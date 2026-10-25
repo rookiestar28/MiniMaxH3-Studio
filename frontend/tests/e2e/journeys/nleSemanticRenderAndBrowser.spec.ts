@@ -43,11 +43,8 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import {
-  playheadFrame,
-  playheadSlider,
-  seekPlayhead,
-} from "../helpers/nleTimeline";
+import { playheadFrame, playheadSlider } from "../helpers/nleTimeline";
+import { seekSemanticTransport as seekTransport } from "../helpers/nleSemanticTransport";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -504,36 +501,6 @@ async function captureImage(page: Page): Promise<{
     readbackMs: captured.readbackMs,
     serializeMs: captured.serializeMs,
   };
-}
-
-/**
- * Issue the real seek gesture for one output frame and report the value the control now holds.
- *
- * GUARD (D45-02): the returned number is the frame the transport was ASKED for, never evidence
- * that it was presented. `NleMonitor` deliberately shows `requestedFrame` while a seek is still
- * settling, so this value equals the target the instant the fill lands. The previous version
- * looped until two consecutive reads of this input were equal and treated that as "settled",
- * which was therefore satisfied immediately and proved nothing at all. Presentation is established
- * by `waitForPresentedFrame` against the compositor's own receipt; do not put a settle loop back
- * here.
- *
- * GUARD: the fill carries its own bound, and that bound is one frame's work on the
- * backing being presented -- not the config's 15 s `actionTimeout`. That 15 s exists to fail a
- * control that is *permanently* disabled in seconds instead of hanging the sweep, and it is right
- * for a 320 x 180 row where a frame costs about four seconds. At 1280 x 720 a frame costs about
- * twenty-three, so the same bound fires while the seek input is legitimately busy with the frame
- * before this one, and a healthy row is reported as a wedged control. A bound shorter than the
- * work it is waiting on cannot tell "busy" from "broken".
- */
-async function seekTransport(
-  page: Page,
-  frame: number,
-  budgetMs: number,
-): Promise<number> {
-  const slider = playheadSlider(page);
-  await slider.waitFor({ state: "visible", timeout: budgetMs });
-  await seekPlayhead(page, slider, frame);
-  return playheadFrame(slider);
 }
 
 /**

@@ -12,6 +12,7 @@ import {
 } from "./graphSerialization";
 import { recognizeH3InferenceCanvas } from "./graphRecognition";
 import { referenceCapacity } from "./referenceSelection";
+import type { ImageCrop } from "./imageCropGeometry";
 
 export type Json = Record<string, unknown>;
 
@@ -94,6 +95,7 @@ export class TemplateSpliceError extends Error {
 export type LoaderSource = {
   readonly type: string;
   readonly widgetValues: readonly unknown[];
+  readonly crop?: ImageCrop;
 };
 
 /**
@@ -892,6 +894,9 @@ export type SpliceOptions = {
 };
 
 export type SpliceMediaIds = {
+  readonly crops?: Readonly<
+    Record<string, Readonly<{ nodeId: number; crop: ImageCrop }>>
+  >;
   readonly firstFrame?: number;
   readonly lastFrame?: number;
   readonly referenceImages: readonly number[];

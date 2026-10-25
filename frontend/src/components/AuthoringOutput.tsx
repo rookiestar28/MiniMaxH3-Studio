@@ -96,6 +96,9 @@ function OutputBody({
       <p role="status">{job ? text.phases[job.phase] : text.empty}</p>
       {old && <p className="h3a-output-warning">{text.old}</p>}
       {state.error && <p role="alert">{text.error}</p>}
+      {job?.phase === "failed" && job.failure === "font_changed" && (
+        <p role="alert">{text.fontUnavailable}</p>
+      )}
       {job && !terminal && (
         <progress
           aria-label={text.phases[job.phase]}

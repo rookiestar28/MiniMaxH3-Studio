@@ -160,7 +160,10 @@ export function parseOfficialAssetManifest(
     )
       fail("invalid_manifest");
     const acceptedBasenames = accepted.map(boundedName);
-    if (new Set(acceptedBasenames).size !== acceptedBasenames.length)
+    if (
+      new Set(acceptedBasenames.map((name) => name.toLowerCase())).size !==
+      acceptedBasenames.length
+    )
       fail("invalid_manifest");
     const templateDefault = boundedName(row?.template_default);
     if (!acceptedBasenames.includes(templateDefault)) fail("invalid_manifest");
@@ -174,6 +177,24 @@ export function parseOfficialAssetManifest(
     });
   });
   if (seen.size !== MATERIALIZATION_ROLE_ORDER.length) fail("invalid_manifest");
+  // Shared loaders rely on disjoint role names; overlap can bind video as audio.
+  for (const [index, spec] of slots.entries()) {
+    if (
+      slots
+        .slice(0, index)
+        .some(
+          (other) =>
+            other.loaderType === spec.loaderType &&
+            other.widgetName === spec.widgetName &&
+            other.acceptedBasenames.some((name) =>
+              spec.acceptedBasenames.some(
+                (candidate) => candidate.toLowerCase() === name.toLowerCase(),
+              ),
+            ),
+        )
+    )
+      fail("invalid_manifest");
+  }
   const parseFamilies = <T extends string>(
     value: unknown,
     roleOrder: readonly T[],
@@ -411,10 +432,21 @@ function sameId(left: unknown, right: unknown): boolean {
   );
 }
 
+function matchesRole(value: unknown, spec: OfficialAssetSpec): value is string {
+  // CRITICAL: identify a role by its whole official set, never one pinned
+  // default. Served-template precision changes otherwise bypass installed variants.
+  return (
+    typeof value === "string" &&
+    spec.acceptedBasenames.some(
+      (accepted) => basename(value) === accepted.toLowerCase(),
+    )
+  );
+}
+
 function namedWidgetIndex(
   node: Json,
   widgetName: string,
-  templateDefault: string,
+  spec: OfficialAssetSpec,
 ): number | undefined {
   const values = widgetValues(node);
   const named = record(node.widgets_values_named);
@@ -429,17 +461,11 @@ function namedWidgetIndex(
       typeof value !== "string"
     )
       fail("malformed_loader_seam");
-    return basename(value) === templateDefault.toLowerCase()
-      ? index
-      : undefined;
+    return matchesRole(value, spec) ? index : undefined;
   }
   const matching = values
     .map((value, index) => ({ value, index }))
-    .filter(
-      ({ value }) =>
-        typeof value === "string" &&
-        basename(value) === templateDefault.toLowerCase(),
-    );
+    .filter(({ value }) => matchesRole(value, spec));
   if (matching.length > 1) fail("malformed_loader_seam");
   return matching[0]?.index;
 }
@@ -452,11 +478,7 @@ function directLocations(
   for (const owner of nodes(workflow.nodes).filter(
     (node) => node.type === spec.loaderType,
   )) {
-    const widgetIndex = namedWidgetIndex(
-      owner,
-      spec.widgetName,
-      spec.templateDefault,
-    );
+    const widgetIndex = namedWidgetIndex(owner, spec.widgetName, spec);
     if (widgetIndex !== undefined)
       found.push({ owner, widgetIndex, namedWidgetKey: spec.widgetName });
   }
@@ -489,8 +511,7 @@ function nestedLocations(
     for (const inner of innerNodes.filter(
       (node) =>
         node.type === spec.loaderType &&
-        namedWidgetIndex(node, spec.widgetName, spec.templateDefault) !==
-          undefined,
+        namedWidgetIndex(node, spec.widgetName, spec) !== undefined,
     )) {
       const innerInputs = nodes(inner.inputs);
       const matchingInputs = innerInputs.filter(
@@ -517,20 +538,12 @@ function nestedLocations(
       if (promoted === undefined || typeof promoted.name !== "string")
         fail("malformed_loader_seam");
       for (const owner of instances) {
-        const namedIndex = namedWidgetIndex(
-          owner,
-          promoted.name,
-          spec.templateDefault,
-        );
+        const namedIndex = namedWidgetIndex(owner, promoted.name, spec);
         const fallbackIndex = widgetInputs.indexOf(promoted);
         const widgetIndex = namedIndex ?? fallbackIndex;
         if (widgetIndex < 0) fail("malformed_loader_seam");
         const current = widgetValues(owner)[widgetIndex];
-        if (
-          typeof current !== "string" ||
-          basename(current) !== spec.templateDefault.toLowerCase()
-        )
-          fail("malformed_loader_seam");
+        if (!matchesRole(current, spec)) fail("malformed_loader_seam");
         found.push({
           owner,
           widgetIndex,
@@ -609,15 +622,15 @@ export function resolveOfficialAssets(
       unresolvedSlots.push(slot);
       continue;
     }
+    const values = [...widgetValues(location.owner)];
     const choice = selectOfficialAsset(
-      spec,
+      { ...spec, templateDefault: values[location.widgetIndex] as string },
       inventory[spec.folderCategory] ?? [],
     );
     if (choice === undefined) {
       unresolvedSlots.push(slot);
       continue;
     }
-    const values = [...widgetValues(location.owner)];
     if (values[location.widgetIndex] !== choice.value) changedSlots.push(slot);
     values[location.widgetIndex] = choice.value;
     location.owner.widgets_values = values;

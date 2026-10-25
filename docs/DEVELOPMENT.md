@@ -41,7 +41,7 @@ Use `.venv-wsl/bin/python` on Linux or WSL. Without this extra, tests that requi
 collection. Official-template corpus and external integration campaigns also require their
 separately acquired inputs; reference repositories and maintainer evidence are not distributed.
 
-## Run focused suites
+## Run the test suites
 
 Windows PowerShell:
 
@@ -51,7 +51,8 @@ pnpm.cmd --dir frontend run test
 pnpm.cmd --dir frontend run test:e2e:ci
 ```
 
-Use `.venv-wsl/bin/python` and `pnpm` on Linux or WSL. Add a test path or selector to run a focused subset.
+Use `.venv-wsl/bin/python` and `pnpm` on Linux or WSL. These commands run every test, and a complete
+run is long. Pass a test path, or a pytest `-k` selector, to run only the affected subset.
 Frontend unit tests use Vitest; the ordinary browser suite uses Playwright and local host doubles.
 Test collection alone does not establish a passing execution result.
 
@@ -70,6 +71,27 @@ On Linux or WSL:
 ```bash
 bash scripts/run_full_tests_linux.sh
 ```
+
+Both runners require Node.js 24 and the project-local virtual environment (`.venv` on Windows,
+`.venv-wsl` on Linux or WSL) and stop with a message when either is missing. A complete run is
+long. After fixing a failed stage, add `-Resume` on Windows or `--resume` on Linux or WSL:
+
+```powershell
+powershell -File scripts/run_full_tests_windows.ps1 -Resume
+```
+
+```bash
+bash scripts/run_full_tests_linux.sh --resume
+```
+
+Resume skips a stage only when the files it reads are unchanged since its recorded pass, as decided
+by `scripts/gate_stages.py`; the backend tests are skipped in groups the same way. The link guard,
+the CI prerequisite check and the shipped-artifact integrity check always run, and the final
+summary fails if a recorded pass no longer matches the current files. Without the flag every stage
+runs and nothing is recorded. `scripts/gate_stages.py reset` discards the recorded state.
+
+On Windows, `-Preflight` runs only the prerequisite stages and the backend guard tests, then stops.
+It cannot be combined with `-Resume` and does not replace the full run.
 
 The standard gate runs a browser smoke selection, not every browser or live-host campaign. List the
 selection without launching a browser:
@@ -148,18 +170,20 @@ installing models, changing a running ComfyUI host or queueing generation.
 
 ## Verify distribution completeness
 
-`scripts/product_completeness.py` checks source-declared runtime and developer inputs and performs
-an isolated product import/resource smoke. `scripts/registry_payload.py` audits the actual packed
-archive against the tracked source. `scripts/registry_policy_check.py <archive.zip>` is an offline
-check that packaged runtime sources do not download, extract or install executables; it reads
-archive members in memory and runs none of them. Missing tests, fixtures, configurations, tooling or runtime
-resources fail these checks; private records and generated dependency/cache material stay excluded.
+`scripts/product_completeness.py --source-root <dir>` checks source-declared runtime and developer
+inputs and performs an isolated product import/resource smoke.
+`scripts/registry_payload.py --archive <zip>` audits the actual packed archive against the tracked
+source. `scripts/registry_policy_check.py <archive.zip or directory>` is an offline check that
+packaged runtime sources do not download, extract or install executables; it reads archive members
+in memory and runs none of them, and it checks the checkout when no path is given. Missing tests,
+fixtures, configurations, tooling or runtime resources fail these checks; private records and
+generated dependency/cache material stay excluded.
 
 Build a Python source distribution from a Git checkout whose reviewed public inputs are tracked:
 
 ```powershell
 & .\.venv\Scripts\python.exe -m build --sdist
-& .\.venv\Scripts\python.exe scripts/sdist_payload.py --archive dist/minimax_h3_studio-1.3.2.tar.gz
+& .\.venv\Scripts\python.exe scripts/sdist_payload.py --archive dist/minimax_h3_studio-1.4.0.tar.gz
 ```
 
 The standard build backend copies public tracked files into a fresh temporary tree and respects

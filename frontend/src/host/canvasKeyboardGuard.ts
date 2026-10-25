@@ -40,8 +40,42 @@ function data(host: unknown, member: string): unknown {
   return undefined;
 }
 
+function canvasOwner(host: unknown): unknown {
+  // CRITICAL: inspect descriptors only; never read app.canvas or call a host getter.
+  // Native hosts use canvas data, or (ComfyUI_frontend v1.55.11+) a prototype
+  // canvas getter/setter backed by own canvasInternal data. Dropping that backing
+  // shape prevents both the clip editor and crop dialog from opening on newer hosts.
+  let current = host;
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (
+      current === null ||
+      (typeof current !== "object" && typeof current !== "function")
+    )
+      return undefined;
+    const descriptor = Reflect.getOwnPropertyDescriptor(current, "canvas");
+    if (descriptor !== undefined) {
+      if ("value" in descriptor) return descriptor.value;
+      if (
+        current === host ||
+        typeof descriptor.get !== "function" ||
+        typeof descriptor.set !== "function"
+      )
+        return undefined;
+      const backing = Reflect.getOwnPropertyDescriptor(
+        host as object,
+        "canvasInternal",
+      );
+      return backing !== undefined && "value" in backing
+        ? backing.value
+        : undefined;
+    }
+    current = Reflect.getPrototypeOf(current);
+  }
+  return undefined;
+}
+
 function readShape(host: unknown): Shape | null {
-  const owner = data(host, "canvas");
+  const owner = canvasOwner(host);
   if (owner === null || typeof owner !== "object") return null;
   const element = data(owner, "canvas");
   const key = data(owner, "_key_callback");

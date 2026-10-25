@@ -286,7 +286,6 @@ describe("title insertion admission", () => {
     ["", false],
     ["a".repeat(2_049), false],
     ["a".repeat(2_048), true],
-    ["😀".repeat(2_048), true],
     ["e\u0301", true],
     ["\ud800", false],
     ["\udfff", false],
@@ -300,6 +299,18 @@ describe("title insertion admission", () => {
       (separator) => [Array(33).fill("line").join(separator), false] as const,
     ),
   ] as const;
+  it.each(["中文", "한국어", "😀".repeat(2_048)])(
+    "refuses unrenderable packaged glyphs independently of scalar limits",
+    (content) => {
+      const authority = base();
+      expect(
+        planTitleInsertion(authority, input(authority, { content })),
+      ).toEqual({
+        admitted: false,
+        reason: "font_glyph_unsupported",
+      });
+    },
+  );
   it.each(contents)(
     "content boundary %j is admitted=%s by both existing codecs",
     (content, admitted) => {

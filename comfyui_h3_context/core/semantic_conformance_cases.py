@@ -40,6 +40,8 @@ from .semantic_conformance import (
     TEXT_LINE_HEIGHT_DOMAIN,
     TEXT_SIZE_DOMAIN,
     TRANSFORM_DOMAINS,
+    WIPE_CASES,
+    WIPE_KINDS,
     Corpus,
     CorpusCase,
     NumericDomain,
@@ -812,6 +814,33 @@ def _transition_recipes() -> Iterator[CaseRecipe]:
                 "exclusive_end",
             ),
         )
+
+    for kind in WIPE_KINDS:
+        for case in WIPE_CASES:
+            subject = PRIMARY_CLIP if case == "participant_invalid" else OVERLAY_CLIP
+            duration = {
+                "first_included_frame": 2,
+                "interior_frame": 6,
+                "last_included_frame": 7,
+                "duration_lower": 1,
+                "duration_upper": 8,
+                "duration_underflow": 0,
+                "duration_overflow": 999,
+            }.get(case, 4)
+            edits: tuple[SnapshotEdit, ...] = (
+                SnapshotEdit("clip.transition", "kind", kind, subject),
+                SnapshotEdit("clip.transition", "duration_frames", duration, subject),
+            )
+            if case == "rotation_follow":
+                edits += (SnapshotEdit("clip.transform", "rotation_mdeg", 30000, subject),)
+            yield _property(
+                f"transition.{kind}.{case}",
+                "transition",
+                edits=edits,
+                refusal_code=INVALID_CONTRACT
+                if case in {"duration_underflow", "duration_overflow", "participant_invalid"}
+                else None,
+            )
 
 
 def _effect_recipes() -> Iterator[CaseRecipe]:

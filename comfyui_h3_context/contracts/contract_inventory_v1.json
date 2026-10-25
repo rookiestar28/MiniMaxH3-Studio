@@ -406,6 +406,7 @@
         "frontend/src/runtime/visualCompositionResources.ts",
         "frontend/src/runtime/visualCompositionSession.ts",
         "frontend/src/runtime/visualCompositor.ts",
+        "frontend/src/state/sidebarRetention.ts",
         "frontend/tests/CompositionPreview.test.tsx",
         "frontend/tests/authoringActions.test.ts",
         "frontend/tests/authoringLeasedEditorRuntime.test.ts",
@@ -426,6 +427,7 @@
         "frontend/tests/e2e/journeys/m25_77ClipAudioParity.spec.ts",
         "frontend/tests/e2e/journeys/mediaSourceLeases.spec.ts",
         "frontend/tests/e2e/journeys/titleInsertion.spec.ts",
+        "frontend/tests/e2e/journeys/wipeTransitions.spec.ts",
         "frontend/tests/editorRuntime.test.ts",
         "frontend/tests/editorRuntimeAdmission.test.ts",
         "frontend/tests/embeddedAudioFollower.test.ts",
@@ -436,6 +438,7 @@
         "frontend/tests/nleAuthoringAssetManifest.test.ts",
         "frontend/tests/nleEmptyTimelineDrop.test.tsx",
         "frontend/tests/nleInspectorAudio.test.tsx",
+        "frontend/tests/nleInspectorTabs.test.tsx",
         "frontend/tests/nleMediaBin.test.tsx",
         "frontend/tests/nleMediaBinDecorationCount.test.tsx",
         "frontend/tests/nleMediaRebind.test.ts",
@@ -467,6 +470,7 @@
         "frontend/tests/visualCompositionSession.test.ts",
         "frontend/tests/visualCompositor.test.ts",
         "frontend/tests/visualResourceRetention.test.ts",
+        "frontend/tests/wipeTransitions.test.ts",
         "governance/contracts/supply_chain_v1.json",
         "scripts/cross_language_surface.py"
       ],
@@ -843,6 +847,7 @@
         "frontend/src/lifecycle/appModeSession.ts",
         "frontend/src/lifecycle/managedProjectMember.ts",
         "frontend/src/lifecycle/shellSession.ts",
+        "frontend/tests/e2e/journeys/host/managedTerminalWaiting.spec.ts",
         "frontend/tests/e2e/journeys/host/productionAuthoringImportHost.spec.ts",
         "frontend/tests/entryWorkspaceLifecycle.test.tsx",
         "frontend/tests/productionAccumulationCodec.test.ts",
@@ -963,6 +968,7 @@
         "frontend/tests/e2e/host/productionRuntimeProducer.ts",
         "frontend/tests/e2e/host/productionRuntimeRow.ts",
         "frontend/tests/e2e/journeys/host/managedArtifactPrivateRoot.spec.ts",
+        "frontend/tests/e2e/journeys/host/managedTerminalWaiting.spec.ts",
         "frontend/tests/e2e/journeys/host/nleCausalJourney.spec.ts",
         "frontend/tests/e2e/journeys/host/planningIconToolbarHost.spec.ts",
         "frontend/tests/e2e/journeys/host/productionAuthoringImportHost.spec.ts",
@@ -1402,10 +1408,12 @@
         "frontend/tests/H3Sidebar.test.tsx",
         "frontend/tests/appMode.test.ts",
         "frontend/tests/connectRoute.test.ts",
+        "frontend/tests/cropWeightSampleGeometry.test.ts",
         "frontend/tests/e2e/journeys/host/connectedMedia.spec.ts",
         "frontend/tests/e2e/journeys/host/existingRoutePreview.spec.ts",
         "frontend/tests/e2e/journeys/host/frameAuthority.spec.ts",
         "frontend/tests/e2e/journeys/host/guideReadiness.spec.ts",
+        "frontend/tests/e2e/journeys/host/imageCrop.spec.ts",
         "frontend/tests/e2e/journeys/host/m25_08CausalClipEditor.spec.ts",
         "frontend/tests/e2e/journeys/host/managedArtifacts.spec.ts",
         "frontend/tests/e2e/journeys/host/managedTerminalWaiting.spec.ts",
@@ -1420,6 +1428,7 @@
         "frontend/tests/fixtures/entryHostModules.ts",
         "frontend/tests/graphAdapter.test.ts",
         "frontend/tests/hermeticExecution.test.ts",
+        "frontend/tests/imageCropSidebar.test.tsx",
         "frontend/tests/m15_13_graph_decision.test.ts",
         "frontend/tests/m17_14ProductionCloseout.test.tsx",
         "frontend/tests/m25_08HostBootstrap.test.ts",
@@ -1431,6 +1440,7 @@
         "frontend/tests/shellState.test.ts",
         "frontend/tests/sidebarHost.test.ts",
         "frontend/tests/support/connectFixture.ts",
+        "frontend/tests/support/cropWeightSampleGeometry.ts",
         "frontend/tests/support/generationProfileFixture.ts",
         "frontend/tests/support/h3CoreCensusFixture.ts",
         "frontend/tests/support/hostBehaviourCatalogue.ts",
@@ -1529,10 +1539,12 @@
         "frontend/src/host/templateGraphTopology.ts",
         "frontend/tests/appMode.test.ts",
         "frontend/tests/connectRoute.test.ts",
+        "frontend/tests/cropWeightSampleGeometry.test.ts",
         "frontend/tests/e2e/host/m25_08Bootstrap.ts",
         "frontend/tests/e2e/host/referenceMaximumOrder.ts",
         "frontend/tests/e2e/journeys/host/audioComposition.spec.ts",
         "frontend/tests/e2e/journeys/host/contentExtentHost.spec.ts",
+        "frontend/tests/e2e/journeys/host/imageCrop.spec.ts",
         "frontend/tests/e2e/journeys/host/m25_08CausalClipEditor.spec.ts",
         "frontend/tests/e2e/journeys/host/m25_45LargeSharpPreview.spec.ts",
         "frontend/tests/e2e/journeys/host/m25_46DirectManipulation.spec.ts",
@@ -2607,6 +2619,29 @@
     },
     {
       "authority_paths": [
+        "governance/contracts/host_seam_census_transition_reference_crop_v1.json"
+      ],
+      "blockers": [],
+      "boundary": "untrusted_input",
+      "compatibility": "old_readers_unaffected",
+      "consumers": [
+        "frontend/tests/hostSeamDrift.test.ts",
+        "frontend/tests/support/hostSeamDrift.ts"
+      ],
+      "contract_id": "h3.context.host_seam_census_transition_reference_crop.v1",
+      "dialect": "not_applicable",
+      "disposition": "KEEP",
+      "evidence": "untrusted_input boundary keeps a reader this repository cannot re-migrate",
+      "fingerprint_domain": "none",
+      "kind": "json_data",
+      "persistence": "persisted",
+      "producers": [
+        "governance/contracts/host_seam_census_transition_reference_crop_v1.json"
+      ],
+      "publication": "repository_only"
+    },
+    {
+      "authority_paths": [
         "governance/contracts/host_seam_census_transition_retained_media_v1.json"
       ],
       "blockers": [],
@@ -2874,6 +2909,7 @@
         "frontend/src/host/officialAssetResolution.ts",
         "frontend/tests/e2e/host/candidate.ts",
         "frontend/tests/m17_29OfficialAssetResolution.test.ts",
+        "frontend/tests/officialAssetVariants.test.ts",
         "governance/contracts/supply_chain_v1.json",
         "scripts/supply_chain_manifest.py",
         "tests/test_generation_profile_adapter.py",
@@ -8336,6 +8372,7 @@
         "frontend/tests/H3Sidebar.test.tsx",
         "frontend/tests/durationResolutionClient.test.ts",
         "frontend/tests/durationResolutionState.test.ts",
+        "frontend/tests/imageCropSidebar.test.tsx",
         "frontend/tests/m15_13_always_usable.test.tsx",
         "frontend/tests/m17_14ProductionCloseout.test.tsx",
         "frontend/tests/m17_17Ref2vaSoundtrackOwnership.test.tsx",
@@ -10428,7 +10465,8 @@
         "tests/test_m25_composition_contract.py",
         "tests/test_m25_media_derivative_source.py",
         "tests/test_m25_nle_authoring_state.py",
-        "tests/test_m25_timeline_history_v2.py"
+        "tests/test_m25_timeline_history_v2.py",
+        "tests/test_title_glyph_admission.py"
       ],
       "contract_id": "h3.context.nle_authoring_state.v1",
       "dialect": "not_applicable",
@@ -11295,6 +11333,7 @@
         "frontend/tests/e2e/host/productionRuntimeProducer.ts",
         "frontend/tests/e2e/journeys/host/closeout.spec.ts",
         "frontend/tests/e2e/journeys/host/managedParentQualification.spec.ts",
+        "frontend/tests/e2e/journeys/host/managedTerminalWaiting.spec.ts",
         "frontend/tests/e2e/journeys/host/productionAssembly.spec.ts",
         "frontend/tests/e2e/journeys/host/productionAuthoringImportHost.spec.ts",
         "frontend/tests/e2e/journeys/host/productionPlanning.spec.ts",
@@ -12387,8 +12426,10 @@
         "frontend/tests/e2e/host/execution.ts",
         "frontend/tests/sidebarActions.test.ts",
         "governance/contracts/sidebar_action_v2.schema.json",
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_comfyui_assisted_draft.py",
+        "tests/test_instruction_refinement.py",
         "tests/test_m26_03_planning_atomicity.py",
         "tests/test_m26_03_planning_source.py",
         "tests/test_m26_03_prepared_context.py",
@@ -14002,6 +14043,7 @@
         "scripts/prompt_model_qualification.py",
         "tests/test_assisted_authoring_closeout.py",
         "tests/test_comfyui_assisted_draft.py",
+        "tests/test_instruction_refinement.py",
         "tests/test_m22_13_local_qualification.py",
         "tests/test_m22_14_remote_provider_activation.py",
         "tests/test_prompt_model_dialects.py",
@@ -15557,6 +15599,6 @@
       "reachability_source": "none"
     }
   ],
-  "fingerprint": "sha256:68afd8b7cca22dcfcb8efb1a5968989b09a395d4c5b070b6a958b04db15c8b1e",
+  "fingerprint": "sha256:563dcc817080aba9ab9833f3944377a4648806dd2de5e17d6e7e3ed999126dba",
   "schema": "h3-context-contract-inventory/1"
 }

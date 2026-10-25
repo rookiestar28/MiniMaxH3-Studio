@@ -38,6 +38,48 @@ const idle = {
 };
 
 describe("assisted client completion ownership", () => {
+  it("retains the reviewed proposal and local edit after a typed edit refusal", async () => {
+    const active = { state: "active", candidate_text: "Reviewed candidate" };
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({
+        kind: "assisted",
+        result: { state: "proposal" },
+        proposal: active,
+      })
+      .mockResolvedValueOnce({
+        kind: "assisted",
+        result: {
+          state: "failed",
+          outcomeId: "prompt_model.proposal_user_text_altered",
+          proposal: null,
+        },
+        proposal: null,
+      });
+    const { session, controller } = subject(send);
+    await controller.runWorkspaceAction({
+      action: "optimize_prompt",
+      payload: {},
+    });
+    const reviewed = session.assistedProposal;
+    session.workspaceDraft = {
+      ...session.workspaceDraft!,
+      promptText: "Unstaged local edit",
+    };
+    await controller.runWorkspaceAction({
+      action: "edit_assisted_proposal",
+      payload: {
+        proposal_id: `assist_${"a".repeat(32)}`,
+        expected_proposal_revision: 1,
+        prompt_text: "Unstaged local edit",
+      },
+    });
+    expect(session.assistedProposal).toBe(reviewed);
+    expect(session.assistedFailure).toBe(
+      "prompt_model.proposal_user_text_altered",
+    );
+    expect(session.workspaceDraft?.promptText).toBe("Unstaged local edit");
+  });
   it("routes Refine through the assisted client and drops a changed report completion", async () => {
     const deferred = pending();
     const send = vi.fn(() => deferred.promise);

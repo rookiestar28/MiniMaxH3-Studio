@@ -693,6 +693,15 @@ def _decoration_rgba(value: object, name: str) -> tuple[int, int, int, int]:
     return color
 
 
+WIPE_KINDS = (
+    "wipe_from_left_v1",
+    "wipe_from_right_v1",
+    "wipe_from_top_v1",
+    "wipe_from_bottom_v1",
+)
+TRANSITION_KINDS = ("none", "cross_dissolve_v1", *WIPE_KINDS)
+
+
 @dataclass(frozen=True, slots=True)
 class Transition:
     kind: str
@@ -830,14 +839,12 @@ def _clip(value: object, index: int) -> CompositionClip:
     transition_wire = _mapping(
         wire["transition"], ("kind", "duration_frames"), f"{name}.transition"
     )
-    transition_kind = _enum(
-        transition_wire["kind"], ("none", "cross_dissolve_v1"), f"{name}.transition.kind"
-    )
+    transition_kind = _enum(transition_wire["kind"], TRANSITION_KINDS, f"{name}.transition.kind")
     transition_duration = _integer(
         transition_wire["duration_frames"], f"{name}.transition.duration_frames", 0, 300
     )
     if (transition_kind == "none" and transition_duration != 0) or (
-        transition_kind == "cross_dissolve_v1" and not 1 <= transition_duration <= duration
+        transition_kind != "none" and not 1 <= transition_duration <= duration
     ):
         raise _reject("invalid_contract", f"{name}.transition duration is invalid")
     effect_wire = _mapping(
@@ -1505,7 +1512,7 @@ def decode_public_snapshot(value: object) -> PublicCompositionSnapshot:
         # where there is bound audio to scale. Track placement does not decide it.
         if clip.audio != IDENTITY_CLIP_AUDIO and not bound_audio:
             raise _reject("invalid_contract", "clip audio adjustments need bound audio")
-        if clip.transition.kind == "cross_dissolve_v1":
+        if clip.transition.kind != "none":
             lower_participants = (
                 other
                 for other in clips
@@ -1520,7 +1527,7 @@ def decode_public_snapshot(value: object) -> PublicCompositionSnapshot:
             if next(lower_participants, None) is None:
                 raise _reject(
                     "invalid_contract",
-                    "cross dissolve requires a lower layer for its full duration",
+                    "transition requires a lower layer for its full duration",
                 )
 
     video_clips = tuple(
@@ -1617,9 +1624,10 @@ class ResolvedLayer:
     blend: str
     text: TextStyle | None
     effect: Effect
+    wipe: Transition | None = None
 
     def to_wire(self) -> dict[str, object]:
-        return {
+        wire: dict[str, object] = {
             "clip_id": self.clip_id,
             "asset_id": self.asset_id,
             "track_id": self.track_id,
@@ -1634,6 +1642,9 @@ class ResolvedLayer:
             "text": None if self.text is None else self.text.to_wire(),
             "effect": self.effect.to_wire(),
         }
+        if self.wipe is not None:
+            wire["wipe"] = self.wipe.to_wire()
+        return wire
 
 
 @dataclass(frozen=True, slots=True)
@@ -1904,12 +1915,11 @@ def resolve_composition(snapshot: PublicCompositionSnapshot, frame: int) -> Reso
             operation_ids.append("ColorAdjustV1")
         operation_ids.extend(("OpacityV1", "BlendV1"))
         transition_elapsed = None
-        if (
-            clip.transition.kind == "cross_dissolve_v1"
-            and local_frame < clip.transition.duration_frames
-        ):
+        if clip.transition.kind != "none" and local_frame < clip.transition.duration_frames:
             transition_elapsed = local_frame
-            operation_ids.append("CrossDissolveV1")
+            operation_ids.append(
+                "WipeV1" if clip.transition.kind in WIPE_KINDS else "CrossDissolveV1"
+            )
         if track.kind == "text_overlay":
             operation_ids.append("DrawTextV1")
             if clip.text is not None and (
@@ -1933,6 +1943,7 @@ def resolve_composition(snapshot: PublicCompositionSnapshot, frame: int) -> Reso
                 clip.blend,
                 clip.text,
                 clip.effect,
+                clip.transition if clip.transition.kind in WIPE_KINDS else None,
             )
         )
 

@@ -41,6 +41,48 @@ def fixture_snapshot() -> dict[str, Any]:
     return cast(dict[str, Any], fixture_document()["snapshot"])
 
 
+WIPE_KINDS = (
+    "wipe_from_left_v1",
+    "wipe_from_right_v1",
+    "wipe_from_top_v1",
+    "wipe_from_bottom_v1",
+)
+
+
+@pytest.mark.parametrize("kind", WIPE_KINDS)
+def test_wipe_resolves_direction_and_exact_active_window(kind: str) -> None:
+    wire = fixture_snapshot()
+    incoming = wire["clips"][1]
+    incoming["transition"] = {"kind": kind, "duration_frames": 6}
+    snapshot = decode_public_snapshot(resign(wire))
+    for elapsed in (0, 2, 5, 6, 11):
+        scene = resolve_composition(snapshot, incoming["start_frame"] + elapsed)
+        layer = next(row for row in scene.layers if row.clip_id == incoming["clip_id"])
+        assert layer.to_wire()["wipe"] == incoming["transition"]
+        assert layer.transition_elapsed_frames == (elapsed if elapsed < 6 else None)
+        assert ("WipeV1" in layer.operation_ids) is (elapsed < 6)
+        assert "CrossDissolveV1" not in layer.operation_ids
+
+
+@pytest.mark.parametrize("kind", WIPE_KINDS)
+@pytest.mark.parametrize("fault", ("zero", "negative", "past_clip", "unknown", "no_lower"))
+def test_wipe_keeps_duration_closed_enum_and_participant_guards(kind: str, fault: str) -> None:
+    wire = fixture_snapshot()
+    incoming = wire["clips"][1]
+    incoming["transition"] = {"kind": kind, "duration_frames": 6}
+    if fault == "no_lower":
+        wire["tracks"][0]["enabled"] = False
+    elif fault == "unknown":
+        incoming["transition"]["kind"] = kind + "_unknown"
+    else:
+        incoming["transition"]["duration_frames"] = {
+            "zero": 0,
+            "negative": -1,
+            "past_clip": incoming["duration_frames"] + 1,
+        }[fault]
+    assert rejection_code(lambda: decode_public_snapshot(resign(wire))) == "invalid_contract"
+
+
 def resign(wire: dict[str, Any]) -> dict[str, Any]:
     wire["public_fingerprint"] = public_snapshot_fingerprint(wire)
     return wire

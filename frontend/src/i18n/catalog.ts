@@ -19,6 +19,67 @@ const sidebarBaseCatalog = {
     firstFrameSource: "First frame source",
     lastFrameSource: "Last frame source",
     chooseImageSource: "Choose a visible image node",
+    crop: {
+      action: "Crop image",
+      title: "Crop image",
+      free: "Free",
+      original: "Original",
+      aspectRatio: "Aspect ratio",
+      apply: "Apply",
+      reset: "Reset",
+      cancel: "Cancel",
+      discard: "Discard changes",
+      keep: "Keep editing",
+      dirty: "Discard unapplied crop changes?",
+      help: "Drag the rectangle or its handles. Arrow keys move one source pixel; Shift moves ten.",
+      loading: "Opening image…",
+      failed: "The image could not be opened. Check the source and try again.",
+      unavailable: "Crop Image is unavailable on this host.",
+      choose: "Choose an image first.",
+      useExisting:
+        "Crop is available when preparing a new canvas. Edit the Crop Image node on an existing canvas.",
+      prepareRequired:
+        "To apply this crop, prepare the canvas first: in Intent / Mode, choose Start H3 App Mode or Replace canvas and start H3 App Mode. Or reset the crop.",
+      regionLabel: "Crop rectangle",
+      stale: "The source image changed. Open the crop again.",
+      invalid: "The crop is invalid. Open the crop again.",
+      handles: {
+        n: "Resize top",
+        ne: "Resize top right",
+        e: "Resize right",
+        se: "Resize bottom right",
+        s: "Resize bottom",
+        sw: "Resize bottom left",
+        w: "Resize left",
+        nw: "Resize top left",
+      },
+    },
+    sourceGuidance: {
+      noImage:
+        "No image node on the canvas. Start or Replace places the template's Load Image node; set your image there. To reuse an image already on the canvas, put it in a Load Image node on the main canvas (outside subgraphs).",
+      needTwoImages:
+        "First and last frame: {count} Load Image node(s) on the main canvas (outside subgraphs). Frames you leave unchosen use the template's Load Image node; set them there. Two chosen frames must differ.",
+      noReferenceMedia:
+        "No image or video node on the main canvas (outside subgraphs). Leave sources unchosen and use Start or Replace to place the template's two Load Image nodes. Set the images there, then choose them here before queueing.",
+      noKind:
+        "No {kind} node on the canvas. Add a {node} node to the main canvas (outside subgraphs) to choose one.",
+      kinds: { image: "image", video: "video", audio: "audio" },
+      loaders: {
+        image: "Load Image",
+        video: "Load Video",
+        audio: "Load Audio",
+      },
+      roles: {
+        firstFrame: "first frame Load Image node",
+        lastFrame: "last frame Load Image node",
+        referenceImages: "two reference Load Image nodes",
+      },
+      roleSeparator: ", ",
+      readyFrames:
+        "Before using {queue}, set your images in: {roles}. These nodes still use the template's samples.",
+      readyReferences:
+        "Before using {queue}, set your images in: {roles}. These nodes still use the template's samples. Then choose the references in the pickers above.",
+    },
     referenceImages: "Reference images",
     referenceVideos: "Reference videos",
     referenceAudios: "Reference audio",
@@ -301,6 +362,66 @@ const sidebarBaseCatalog = {
     firstFrameSource: "首幀來源",
     lastFrameSource: "尾幀來源",
     chooseImageSource: "選擇可見的圖片節點",
+    crop: {
+      action: "裁切圖像",
+      title: "裁切圖像",
+      free: "自由",
+      original: "原始比例",
+      aspectRatio: "長寬比",
+      apply: "套用",
+      reset: "重設",
+      cancel: "取消",
+      discard: "捨棄變更",
+      keep: "繼續編輯",
+      dirty: "要捨棄尚未套用的裁切變更嗎？",
+      help: "拖曳選框或邊緣控制點。方向鍵移動 1 個來源像素，按住 Shift 移動 10 個。",
+      loading: "正在開啟圖像…",
+      failed: "無法開啟圖像，請檢查來源後重試。",
+      unavailable: "此主機無法使用圖像裁切 (Crop Image)。",
+      choose: "請先選擇圖像。",
+      useExisting: "裁切適用於準備新畫布；現有畫布請直接編輯圖像裁切節點。",
+      prepareRequired:
+        "要套用這個裁切，請先準備畫布：在「意圖／模式」選擇「啟動 H3 App Mode」或「取代畫布並啟動 H3 App Mode」；或重設裁切。",
+      regionLabel: "裁切選框",
+      stale: "來源圖像已變更，請重新開啟裁切。",
+      invalid: "裁切範圍無效，請重新開啟裁切。",
+      handles: {
+        n: "調整上緣",
+        ne: "調整右上角",
+        e: "調整右緣",
+        se: "調整右下角",
+        s: "調整下緣",
+        sw: "調整左下角",
+        w: "調整左緣",
+        nw: "調整左上角",
+      },
+    },
+    sourceGuidance: {
+      noImage:
+        "畫布上沒有圖片節點。啟動或取代後會放上範本的「載入圖片」（Load Image）節點，請在該節點設定圖片。若要沿用畫布上的圖片，請放在主畫布（子圖之外）的「載入圖片」（Load Image）節點。",
+      needTwoImages:
+        "首尾幀：主畫布（子圖之外）有 {count} 個「載入圖片」（Load Image）節點。未選的幀會使用範本的「載入圖片」（Load Image）節點，請在該處設定。兩個已選的幀必須不同。",
+      noReferenceMedia:
+        "主畫布（子圖之外）沒有圖片或影片節點。先不選來源，啟動或取代後會放上範本的兩個「載入圖片」（Load Image）節點，請在該處設定圖片，加入佇列前再回到這裡選擇。",
+      noKind:
+        "畫布上沒有{kind}節點。請在主畫布（子圖之外）加入「{node}」節點後再選擇。",
+      kinds: { image: "圖片", video: "影片", audio: "音訊" },
+      loaders: {
+        image: "載入圖片（Load Image）",
+        video: "載入影片（Load Video）",
+        audio: "載入音訊（Load Audio）",
+      },
+      roles: {
+        firstFrame: "首幀的「載入圖片」（Load Image）節點",
+        lastFrame: "尾幀的「載入圖片」（Load Image）節點",
+        referenceImages: "兩個參考圖片的「載入圖片」（Load Image）節點",
+      },
+      roleSeparator: "、",
+      readyFrames:
+        "使用「{queue}」前，請在以下節點設定圖片：{roles}。目前仍是範本的範例圖。",
+      readyReferences:
+        "使用「{queue}」前，請在以下節點設定圖片：{roles}。目前仍是範本的範例圖；設定後請在上方的來源選單選擇這些參考圖片。",
+    },
     referenceImages: "參考圖片",
     referenceVideos: "參考影片",
     referenceAudios: "參考音訊",
@@ -548,6 +669,66 @@ const sidebarBaseCatalog = {
     firstFrameSource: "首帧来源",
     lastFrameSource: "尾帧来源",
     chooseImageSource: "选择可见的图片节点",
+    crop: {
+      action: "裁剪图像",
+      title: "裁剪图像",
+      free: "自由",
+      original: "原始比例",
+      aspectRatio: "宽高比",
+      apply: "应用",
+      reset: "重置",
+      cancel: "取消",
+      discard: "放弃更改",
+      keep: "继续编辑",
+      dirty: "要放弃尚未应用的裁剪更改吗？",
+      help: "拖动选框或边缘控制点。方向键移动 1 个源像素，按住 Shift 移动 10 个。",
+      loading: "正在打开图像…",
+      failed: "无法打开图像，请检查来源后重试。",
+      unavailable: "此主机无法使用图像裁剪 (Crop Image)。",
+      choose: "请先选择图像。",
+      useExisting: "裁剪适用于准备新画布；现有画布请直接编辑图像裁剪节点。",
+      prepareRequired:
+        "要应用这个裁剪，请先准备画布：在「意图／模式」选择「启动 H3 App Mode」或「替换画布并启动 H3 App Mode」；或重置裁剪。",
+      regionLabel: "裁剪选框",
+      stale: "源图像已更改，请重新打开裁剪。",
+      invalid: "裁剪范围无效，请重新打开裁剪。",
+      handles: {
+        n: "调整上边",
+        ne: "调整右上角",
+        e: "调整右边",
+        se: "调整右下角",
+        s: "调整下边",
+        sw: "调整左下角",
+        w: "调整左边",
+        nw: "调整左上角",
+      },
+    },
+    sourceGuidance: {
+      noImage:
+        "画布上没有图片节点。启动或替换后会放上模板的「加载图像」（Load Image）节点，请在该节点设置图片。若要沿用画布上的图片，请放在主画布（子图之外）的「加载图像」（Load Image）节点。",
+      needTwoImages:
+        "首尾帧：主画布（子图之外）有 {count} 个「加载图像」（Load Image）节点。未选的帧会使用模板的「加载图像」（Load Image）节点，请在该处设置。两个已选的帧必须不同。",
+      noReferenceMedia:
+        "主画布（子图之外）没有图片或视频节点。先不选来源，启动或替换后会放上模板的两个「加载图像」（Load Image）节点，请在该处设置图片，加入队列前再回到这里选择。",
+      noKind:
+        "画布上没有{kind}节点。请在主画布（子图之外）添加「{node}」节点后再选择。",
+      kinds: { image: "图片", video: "视频", audio: "音频" },
+      loaders: {
+        image: "加载图像（Load Image）",
+        video: "加载视频（Load Video）",
+        audio: "加载音频（Load Audio）",
+      },
+      roles: {
+        firstFrame: "首帧的「加载图像」（Load Image）节点",
+        lastFrame: "尾帧的「加载图像」（Load Image）节点",
+        referenceImages: "两个参考图片的「加载图像」（Load Image）节点",
+      },
+      roleSeparator: "、",
+      readyFrames:
+        "使用「{queue}」前，请在以下节点设置图片：{roles}。目前仍是模板的示例图。",
+      readyReferences:
+        "使用「{queue}」前，请在以下节点设置图片：{roles}。目前仍是模板的示例图；设置后请在上方的来源菜单选择这些参考图片。",
+    },
     referenceImages: "参考图片",
     referenceVideos: "参考视频",
     referenceAudios: "参考音频",
@@ -929,9 +1110,9 @@ const stageChromeBaseCatalog = {
     currentReportCopy:
       "Copy and Export use the current report when those actions are available.",
     refineCurrentScope:
-      "Applies to the current prompt. Typed facts and exact text stay protected.",
+      "Revise wording, style, camera moves or transitions in the current prompt. Typed facts and exact text stay protected.",
     refinePlaceholder:
-      "Describe only what should change in the wording, detail or style.",
+      "Describe the wording, style, camera move or transition you want to change.",
     instructionScalars: "characters",
     instructionBytes: "UTF-8 bytes",
     clearInstruction: "Clear instruction",
@@ -956,7 +1137,7 @@ const stageChromeBaseCatalog = {
     updateProposal: "Update proposal",
     acceptProposal: "Accept proposal",
     rejectProposal: "Reject proposal",
-    assistedFailure: "Optimization did not produce a reviewable proposal.",
+    assistedFailure: "No reviewable proposal was produced.",
     assistedProfileNotQualified:
       "This provider profile cannot run in this version.",
     diagnostics: "Audit diagnostics",
@@ -1046,8 +1227,9 @@ const stageChromeBaseCatalog = {
     promptComparison: "提示詞比較",
     comparisonKeepsLocalEdit: "尚未暫存的本地修改已保留；比較不會覆蓋它。",
     currentReportCopy: "複製與匯出可用時，使用的內容仍是目前報告。",
-    refineCurrentScope: "套用至目前提示詞。結構化事實及精確文字仍受保護。",
-    refinePlaceholder: "請只描述需要修改的措辭、細節或風格。",
+    refineCurrentScope:
+      "可修改目前提示詞的措辭、風格、運鏡或轉場。結構化事實及精確文字仍受保護。",
+    refinePlaceholder: "描述你想修改的措辭、風格、運鏡或轉場。",
     instructionScalars: "字元",
     instructionBytes: "UTF-8 位元組",
     clearInstruction: "清除指令",
@@ -1067,7 +1249,7 @@ const stageChromeBaseCatalog = {
     updateProposal: "更新提案",
     acceptProposal: "接受提案",
     rejectProposal: "拒絕提案",
-    assistedFailure: "最佳化未產生可供檢視的提案。",
+    assistedFailure: "未產生可供檢視的提案。",
     assistedProfileNotQualified: "此提供者設定檔無法在此版本中執行。",
     diagnostics: "稽核診斷",
     noDiagnostics: "沒有阻擋診斷。",
@@ -1156,8 +1338,9 @@ const stageChromeBaseCatalog = {
     promptComparison: "提示词比较",
     comparisonKeepsLocalEdit: "尚未暂存的本地修改已保留；比较不会覆盖它。",
     currentReportCopy: "复制与导出可用时，使用的内容仍是当前报告。",
-    refineCurrentScope: "应用于当前提示词。结构化事实及精确文字仍受保护。",
-    refinePlaceholder: "请只描述需要修改的措辞、细节或风格。",
+    refineCurrentScope:
+      "可修改当前提示词的措辞、风格、运镜或转场。结构化事实及精确文字仍受保护。",
+    refinePlaceholder: "描述你想修改的措辞、风格、运镜或转场。",
     instructionScalars: "字符",
     instructionBytes: "UTF-8 字节",
     clearInstruction: "清除指令",
@@ -1177,7 +1360,7 @@ const stageChromeBaseCatalog = {
     updateProposal: "更新提案",
     acceptProposal: "接受提案",
     rejectProposal: "拒绝提案",
-    assistedFailure: "优化未产生可供检查的提案。",
+    assistedFailure: "未产生可供检查的提案。",
     assistedProfileNotQualified: "此提供者配置文件无法在此版本中运行。",
     diagnostics: "审核诊断",
     noDiagnostics: "没有阻止性诊断。",
@@ -1266,9 +1449,9 @@ const diagnosticBaseCatalog = {
       },
       camera: {
         unrequested_motion:
-          "The prompt describes the camera move “{term}”, which the request did not ask for.",
+          "The camera move “{term}” is not recorded in the typed request; keep it if you asked for it.",
         unrequested_cut:
-          "The prompt describes the cut “{term}”, which the request did not ask for.",
+          "The cut “{term}” is not recorded in the typed request; keep it if you asked for it.",
       },
       dialogue: {
         speaker_identity_missing:
@@ -1357,8 +1540,10 @@ const diagnosticBaseCatalog = {
           "第 {shot_index} 個鏡頭是首個鏡頭卻標了切換時間 {cut_time}；首個鏡頭是影片開頭，之前沒有切換。",
       },
       camera: {
-        unrequested_motion: "提示詞描述了「{term}」這個運鏡，但請求並未要求。",
-        unrequested_cut: "提示詞描述了「{term}」這個轉場，但請求並未要求。",
+        unrequested_motion:
+          "結構化請求未記錄「{term}」這個運鏡；若是你要求的，請保留。",
+        unrequested_cut:
+          "結構化請求未記錄「{term}」這個轉場；若是你要求的，請保留。",
       },
       dialogue: {
         speaker_identity_missing:
@@ -1441,8 +1626,10 @@ const diagnosticBaseCatalog = {
           "第 {shot_index} 个镜头是首个镜头却标了切换时间 {cut_time}；首个镜头是视频开头，之前没有切换。",
       },
       camera: {
-        unrequested_motion: "提示词描述了“{term}”这个运镜，但请求并未要求。",
-        unrequested_cut: "提示词描述了“{term}”这个转场，但请求并未要求。",
+        unrequested_motion:
+          "结构化请求未记录“{term}”这个运镜；若是你要求的，请保留。",
+        unrequested_cut:
+          "结构化请求未记录“{term}”这个转场；若是你要求的，请保留。",
       },
       dialogue: {
         speaker_identity_missing:
@@ -1752,6 +1939,16 @@ const providerBaseCatalog = {
         repair_reference_drift: "The repair changed which references are cited",
         repair_user_text_altered: "The repair altered text you wrote",
         repair_output_truncated: "The repair exceeded the output limit",
+        proposal_user_text_altered:
+          "The proposal altered protected text. Restore the exact text and try again.",
+        proposal_reference_drift:
+          "The proposal changed the reference inventory. Keep the original references and try again.",
+        proposal_audit_failed:
+          "The proposal did not pass the audit. Review the typed facts and try again.",
+        proposal_forbidden_content_added:
+          "The proposal added forbidden content. Remove it and try again.",
+        repair_forbidden_content_added:
+          "The repair added forbidden content. Remove it and try again.",
         consent_revoked: "Consent was withdrawn",
         network_not_permitted: "Network use is not permitted",
         upload_not_consented: "Uploading media was not consented to",
@@ -1938,6 +2135,15 @@ const providerBaseCatalog = {
         repair_reference_drift: "修補改變了引用的參考素材",
         repair_user_text_altered: "修補更動了你撰寫的文字",
         repair_output_truncated: "修補超出輸出長度上限",
+        proposal_user_text_altered:
+          "提案更動了受保護的文字。請還原精確文字後再試一次。",
+        proposal_reference_drift:
+          "提案改變了參考素材清單。請保留原有參考素材後再試一次。",
+        proposal_audit_failed: "提案未通過稽核。請檢查結構化事實後再試一次。",
+        proposal_forbidden_content_added:
+          "提案加入了禁止內容。請移除後再試一次。",
+        repair_forbidden_content_added:
+          "修補加入了禁止內容。請移除後再試一次。",
         consent_revoked: "同意已被撤回",
         network_not_permitted: "未允許使用網路",
         upload_not_consented: "未同意上傳媒體",
@@ -2123,6 +2329,13 @@ const providerBaseCatalog = {
         repair_reference_drift: "修补改变了引用的参考素材",
         repair_user_text_altered: "修补改动了你撰写的文本",
         repair_output_truncated: "修补超出输出长度上限",
+        proposal_user_text_altered:
+          "提案改动了受保护的文本。请还原精确文本后再试一次。",
+        proposal_reference_drift:
+          "提案改变了参考素材清单。请保留原有参考素材后再试一次。",
+        proposal_audit_failed: "提案未通过审核。请检查结构化事实后再试一次。",
+        proposal_forbidden_content_added: "提案加入了禁止内容。请移除后重试。",
+        repair_forbidden_content_added: "修补加入了禁止内容。请移除后重试。",
         consent_revoked: "同意已被撤回",
         network_not_permitted: "未允许使用网络",
         upload_not_consented: "未同意上传媒体",
@@ -2383,6 +2596,9 @@ export function appModeRefusalCopy(
     return copy.refusalReasons.queueResponseInvalid;
   if (reason.kind === "source_image_changed")
     return copy.refusalReasons.sourceImageChanged;
+  if (reason.kind === "image_crop_stale") return copy.crop.stale;
+  if (reason.kind === "image_crop_invalid") return copy.crop.invalid;
+  if (reason.kind === "image_crop_unavailable") return copy.crop.unavailable;
   return copy.refusalReasons.templateUnavailable;
 }
 

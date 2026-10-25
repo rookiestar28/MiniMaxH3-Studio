@@ -19,6 +19,7 @@ import {
   type VisualLayerResource,
   type VisualLayerResources,
 } from "../src/runtime/visualCompositor";
+import { resolveCompositionScene } from "../src/runtime/sceneResolver";
 
 type SolidSource = Readonly<{
   width: number;
@@ -1421,6 +1422,126 @@ describe("M25-14 visual compositor", () => {
       ),
     ).toMatchObject({ status: "unavailable", blocker: "source_unavailable" });
     expect(imageKindMismatch.context.drawOrder).toEqual([]);
+  });
+
+  it.each(["elapsed", "direction", "duration"] as const)(
+    "refuses a decoded wipe whose %s drifts from its snapshot before painting",
+    (field) => {
+      const wire = structuredClone(fixture.snapshot);
+      wire.tracks.forEach((track) => {
+        track.enabled = track.kind === "image_overlay";
+      });
+      const lower = wire.clips[2]!;
+      lower.start_frame = 0;
+      lower.duration_frames = 12;
+      lower.transition = { kind: "none", duration_frames: 0 };
+      const image = structuredClone(lower);
+      image.clip_id = "image-wipe";
+      image.track_id = "track-wipe";
+      wire.tracks.push({
+        track_id: "track-wipe",
+        kind: "image_overlay",
+        order: 4,
+        enabled: true,
+        locked: false,
+      });
+      wire.clips = [lower, image];
+      image.start_frame = 0;
+      image.duration_frames = 12;
+      image.transition = { kind: "wipe_from_left_v1", duration_frames: 6 };
+      wire.public_fingerprint = publicCompositionFingerprint(wire);
+      const accepted = decodePublicCompositionSnapshot(wire);
+      const resolved = resolveCompositionScene(accepted, 2);
+      const drift = structuredClone(resolved);
+      const layer = drift.layers.find(
+        (row) => row.clip_id === image.clip_id,
+      )! as Record<string, unknown>;
+      if (field === "elapsed") layer.transition_elapsed_frames = 3;
+      else
+        layer.wipe = {
+          kind:
+            field === "direction" ? "wipe_from_right_v1" : "wipe_from_left_v1",
+          duration_frames: field === "duration" ? 5 : 6,
+        };
+      const subject = harness();
+      const resources: VisualLayerResources = new Map(
+        wire.clips.map((clip) => [
+          clip.clip_id,
+          {
+            kind: "image",
+            source: qualifiedImageSource([255, 0, 0, 255]),
+            nativeWidth: 320,
+            nativeHeight: 180,
+          },
+        ]),
+      );
+      const compositor = createVisualCompositor(subject.canvas, accepted);
+      expect(
+        compositor.render(decodeResolvedScene(resolved), resources, 1).status,
+      ).toBe("presented");
+      expect(
+        compositor.render(decodeResolvedScene(drift), resources, 2),
+      ).toMatchObject({
+        status: "unavailable",
+        blocker: "invalid_contract",
+        renderedLayerCount: 0,
+      });
+      expect(subject.context.pixel()).toEqual([0, 0, 0, 255]);
+      compositor.close();
+    },
+  );
+
+  it("refuses three active image resources after counting every resolved layer", () => {
+    const wire = structuredClone(fixture.snapshot);
+    const template = wire.clips[2]!;
+    const primary = { ...wire.tracks[0]!, enabled: false };
+    wire.tracks = Array.from({ length: 3 }, (_, index) => ({
+      track_id: `image-${index}`,
+      kind: "image_overlay",
+      order: index + 1,
+      enabled: true,
+      locked: false,
+    }));
+    wire.clips = wire.tracks.map((track, index) => ({
+      ...structuredClone(template),
+      clip_id: `image-${index}`,
+      track_id: track.track_id,
+      start_frame: 0,
+      duration_frames: 12,
+      transition: { kind: "none", duration_frames: 0 },
+    }));
+    wire.tracks.unshift(primary);
+    wire.public_fingerprint = publicCompositionFingerprint(wire);
+    const accepted = decodePublicCompositionSnapshot(wire);
+    const resolved = resolveCompositionScene(accepted, 2);
+    const subject = harness();
+    const resources: VisualLayerResources = new Map(
+      wire.clips.map((clip) => [
+        clip.clip_id,
+        {
+          kind: "image" as const,
+          source: qualifiedImageSource([255, 0, 0, 255]),
+          nativeWidth: 320,
+          nativeHeight: 180,
+        },
+      ]),
+    );
+    const compositor = createVisualCompositor(subject.canvas, accepted);
+    // This independently checks the compositor's guard even if an upstream resolver refuses too.
+    expect(
+      compositor.render(
+        decodeResolvedScene({ ...resolved, blockers: [] }),
+        resources,
+        1,
+      ),
+    ).toMatchObject({
+      status: "unavailable",
+      blocker: "resource_limit",
+      renderedLayerCount: 0,
+    });
+    expect(subject.context.drawOrder).toEqual([]);
+    expect(subject.context.pixel()).toEqual([0, 0, 0, 255]);
+    compositor.close();
   });
 
   it("renders a valid gap as opaque black and fails closed on source or scene drift", () => {

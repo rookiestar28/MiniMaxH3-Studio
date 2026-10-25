@@ -10,6 +10,7 @@ import {
 } from "./authoringPreviewCodec";
 import {
   BLOCKER_CODES,
+  TRANSITION_KINDS,
   CLIP_AUDIO_FADE_MAX_FRAMES,
   CLIP_AUDIO_GAIN_MAX_MB,
   CLIP_AUDIO_GAIN_MIN_MB,
@@ -1184,21 +1185,14 @@ function validateTextStyle(
 
 function validateTransition(value: unknown, name: string): number {
   const wire = object(value, transitionKeys, name);
-  const kind = exactChoice(
-    wire.kind,
-    ["none", "cross_dissolve_v1"],
-    `${name}.kind`,
-  );
+  const kind = exactChoice(wire.kind, TRANSITION_KINDS, `${name}.kind`);
   const duration = exactInteger(
     wire.duration_frames,
     0,
     300,
     `${name}.duration_frames`,
   );
-  if (
-    (kind === "none" && duration !== 0) ||
-    (kind === "cross_dissolve_v1" && duration < 1)
-  )
+  if ((kind === "none" && duration !== 0) || (kind !== "none" && duration < 1))
     throw new Error(`${name}.duration_frames is inconsistent with its kind`);
   return duration;
 }

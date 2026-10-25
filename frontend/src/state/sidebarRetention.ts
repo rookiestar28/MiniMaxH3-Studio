@@ -8,6 +8,7 @@
 // backend: a reload or a complete extension disposal loses it by design.
 
 import type { ProductionFunctionId } from "../contracts/sidebarEditorUiContract";
+import type { TransitionKind } from "../contracts/compositionCodec";
 import type {
   ClipAudioWire,
   CropWire,
@@ -67,7 +68,7 @@ export type SidebarRetentionSlots = {
     style: TextStyleWire | null;
   }>;
   "nle.inspector.transition": Readonly<{
-    transitionKind: "none" | "cross_dissolve_v1";
+    transitionKind: TransitionKind;
     transitionFrames: number;
   }>;
   "nle.inspector.audio": Readonly<{ audio: ClipAudioWire }>;

@@ -221,6 +221,18 @@
       "path": "frontend/tests/e2e/journeys/productionCore.spec.ts",
       "runner": "playwright",
       "selector": "selection keeps a completed run authority and preview"
+    },
+    {
+      "id": "app-mode.canvas-preparation-unchosen-start",
+      "path": "frontend/tests/e2e/journeys/managedLifecycle.spec.ts",
+      "runner": "playwright",
+      "selector": "I2VA Start prepares an unchosen image and refreshes source guidance"
+    },
+    {
+      "id": "app-mode.canvas-preparation-unchosen-replace",
+      "path": "frontend/tests/e2e/journeys/managedLifecycle.spec.ts",
+      "runner": "playwright",
+      "selector": "I2VA Replace prepares an unchosen image and refreshes source guidance"
     }
   ],
   "policies": [],

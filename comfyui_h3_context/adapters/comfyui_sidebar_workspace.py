@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 
-from ..core.assisted_draft import DraftGuarantee, reference_inventory
+from ..core.assisted_draft import DraftGuarantee, inventory_matches_guarantee
 from ..core.assisted_draft_orchestration import (
     AssistedDraftExecutionResult,
     AssistedDraftReceipt,
@@ -22,13 +22,18 @@ from ..core.assisted_draft_orchestration import (
 from ..core.audit_override import stage_audit_override
 from ..core.canonical import canonical_fingerprint, fingerprint_context_report
 from ..core.context_reporting import ContextReport
-from ..core.contracts import MediaKind, TaskMode
+from ..core.contracts import MediaKind, TaskMode, ValidationSeverity
 from ..core.errors import NativeH3AdapterError, SidebarWorkspaceError
 from ..core.native_h3 import (
     NativeH3Wiring,
     assert_native_h3_wiring_authority,
 )
 from ..core.prompt_fidelity import PromptFidelityAuditResult, audit_prompt_fidelity
+from ..core.prompt_model_provider import (
+    PromptModelOutcomeId,
+    PromptModelRemediation,
+    build_prompt_model_outcome,
+)
 from ..core.registry import ReferenceRegistry
 from ..core.segment_workspace import (
     MultiSegmentWorkspace,
@@ -93,6 +98,34 @@ SIDEBAR_ACTION_ROUTE = "/h3-context/v1/sidebar/action"
 ASSISTED_SIDEBAR_ACTION_ROUTE = "/h3-context/v1/sidebar/assisted"
 MAX_SIDEBAR_ACTION_BYTES = 70_000
 MAX_SIDEBAR_TRANSFER_BYTES = 70_000
+
+
+def _assisted_candidate_failure(
+    error: SidebarWorkspaceError, receipt: AssistedDraftReceipt | None
+) -> AssistedDraftExecutionResult:
+    if error.code == "assisted_proposal_audit":
+        outcome_id = PromptModelOutcomeId.PROPOSAL_AUDIT_FAILED
+    elif error.code == "assisted_proposal_preservation":
+        outcome_id = (
+            PromptModelOutcomeId.PROPOSAL_REFERENCE_DRIFT
+            if str(error) == "assisted_proposal_preservation: reference inventory changed"
+            else PromptModelOutcomeId.PROPOSAL_USER_TEXT_ALTERED
+        )
+    elif error.code == "assisted_proposal_forbidden_content":
+        outcome_id = PromptModelOutcomeId.PROPOSAL_FORBIDDEN_CONTENT_ADDED
+    else:
+        raise error
+    return AssistedDraftExecutionResult(
+        outcome=build_prompt_model_outcome(
+            outcome_id,
+            severity=ValidationSeverity.WARNING,
+            remediation=PromptModelRemediation.NONE,
+            parameters=(),
+        ),
+        receipt=None if receipt is None else replace(receipt, outcome_id=outcome_id),
+    )
+
+
 MAX_SIDEBAR_ACTION_DEPTH = 8
 MAX_SIDEBAR_ACTION_ITEMS = 64
 MAX_SIDEBAR_WORKSPACES = 64
@@ -1435,7 +1468,7 @@ class SidebarWorkspaceRegistry:
     ) -> tuple[PromptFidelityAuditResult, ContextReport]:
         if type(prompt_text) is not str:
             raise SidebarWorkspaceError("assisted_proposal_invalid", "candidate is invalid")
-        if reference_inventory(prompt_text) != reference_inventory(report.prompt_document.text):
+        if not inventory_matches_guarantee(guarantee, prompt_text):
             raise SidebarWorkspaceError(
                 "assisted_proposal_preservation", "reference inventory changed"
             )
@@ -1443,9 +1476,23 @@ class SidebarWorkspaceRegistry:
         # prose audit passes. Keep this deterministic check before candidate staging.
         if any(span not in prompt_text for span in guarantee.preserved_spans):
             raise SidebarWorkspaceError("assisted_proposal_preservation", "exact user text changed")
+        from ..core.hard_content import FORBIDDEN_CONTENT_PRESENT, hard_content_violations
+
+        content = hard_content_violations(
+            guarantee.required_content, guarantee.forbidden_content, prompt_text
+        )
+        if content:
+            if content[0][0] == FORBIDDEN_CONTENT_PRESENT:
+                raise SidebarWorkspaceError(
+                    "assisted_proposal_forbidden_content", "forbidden content added"
+                )
+            raise SidebarWorkspaceError("assisted_proposal_preservation", "required content lost")
         audit = audit_prompt_fidelity(
             report.plan,
             replace(report.prompt_document, text=prompt_text),
+            # IMPORTANT: the same action grant must reach publish, edit and accept. Recomputing
+            # it here loses the instruction and incorrectly rejects a requested camera/cut.
+            allowance=guarantee.requested_allowance,
         )
         if audit.prose_blocking:
             raise SidebarWorkspaceError("assisted_proposal_audit", "candidate audit failed")
@@ -1642,7 +1689,7 @@ class SidebarWorkspaceRegistry:
         expected_proposal_revision: int,
         prompt_text: str,
         authority: ProviderAuthorityClaim,
-    ) -> AssistedPromptProposalProjection:
+    ) -> AssistedPromptProposalProjection | AssistedDraftExecutionResult:
         now = self._clock()
         with self._lock:
             self._prune(now)
@@ -1652,9 +1699,12 @@ class SidebarWorkspaceRegistry:
                 expected_proposal_revision,
                 authority,
             )
-            audit, _staged = self._validate_assisted_candidate(
-                workspace.report, prompt_text, proposal.guarantee
-            )
+            try:
+                audit, _staged = self._validate_assisted_candidate(
+                    workspace.report, prompt_text, proposal.guarantee
+                )
+            except SidebarWorkspaceError as error:
+                return _assisted_candidate_failure(error, proposal.receipt)
             proposal.candidate_text = prompt_text
             proposal.audit = audit
             proposal.proposal_revision += 1
@@ -2021,7 +2071,8 @@ async def dispatch_assisted_sidebar_action(
                 "proposal": None,
             }
         lease = decision.lease
-        guarantee = build_assisted_guarantee(report)
+        revision_instruction = payload["instruction"] if kind == "refine_prompt" else None
+        guarantee = build_assisted_guarantee(report, revision_instruction=revision_instruction)
         try:
             execution = await asyncio.to_thread(
                 run_assisted_draft_orchestration,
@@ -2045,9 +2096,20 @@ async def dispatch_assisted_sidebar_action(
                     lease,
                     report,
                     exchange_factory=exchange_factory,
+                    refine=revision_instruction is not None,
                 ),
                 cancellation=lease.cancelled,
             )
+            # An explicit typed restriction still wins over Refine's category grant. A failed
+            # re-audit is a proposal refusal; do not publish its rejected candidate or draft.
+            if (
+                revision_instruction is not None
+                and execution.outcome.outcome_id is PromptModelOutcomeId.REPAIR_REAUDIT_FAILED
+            ):
+                execution = _assisted_candidate_failure(
+                    SidebarWorkspaceError("assisted_proposal_audit", "proposal failed audit"),
+                    execution.receipt,
+                )
             proposal = None
             if execution.usable:
                 try:
@@ -2070,6 +2132,8 @@ async def dispatch_assisted_sidebar_action(
                     raise SidebarWorkspaceError(
                         "assisted_proposal_authority", "provider changed"
                     ) from None
+                except SidebarWorkspaceError as error:
+                    execution = _assisted_candidate_failure(error, execution.receipt)
             return {
                 "schema": "h3.context.assisted_sidebar_result.v1",
                 "state": "proposal" if proposal is not None else "failed",
@@ -2115,6 +2179,13 @@ async def dispatch_assisted_sidebar_action(
                 authority=authority,
             )
         )
+        if isinstance(result, AssistedDraftExecutionResult):
+            return {
+                "schema": "h3.context.assisted_sidebar_result.v1",
+                "state": "failed",
+                "execution": result.to_wire(),
+                "proposal": None,
+            }
         if not isinstance(result, AssistedPromptProposalProjection):
             raise RuntimeError("assisted proposal projection is invalid")
         return result.to_wire()

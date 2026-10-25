@@ -11,6 +11,7 @@ type Copy = {
   old: string;
   empty: string;
   error: string;
+  fontUnavailable: string;
   refresh: string;
   loading: string;
   previewError: string;
@@ -38,6 +39,8 @@ export const outputCopy: Record<Locale, Copy> = {
     empty: "Render the current timeline to create a final video.",
     error:
       "Output status is unavailable. Refresh before accessing this output.",
+    fontUnavailable:
+      "The title font changed or cannot render some characters. Edit the title text or style before rendering again.",
     refresh: "Refresh status",
     loading: "Loading preview",
     previewError: "Preview unavailable. The original remains separate.",
@@ -73,6 +76,8 @@ export const outputCopy: Record<Locale, Copy> = {
     old: "此輸出來自較早版本",
     empty: "算繪目前時間軸以建立最終影片。",
     error: "無法取得輸出狀態。請重新整理後再存取。",
+    fontUnavailable:
+      "標題字型已變更，或無法顯示部分字元。請編輯標題文字或樣式後再算繪。",
     refresh: "重新整理狀態",
     loading: "正在載入預覽",
     previewError: "預覽不可用；原檔仍為獨立輸出。",
@@ -108,6 +113,8 @@ export const outputCopy: Record<Locale, Copy> = {
     old: "此输出来自较早版本",
     empty: "渲染当前时间线以创建最终视频。",
     error: "无法获取输出状态。请刷新后再访问。",
+    fontUnavailable:
+      "标题字体已更改，或无法显示部分字符。请编辑标题文字或样式后再渲染。",
     refresh: "刷新状态",
     loading: "正在加载预览",
     previewError: "预览不可用；原文件仍为独立输出。",

@@ -7,6 +7,7 @@
 
 import type {
   CompositionClip,
+  TransitionKind,
   PublicCompositionSnapshot,
 } from "../../contracts/compositionCodec";
 import type { TimelineCommandWire } from "../../contracts/authoringWorkbenchCodec";
@@ -413,7 +414,7 @@ export const build = Object.freeze({
     command("set_text_style", { clip_id: clipId, style: { ...style } }),
   setTransition: (
     clipId: string,
-    kind: "none" | "cross_dissolve_v1",
+    kind: TransitionKind,
     durationFrames: number,
   ) =>
     command("set_transition", {

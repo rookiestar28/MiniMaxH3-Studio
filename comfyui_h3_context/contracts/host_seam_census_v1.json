@@ -180,7 +180,8 @@
       "authority": "observed.hc_09_pinned_host",
       "source_paths": [
         "frontend/src/host/appModeContract.ts",
-        "frontend/src/host/hostSeams.ts"
+        "frontend/src/host/hostSeams.ts",
+        "frontend/src/host/imageCropSource.ts"
       ],
       "readiness_states": [
         "ready",
@@ -542,6 +543,7 @@
       "source_paths": [
         "frontend/src/host/appModeRoutes.ts",
         "frontend/src/host/hostSeams.ts",
+        "frontend/src/host/imageCropCapability.ts",
         "frontend/src/host/officialAssetResolution.ts"
       ],
       "readiness_states": [

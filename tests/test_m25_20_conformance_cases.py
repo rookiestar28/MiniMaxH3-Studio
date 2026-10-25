@@ -136,14 +136,18 @@ def test_every_corpus_row_has_exactly_one_recipe_and_no_recipe_invents_a_row() -
     #  appended the four high-resolution rows to the accepted 306 rather than replacing any
     # of them, and the 22 `clip_audio` rows and the two rows of its `set_clip_audio`
     # command, so the total moves and the original set is asserted to be untouched beneath it.
-    assert len(BOOK.recipes) == len(CORPUS.cases) == 334
+    assert len(BOOK.recipes) == len(CORPUS.cases) == 374
     high_resolution = {case.case_id for case in CORPUS.cases if case.family == "high_resolution"}
     clip_audio = {case.case_id for case in CORPUS.cases if case.family == "clip_audio"}
     clip_audio_command = {"command.set_clip_audio.accepted", "command.set_clip_audio.refused"}
     assert len(high_resolution) == 4
     assert len(clip_audio) == 22
     assert clip_audio_command <= set(CORPUS.case_ids)
-    assert len(set(CORPUS.case_ids) - high_resolution - clip_audio - clip_audio_command) == 306
+    wipes = {case_id for case_id in CORPUS.case_ids if case_id.startswith("transition.wipe_")}
+    assert len(wipes) == 40
+    assert (
+        len(set(CORPUS.case_ids) - high_resolution - clip_audio - clip_audio_command - wipes) == 306
+    )
     assert len(set(BOOK.by_id)) == len(BOOK.recipes)
 
 
@@ -166,8 +170,8 @@ def test_each_observation_kind_carries_the_rows_its_class_implies() -> None:
     # and the member on a clip without bound audio. Its `set_clip_audio` command adds one
     # accepted and one refused command row (+1, +1), as every command does.
     assert BOOK.counts_by_observation() == {
-        "render_and_browser": 168,
-        "contract_refusal": 70,
+        "render_and_browser": 196,
+        "contract_refusal": 82,
         "command_effect": 34,
         "command_refusal": 36,
         "shell_invariant": 11,
@@ -223,7 +227,7 @@ def test_shell_and_import_rows_never_carry_a_command_or_an_artifact() -> None:
 def test_the_rendering_set_is_exactly_the_rows_that_produce_an_artifact() -> None:
     rendering = BOOK.rendering()
     # 185 accepted rows, 's four, 's fourteen and its accepted command row.
-    assert len(rendering) == 204
+    assert len(rendering) == 232
     assert all(recipe.refusal_code is None for recipe in rendering)
     assert all(recipe.observation != "declared_negative" for recipe in rendering)
 
@@ -822,6 +826,15 @@ SHARED_COMPOSITIONS: Final[dict[str, tuple[str, tuple[str, ...]]]] = {
 #: the two: a row that reaches a different composition but claims the same thing about it is still
 #: two runs of one experiment, and the difference goes unobserved.
 SHARED_CLAIMS: Final[dict[str, tuple[str, tuple[str, ...]]]] = {
+    "one-frame wipes have no directional intermediate picture": (
+        "At elapsed zero every direction is empty; from elapsed one every direction is full. "
+        "There is no integer intermediate frame at duration one, so all four lower-bound "
+        "rows necessarily render the same pixels. Longer durations retain distinct edge samples.",
+        tuple(
+            f"transition.wipe_from_{kind}_v1.duration_lower"
+            for kind in ("left", "right", "top", "bottom")
+        ),
+    ),
     "the clip audio identities the clip audio base already carries": (
         "The three identity rows render one composition (see `SHARED_COMPOSITIONS`), so they "
         "state one expectation: the tone at its source level in every window, and the base's "

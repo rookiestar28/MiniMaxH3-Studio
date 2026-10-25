@@ -1,6 +1,10 @@
-import { expect, test, type Page } from "../fixtures/h3Page";
+import { expect, test, type Page, type TestInfo } from "../fixtures/h3Page";
 
 import { syntheticPromptUuid } from "../../support/queuePromptTestDouble";
+import { createQualifiedBasePrompt } from "../../support/qualifiedBasePrompt";
+import { syntheticTemplate } from "../../support/templateFixture";
+import { sidebarCopy } from "../../../src/i18n/catalog";
+import { createManagedJournal } from "../../../src/state/managedJournal";
 
 const managedPromptId = syntheticPromptUuid(201);
 const secondManagedPromptId = syntheticPromptUuid(202);
@@ -623,6 +627,222 @@ test("existing managed generation never inherits a relocated materialize notice"
     "aria-describedby",
     /h3-app-mode-generation-blocker/,
   );
+});
+
+async function prepareUnchosenImageCanvas(
+  page: Page,
+  testInfo: TestInfo,
+  initialGraph: "empty" | "dirty",
+) {
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  const text = sidebarCopy("en");
+  await page.route("**/templates/video_minimax_h3_i2v.json", (route) =>
+    route.fulfill({ json: syntheticTemplate("video_minimax_h3_i2v") }),
+  );
+  await page.goto(`/?mode=managed-entry&initialGraph=${initialGraph}`);
+  await expect(
+    page.getByRole("combobox", { name: text.taskMode, exact: true }),
+  ).toBeVisible();
+  const output = createQualifiedBasePrompt(
+    {
+      task_mode: "i2va",
+      user_intent: "Prepare the official canvas before choosing an image.",
+      duration_milliseconds: 5000,
+      frame_count: 120,
+      first_frame_source: "17",
+    },
+    {
+      first_frame: {
+        class_type: "LoadImage",
+        inputs: { image: "fixture.png" },
+      },
+    },
+    { sharedDurationSource: true },
+  );
+  // Script the existing fixture compiler; the production preparation, validation and
+  // canvas write still execute through src/entry and the declared host seams.
+  await page.evaluate(async (compiledOutput) => {
+    const fixtureUrl = performance
+      .getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .find((url) =>
+        new URL(url).pathname.endsWith("/tests/fixtures/entryHostModules.ts"),
+      );
+    if (fixtureUrl === undefined)
+      throw new Error("the existing entry fixture module was not observed");
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    fixture.setGraphToPromptHandler(() => ({
+      output: compiledOutput,
+      workflow: {},
+    }));
+  }, output);
+  await page
+    .getByRole("combobox", { name: text.taskMode, exact: true })
+    .selectOption("i2va");
+  await page
+    .getByRole("textbox", { name: "Intent" })
+    .fill("Prepare the official canvas before choosing an image.");
+  const submit = page.locator('[data-h3-focus-key="app-submit"]');
+  const source = page.getByRole("combobox", {
+    name: text.firstFrameSource,
+    exact: true,
+  });
+  await expect(
+    page.getByText(text.sourceGuidance.noImage, { exact: true }),
+  ).toBeVisible();
+  await expect(source).toHaveAttribute(
+    "aria-describedby",
+    "h3-app-mode-source-guidance",
+  );
+  await expect(submit).toHaveText(
+    initialGraph === "empty" ? text.startAppMode : text.replaceAppMode,
+  );
+  await expect(submit).toBeEnabled();
+  await page.locator("#managed-entry-sidebar").screenshot({
+    path: testInfo.outputPath(`${initialGraph}-current-empty.png`),
+  });
+
+  // Model the host's ordinary node-created callback after its graph API changes.
+  // The same mounted Sidebar must refresh; no page reload or remount is used.
+  await page.evaluate(async () => {
+    const fixtureUrl = performance
+      .getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .find((url) =>
+        new URL(url).pathname.endsWith("/tests/fixtures/entryHostModules.ts"),
+      );
+    if (fixtureUrl === undefined)
+      throw new Error("the existing entry fixture module was not observed");
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    const graph = fixture.app.graph.serialize();
+    fixture.app.loadGraphData({
+      ...graph,
+      nodes: [
+        ...graph.nodes,
+        {
+          id: 901,
+          type: "LoadImage",
+          widgets_values: ["fixture.png", "image"],
+        },
+      ],
+    });
+    fixture.registeredExtension().nodeCreated();
+  });
+  await expect(source.locator('option[value="901"]')).toHaveCount(1);
+  await expect(
+    page.getByText(text.sourceGuidance.noImage, { exact: true }),
+  ).toHaveCount(0);
+  await page.evaluate(async () => {
+    const fixtureUrl = performance
+      .getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .find((url) =>
+        new URL(url).pathname.endsWith("/tests/fixtures/entryHostModules.ts"),
+      );
+    if (fixtureUrl === undefined)
+      throw new Error("the existing entry fixture module was not observed");
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    const graph = fixture.app.graph.serialize();
+    fixture.app.loadGraphData({
+      ...graph,
+      nodes: graph.nodes.filter((node: { id: number }) => node.id !== 901),
+    });
+    fixture.registeredExtension().nodeCreated();
+  });
+  await expect(
+    page.getByText(text.sourceGuidance.noImage, { exact: true }),
+  ).toBeVisible();
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(
+    page.locator('[data-shell-reason="canvas_ready"]'),
+  ).toBeVisible();
+  // Reproduce the ordinary post-write inspection through the subscribed host
+  // graph seam; inspecting only the transient ready state misses lost guidance.
+  await page.evaluate(async () => {
+    const fixtureUrl = performance
+      .getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .find((url) =>
+        new URL(url).pathname.endsWith("/tests/fixtures/entryHostModules.ts"),
+      );
+    if (fixtureUrl === undefined)
+      throw new Error("the existing entry fixture module was not observed");
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    fixture.app.graph.events.dispatchEvent(new Event("graphChanged"));
+  });
+  await expect(
+    page.locator('[data-shell-reason="native_preference"]'),
+  ).toBeVisible();
+  await expect
+    .poll(async () => {
+      const wire = await page.evaluate(() =>
+        localStorage.getItem("h3-context.managed-journal.v1"),
+      );
+      const journal = createManagedJournal();
+      journal.initialize({
+        getItem: () => wire,
+        setItem: () => undefined,
+        removeItem: () => undefined,
+      });
+      const entries = journal.snapshot();
+      const ready = [...entries]
+        .reverse()
+        .find(
+          (entry) =>
+            entry.kind === "transition" && entry.event === "CANVAS_READY",
+        );
+      return (
+        ready !== undefined &&
+        entries.some(
+          (entry) =>
+            entry.run === ready.run &&
+            entry.seq > ready.seq &&
+            entry.kind === "state" &&
+            entry.name === "interactive" &&
+            entry.reason === "native_preference",
+        )
+      );
+    })
+    .toBe(true);
+  await expect(page.locator("[data-h3-prepared-source-guidance]")).toHaveText(
+    text.sourceGuidance.readyFrames
+      .replace("{roles}", text.sourceGuidance.roles.firstFrame)
+      .replace("{queue}", text.queueCurrentGraph),
+  );
+  await expect(submit).toHaveText(text.queueCurrentGraph);
+  expect((await snapshot(page)).queueCount).toBe(0);
+  const loaderCount = await page.evaluate(async () => {
+    const fixtureUrl = performance
+      .getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .find((url) =>
+        new URL(url).pathname.endsWith("/tests/fixtures/entryHostModules.ts"),
+      );
+    if (fixtureUrl === undefined)
+      throw new Error("the existing entry fixture module was not observed");
+    const fixture = await import(/* @vite-ignore */ fixtureUrl);
+    return fixture.app.graph
+      .serialize()
+      .nodes.filter((node: { type: string }) => node.type === "LoadImage")
+      .length;
+  });
+  expect(loaderCount).toBe(1);
+  await page.locator("#managed-entry-sidebar").screenshot({
+    path: testInfo.outputPath(`${initialGraph}-canvas-ready.png`),
+  });
+}
+
+test("I2VA Start prepares an unchosen image and refreshes source guidance", async ({
+  page,
+}, testInfo) => {
+  await prepareUnchosenImageCanvas(page, testInfo, "empty");
+});
+
+test("I2VA Replace prepares an unchosen image and refreshes source guidance", async ({
+  page,
+}, testInfo) => {
+  await prepareUnchosenImageCanvas(page, testInfo, "dirty");
 });
 
 test("Replace prepares a ready canvas and native model refusal ends manual queue work", async ({

@@ -463,13 +463,16 @@ def build_spdx_sbom() -> JsonObject:
     for item in load_frontend_license_inventory():
         name = cast(str, item["name"])
         version = cast(str, item["version"])
+        # IMPORTANT: Vite compiles these libraries into the sidebar, including ReactDOM's
+        # Scheduler dependency. Calling all lockfile entries build-only hides shipped licenses.
+        bundled = name in {"react", "react-dom", "scheduler"}
         packages.append(
             _spdx_package(
                 name,
                 version,
                 cast(str, item["license"]),
-                "SOURCE",
-                "development_build_only_not_bundled",
+                "LIBRARY" if bundled else "SOURCE",
+                "bundled_in_sidebar_runtime" if bundled else "development_build_only_not_bundled",
                 f"pkg:npm/{quote(name, safe='/')}@{version}",
             )
         )

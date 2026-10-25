@@ -32,6 +32,27 @@ import { type ShellRuntime, type ViewFocusClaim } from "./shellSession";
 export function createPresentationBinding(ctx: ShellRuntime) {
   const { session, deps, actions } = ctx;
 
+  function acquireImageCropKeyboardGuard(onInvalidated: () => void) {
+    const modal = acquireModalKeyboardGuard(deps.app);
+    if (modal.status !== "ready") return modal;
+    const canvas = acquireCanvasKeyboardGuard(deps.app, onInvalidated);
+    if (canvas.status !== "ready") {
+      modal.value.release();
+      return canvas;
+    }
+    let released = false;
+    return seamReady(
+      Object.freeze({
+        release() {
+          if (released) return;
+          released = true;
+          canvas.value.release();
+          modal.value.release();
+        },
+      }),
+    );
+  }
+
   function ensureBuildProvenance(): void {
     if (session.buildProvenanceRequested) return;
     session.buildProvenanceRequested = true;
@@ -465,6 +486,11 @@ export function createPresentationBinding(ctx: ShellRuntime) {
         state={session.state}
         workspaceState={session.workspaceState}
         appMode={{
+          imageCrop: {
+            available: deps.appModeController.cropAvailable(),
+            actions: deps.appModeController.cropSources,
+            acquireKeyboardGuard: acquireImageCropKeyboardGuard,
+          },
           capability: actions.currentAppModeCapability(),
           imageSources: deps.appModeController.imageSources(),
           mediaSources: deps.appModeController.mediaSources(),

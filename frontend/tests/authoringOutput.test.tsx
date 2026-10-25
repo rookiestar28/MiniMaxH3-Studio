@@ -70,6 +70,48 @@ function dependencies() {
 async function component() {
   return AuthoringOutput;
 }
+it.each([
+  [
+    "en",
+    "The title font changed or cannot render some characters. Edit the title text or style before rendering again.",
+  ],
+  [
+    "zh-TW",
+    "標題字型已變更，或無法顯示部分字元。請編輯標題文字或樣式後再算繪。",
+  ],
+  [
+    "zh-CN",
+    "标题字体已更改，或无法显示部分字符。请编辑标题文字或样式后再渲染。",
+  ],
+] as const)(
+  "explains render-time font refusal in %s",
+  async (locale, message) => {
+    const deps = dependencies();
+    const failed = {
+      ...status,
+      phase: "failed" as const,
+      progress_bp: 0,
+      failure: "font_changed" as const,
+      output: null,
+      output_handle: null,
+      availability: "gone" as const,
+    };
+    vi.mocked(deps.client.create).mockResolvedValue(failed);
+    vi.mocked(deps.client.status).mockResolvedValue(failed);
+    const view = render(
+      <AuthoringOutput
+        capability={{ ...OUTPUT_CAPABILITY, supported: true }}
+        binding={binding}
+        locale={locale}
+        {...deps}
+      />,
+    );
+    fireEvent.click(view.getAllByRole("button")[0]!);
+    await waitFor(() =>
+      expect(view.getByRole("alert").textContent).toBe(message),
+    );
+  },
+);
 describe("unmounted final-output leaf", () => {
   it("performs no calls without exact supported capability and workspace", async () => {
     const Component = await component(),

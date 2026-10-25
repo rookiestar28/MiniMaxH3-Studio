@@ -490,7 +490,7 @@ license-files = ["LICENSE", "NOTICE"]
     def test_workflow_audit_rejects_composite_or_missing_direct_cli_token_binding(self) -> None:
         findings = audit_workflow_text(
             """
-            if: github.repository == 'rookiestar28/ComfyUI-MiniMaxH3-Studio'
+            if: github.repository == 'rookiestar28/MiniMaxH3-Studio'
             permissions:
               contents: read
             steps:
@@ -504,7 +504,7 @@ license-files = ["LICENSE", "NOTICE"]
 
     def test_workflow_audit_rejects_missing_or_renamed_registry_environment(self) -> None:
         template = """
-        if: github.repository == 'rookiestar28/ComfyUI-MiniMaxH3-Studio'
+        if: github.repository == 'rookiestar28/MiniMaxH3-Studio'
         permissions:
           contents: read
         {environment}

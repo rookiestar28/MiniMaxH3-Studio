@@ -1,3 +1,4 @@
+import rawReferenceCropTransition from "../../governance/contracts/host_seam_census_transition_reference_crop_v1.json" with { type: "json" };
 import rawPerceptionHostTransition from "../../governance/contracts/host_seam_census_transition_perception_host_v1.json" with { type: "json" };
 import rawModalKeyboardTransition from "../../governance/contracts/host_seam_census_transition_modal_keyboard_v1.json" with { type: "json" };
 import rawWorkspaceStateTransition from "../../governance/contracts/host_seam_census_transition_workspace_state_v1.json" with { type: "json" };
@@ -94,6 +95,7 @@ const currentTransitionChain = [
   rawRetainedMediaTransition,
   rawProjectPersistenceTransition,
   rawPerceptionHostTransition,
+  rawReferenceCropTransition,
 ] as const;
 
 function replacingCurrentTransition(reference: unknown, value: unknown) {
@@ -315,6 +317,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("closed shape");
     const wrongSource = {
@@ -569,6 +572,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("closed shape");
   });
@@ -644,6 +648,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -660,6 +665,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -737,6 +743,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -752,6 +759,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -830,6 +838,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -844,6 +853,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -919,6 +929,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -932,6 +943,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -986,6 +998,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -998,6 +1011,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -1075,6 +1089,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -1086,6 +1101,7 @@ describe("HC-10 host seam drift classification", () => {
         rawRetainedMediaTransition,
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
+        rawReferenceCropTransition,
       ]),
     ).toThrow("unsupported identity");
   });

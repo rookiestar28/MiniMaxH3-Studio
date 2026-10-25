@@ -11,8 +11,10 @@ canvas features. Ordinary users do not need it: everything else works without ho
 ## Official Context-IR service
 
 The **H3 Official Context-IR** node sends a prompt to MiniMax's hosted Context-IR service and
-returns an enhanced prompt. It does not generate video. The package ships without a connection:
-until a host supplies one, the node refuses to run. Assisted-authoring profiles do not configure it.
+returns an enhanced prompt. The request can also carry connected reference media as public HTTPS
+URLs with their metadata; the node never uploads file bytes. It does not generate video. The
+package ships without a connection: until a host supplies one, the node refuses to run.
+Assisted-authoring profiles do not configure it.
 The service's API is described in MiniMax's
 [Context-IR create API](https://platform.minimax.io/docs/api-reference/video-generation-v2-h3-context-ir)
 and [task query API](https://platform.minimax.io/docs/api-reference/video-generation-v2-query).
@@ -44,7 +46,8 @@ For each run, the factory receives an opaque `credential_reference` and returns 
 
 ### What the node guarantees
 
-- Nothing is requested until the user has given upload and network consent.
+- Nothing is requested until the user has given network consent and upload consent, which confirms
+  that the request, including any connected media URLs, may leave this host.
 - The credential is resolved again before each request, and authority is checked before and after
   each network call.
 - Errors from your callbacks are redacted. A missing configuration refuses before any network use.
@@ -139,7 +142,8 @@ clear_perception_host(binding)
 
 ### Supported setup
 
-Only this combination is supported, on native Windows with Python 3.13:
+Linux support is coming in an upcoming update. Only this combination is qualified, on native
+Windows with Python 3.13:
 
 - **Visual**: Ollama **0.35.1** at `127.0.0.1:11434` with
   [`qwen3.8:27b-q4_K_M`](https://ollama.com/library/qwen3.8:27b-q4_K_M) (SHA-256
@@ -152,15 +156,18 @@ Only this combination is supported, on native Windows with Python 3.13:
   config and tokenizer files.
 
 Both models are Apache-2.0; keep their notices. The nodes never install packages, download models
-or use paid services. If the installed runtime or files differ, the nodes refuse to run.
+or use paid services. Before each run they check the Ollama version and model digest (visual), or
+the Transformers and Torch versions and the weight and processor file hashes (audio), and refuse to
+run if any differs. They do not check the Python version itself; other versions are not qualified.
 
 ### Inputs and limits
 
-- **Visual** accepts an IMAGE, or a VIDEO that is already decoded at a constant frame rate (at most
-  300 frames, 1024 × 1024 pixels, 15 seconds and 256 MiB). File-backed video is refused. Frames are
-  resized to 512 pixels and sent to the local Ollama only after the user consents. For a reference
-  video, connect the optional `request` input to describe up to five frames from the part of the
-  video H3 actually uses; otherwise the first, middle and last frames are used.
+- **Visual** accepts an IMAGE, or a VIDEO that is already decoded at a constant frame rate of 1 to
+  60 frames per second, with no audio track or alpha channel (at most 300 frames, 1024 × 1024
+  pixels, 15 seconds and 256 MiB). File-backed video is refused. Frames are resized to 512 pixels
+  and sent to the local Ollama only after the user consents. For a reference video, connect the
+  optional `request` input to describe up to five frames from the part of the video H3 actually
+  uses; otherwise the first, middle and last frames are used.
 - **Audio** accepts mono or stereo audio at 8–48 kHz, up to 15 seconds, and transcribes it offline.
   It gives no word timings or speaker separation, and silence produces no result.
 - One request runs at a time; others are refused as busy. A run is limited to 180 seconds and a

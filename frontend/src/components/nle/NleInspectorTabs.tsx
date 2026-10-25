@@ -22,6 +22,8 @@ import { useRetainedSlot } from "../useRetainedSlot";
 import type { TimelineCommandWire } from "../../contracts/authoringWorkbenchCodec";
 import {
   CLIP_AUDIO_FADE_MAX_FRAMES,
+  TRANSITION_KINDS,
+  type TransitionKind,
   CLIP_AUDIO_GAIN_MAX_MB,
   CLIP_AUDIO_GAIN_MIN_MB,
   type CompositionClip,
@@ -53,6 +55,7 @@ import {
   type TransformWire,
 } from "./nleCommandBuilders";
 import { fill, nleCopy } from "./nleCopy";
+import { titleTextCovered } from "./nleTitleCoverage";
 import { assetDisplayNames, clipDisplayName } from "./nleTimelineSurface";
 import { NleActionIcon } from "./NleIconActions";
 import {
@@ -121,7 +124,7 @@ const COPY = {
     invalidText:
       "Text must be NFC, 1–2,048 characters, at most 32 lines, without control characters.",
     invalidTransition:
-      "A cross dissolve needs an adjacent clip and an admitted duration.",
+      "A transition needs an enabled clip on a lower track that plays for the whole transition, and a length this clip allows.",
     invalidFades:
       "Fade in and fade out together can't be longer than the clip.",
     overlaySilent:
@@ -164,7 +167,8 @@ const COPY = {
       "請輸入 {min} 至 {max} {unit} 之間、最多 {decimals} 位小數的值。",
     invalidCrop: "相對兩側的裁切總和必須小於 10,000。",
     invalidText: "文字必須是 NFC、1–2,048 字元、最多 32 行，且不可含控制字元。",
-    invalidTransition: "交叉淡化需要相鄰片段與有效持續時間。",
+    invalidTransition:
+      "轉場需要下層軌道上有已啟用、且在整段轉場期間持續播放的片段，以及此片段允許的長度。",
     invalidFades: "淡入與淡出合計不能長於片段。",
     overlaySilent: "疊加影片播放時沒有聲音。片段位於主軌時，這些設定才會生效。",
     scale: "縮放",
@@ -204,7 +208,8 @@ const COPY = {
       "请输入 {min} 至 {max} {unit} 之间、最多 {decimals} 位小数的值。",
     invalidCrop: "相对两侧的裁剪总和必须小于 10,000。",
     invalidText: "文字必须是 NFC、1–2,048 字符、最多 32 行，且不可含控制字符。",
-    invalidTransition: "交叉淡化需要相邻片段和有效持续时间。",
+    invalidTransition:
+      "转场需要下层轨道上有已启用、且在整段转场期间持续播放的片段，以及此片段允许的长度。",
     invalidFades: "淡入和淡出合计不能长于片段。",
     overlaySilent: "叠加视频播放时没有声音。片段位于主轨时，这些设置才会生效。",
     scale: "缩放",
@@ -959,14 +964,13 @@ function ClipPropertyTabs({
       ? retainedText.restored.style
       : acceptedStyle,
   );
-  const acceptedTransitionKind =
-    clip.transition.kind === "cross_dissolve_v1" ? "cross_dissolve_v1" : "none";
-  const [transitionKind, setTransitionKind] = useState<
-    "none" | "cross_dissolve_v1"
-  >(
-    retainedTransition.restored?.transitionKind === "cross_dissolve_v1"
-      ? "cross_dissolve_v1"
-      : acceptedTransitionKind,
+  const acceptedTransitionKind: TransitionKind = (
+    TRANSITION_KINDS as readonly string[]
+  ).includes(clip.transition.kind)
+    ? (clip.transition.kind as TransitionKind)
+    : "none";
+  const [transitionKind, setTransitionKind] = useState<TransitionKind>(
+    retainedTransition.restored?.transitionKind ?? acceptedTransitionKind,
   );
   const [transitionFrames, setTransitionFrames] = useState(
     typeof retainedTransition.restored?.transitionFrames === "number"
@@ -1177,6 +1181,19 @@ function ClipPropertyTabs({
     command: TimelineCommandWire,
   ) => {
     if (busy || same(value, accepted)) return;
+    // Separate commands consume accepted counterparts, never the other unsubmitted draft.
+    // Guard every Apply/Reset/keyboard/numeric path before marking a submission as sent.
+    if (
+      group === "text-content" &&
+      acceptedStyle !== null &&
+      !titleTextCovered(value as string, acceptedStyle)
+    )
+      return;
+    if (
+      group === "text-style" &&
+      !titleTextCovered(textContentOf(clip), value as TextStyleWire)
+    )
+      return;
     const signature = JSON.stringify(value);
     if (submitted.current.get(group) === signature) return;
     submitted.current.set(group, signature);
@@ -1218,7 +1235,12 @@ function ClipPropertyTabs({
   const cropValid =
     crop.left_bp + crop.right_bp < 10_000 &&
     crop.top_bp + crop.bottom_bp < 10_000;
-  const textValid = admittedText(content);
+  const textSyntaxValid = admittedText(content);
+  const textValid =
+    textSyntaxValid &&
+    (acceptedStyle === null || titleTextCovered(content, acceptedStyle));
+  const textStyleValid =
+    style === null || titleTextCovered(textContentOf(clip), style);
   const transitionValid =
     transitionKind === "none" ||
     (lowerCoverage >= transitionFrames &&
@@ -2149,7 +2171,9 @@ function ClipPropertyTabs({
               </label>
               {!textValid ? (
                 <p role="alert" className="h3-nle-validation">
-                  {copy.invalidText}
+                  {textSyntaxValid
+                    ? text.assets.titleRefusals.font_glyph_unsupported
+                    : copy.invalidText}
                 </p>
               ) : null}
               <CommitButton
@@ -2256,11 +2280,16 @@ function ClipPropertyTabs({
               <CommitButton
                 data-h3-nle-control="text.style"
                 dirty={!same(style, acceptedStyle)}
-                disabled={busy || same(style, acceptedStyle)}
+                disabled={busy || !textStyleValid || same(style, acceptedStyle)}
                 onCommit={commitTextStyle}
               >
                 {text.inspector.operations.set_text_style}
               </CommitButton>
+              {!textStyleValid ? (
+                <p role="alert" className="h3-nle-validation">
+                  {text.assets.titleRefusals.font_glyph_unsupported}
+                </p>
+              ) : null}
             </PropertyGroup>
             <NleTextDecorationControls
               locale={locale}
@@ -2308,12 +2337,11 @@ function ClipPropertyTabs({
                   )
                 }
               >
-                <option value="none">
-                  {text.inspector.transitionKinds.none}
-                </option>
-                <option value="cross_dissolve_v1">
-                  {text.inspector.transitionKinds.cross_dissolve_v1}
-                </option>
+                {TRANSITION_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {text.inspector.transitionKinds[kind]}
+                  </option>
+                ))}
               </select>
             </label>
             {numeric(

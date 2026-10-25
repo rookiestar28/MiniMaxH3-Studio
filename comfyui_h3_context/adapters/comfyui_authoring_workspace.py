@@ -36,7 +36,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ..core import length
 from ..core.authoring_media import CreateLeaseRequest
@@ -132,6 +132,11 @@ from ..core.timeline_history_v2 import (
     refresh_authoring_asset_catalog_v2,
     release_timeline_history_v2,
     timeline_history_projection_v2,
+)
+from .authoring_fonts import (
+    AuthoringFontError,
+    load_packaged_font_manifest,
+    require_text_coverage,
 )
 from .authoring_generated_source import (
     GENERATED_AUTHORING_SOURCE_SCHEMA,
@@ -732,6 +737,46 @@ def _seed_reference_state(
         except ContractValidationError as exc:
             not_admissible[audio_id] = str(exc).split(":", 1)[0]
     return universe, not_admissible, state
+
+
+def _require_title_edit_coverage(
+    before: TimelineHistoryState | TimelineHistoryStateV2,
+    after: TimelineHistoryState | TimelineHistoryStateV2,
+    payload: dict[str, object],
+) -> None:
+    # IMPORTANT: admit only edited titles, using the verified packaged manifest, never system
+    # fonts. Keep this host check outside qualified renderer files or rendering loses qualification.
+    # Core validation runs first; publish neither history nor render-source state on refusal.
+    targets: set[str] = set()
+    for command in cast(list[dict[str, object]], payload["commands"]):
+        fields = cast(dict[str, object], command["payload"])
+        if command["kind"] == "insert_title_clip":
+            targets.add(cast(str, cast(dict[str, object], fields["clip"])["clip_id"]))
+        elif command["kind"] in {"set_text_content", "set_text_style"}:
+            targets.add(cast(str, fields["clip_id"]))
+    if not targets:
+        return
+    old_clips = (
+        before.authoring.clips
+        if isinstance(before, TimelineHistoryStateV2)
+        else before.snapshot.clips
+    )
+    new_clips = (
+        after.authoring.clips if isinstance(after, TimelineHistoryStateV2) else after.snapshot.clips
+    )
+    old_text = {clip.clip_id: clip.text for clip in old_clips}
+    edited = [
+        clip.text
+        for clip in new_clips
+        if clip.clip_id in targets
+        and clip.text is not None
+        and clip.text != old_text.get(clip.clip_id)
+    ]
+    if not edited:
+        return
+    manifest = load_packaged_font_manifest()
+    for text in edited:
+        require_text_coverage(manifest, text.font_asset_id, text.weight, text.style, text.content)
 
 
 class AuthoringWorkspaceRegistry:
@@ -2179,6 +2224,7 @@ class AuthoringWorkspaceRegistry:
             try:
                 if isinstance(history, TimelineHistoryStateV2):
                     updated_v2, receipt_v2 = apply_timeline_transaction_v2(history, payload)
+                    _require_title_edit_coverage(history, updated_v2, payload)
                     entry.timeline_history_v2 = updated_v2
                     if entry.initialized_sources is not None:
                         entry.initialized_sources.authoring_state = updated_v2.authoring
@@ -2187,10 +2233,13 @@ class AuthoringWorkspaceRegistry:
                         )
                     return 200, receipt_v2.to_wire(), handle
                 updated_v1, receipt_v1 = apply_timeline_transaction(history, payload)
+                _require_title_edit_coverage(history, updated_v1, payload)
                 entry.timeline_history = updated_v1
                 return 200, receipt_v1.to_wire(), handle
-            except ContractValidationError as exc:
-                code = str(exc).split(":", 1)[0]
+            except (ContractValidationError, AuthoringFontError) as exc:
+                code = (
+                    exc.code if isinstance(exc, AuthoringFontError) else str(exc).split(":", 1)[0]
+                )
                 return 409, self._history_projection(handle, history, rejection=code), handle
         try:
             if name == "set_availability":

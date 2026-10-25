@@ -16,6 +16,7 @@ import {
 } from "../src/components/nle/NleInspectorTabs";
 import { IDENTITY_TRANSFORM } from "../src/components/nle/nleCommandBuilders";
 import { createSidebarRetention } from "../src/state/sidebarRetention";
+import { WIPE_KINDS } from "../src/contracts/compositionCodec";
 import {
   SMOKE_SHAPE,
   authoringReady,
@@ -23,6 +24,205 @@ import {
 } from "./support/nleWorkspaceFixture";
 
 afterEach(() => cleanup());
+
+describe("packaged title glyph admission", () => {
+  it.each([
+    [
+      "en",
+      "Text",
+      "Italic",
+      "The bundled title font cannot render some of these characters. Use supported Latin, Greek or Cyrillic characters.",
+    ],
+    [
+      "zh-TW",
+      "文字",
+      "斜體",
+      "封裝的標題字型無法顯示其中部分字元。請使用支援的拉丁文、希臘文或西里爾文字元。",
+    ],
+    [
+      "zh-CN",
+      "文字",
+      "斜体",
+      "随附的标题字体无法显示其中部分字符。请使用支持的拉丁文、希腊文或西里尔文字符。",
+    ],
+  ] as const)(
+    "keeps content/style drafts and blocks every commit path in %s",
+    (locale, tab, italic, message) => {
+      const original = snapshotFixture(SMOKE_SHAPE, 11);
+      const snapshot = {
+        ...original,
+        clips: original.clips.map((clip) =>
+          clip.text
+            ? { ...clip, text: { ...clip.text, content: "\u2183" } }
+            : clip,
+        ),
+      };
+      const onIntent = vi.fn(async () => undefined);
+      const view = render(
+        <NleInspectorTabs
+          locale={locale}
+          snapshot={snapshot}
+          selection={["clip-3"]}
+          authoring={authoringReady(SMOKE_SHAPE, {
+            selection: ["clip-3"],
+            revision: 11,
+          })}
+          onIntent={onIntent}
+          retention={createSidebarRetention()}
+        />,
+      );
+      fireEvent.click(screen.getByRole("tab", { name: tab }));
+      const input = view.getByRole("textbox") as HTMLTextAreaElement;
+      const apply = view.container.querySelector<HTMLButtonElement>(
+        '[data-h3-nle-control="text.content"]',
+      )!;
+      for (const content of ["中文", "한국어", "😀"]) {
+        fireEvent.change(input, { target: { value: content } });
+        expect(apply.disabled).toBe(true);
+        expect(screen.getByRole("alert").textContent).toBe(message);
+        fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+        fireEvent.click(apply);
+        expect(input.value).toBe(content);
+      }
+      expect(onIntent).not.toHaveBeenCalled();
+      fireEvent.change(input, { target: { value: "Supported draft" } });
+      expect(apply.disabled).toBe(false);
+      fireEvent.click(screen.getByRole("checkbox", { name: italic }));
+      const styleApply = view.container.querySelector<HTMLButtonElement>(
+        '[data-h3-nle-control="text.style"]',
+      )!;
+      expect(styleApply.disabled).toBe(true);
+      expect(screen.getByRole("alert").textContent).toBe(message);
+      expect(
+        (screen.getByRole("checkbox", { name: italic }) as HTMLInputElement)
+          .checked,
+      ).toBe(true);
+      fireEvent.click(styleApply);
+      expect(onIntent).not.toHaveBeenCalled();
+      // Content is validated against accepted Roman, not the unsubmitted Italic draft.
+      fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+      expect(onIntent).toHaveBeenCalledTimes(1);
+      expect(input.value).toBe("Supported draft");
+    },
+  );
+});
+
+describe("transition refusal guidance", () => {
+  it.each([
+    [
+      "en",
+      "Transition",
+      "A transition needs an enabled clip on a lower track that plays for the whole transition, and a length this clip allows.",
+    ],
+    [
+      "zh-TW",
+      "轉場",
+      "轉場需要下層軌道上有已啟用、且在整段轉場期間持續播放的片段，以及此片段允許的長度。",
+    ],
+    [
+      "zh-CN",
+      "转场",
+      "转场需要下层轨道上有已启用、且在整段转场期间持续播放的片段，以及此片段允许的长度。",
+    ],
+  ] as const)(
+    "explains the lower-track rule for every kind in %s",
+    (locale, label, reason) => {
+      const onIntent = vi.fn(async () => undefined);
+      const selection = ["clip-0"];
+      const { container } = render(
+        <NleInspectorTabs
+          locale={locale}
+          snapshot={snapshotFixture(SMOKE_SHAPE, 11)}
+          selection={selection}
+          authoring={authoringReady(SMOKE_SHAPE, { selection, revision: 11 })}
+          onIntent={onIntent}
+          retention={createSidebarRetention()}
+        />,
+      );
+      fireEvent.click(screen.getByRole("tab", { name: label }));
+      const select = screen.getByRole("combobox", { name: label });
+      const apply = container.querySelector<HTMLButtonElement>(
+        '[data-h3-nle-control="boundary.transition"]',
+      )!;
+      for (const kind of ["cross_dissolve_v1", ...WIPE_KINDS]) {
+        fireEvent.change(select, { target: { value: kind } });
+        expect(screen.getByRole("alert").textContent).toBe(reason);
+        expect(apply.disabled).toBe(true);
+        fireEvent.click(apply);
+      }
+      expect(onIntent).not.toHaveBeenCalled();
+      fireEvent.change(select, { target: { value: "none" } });
+      expect(screen.queryByRole("alert")).toBeNull();
+    },
+  );
+});
+
+describe("directional wipe controls", () => {
+  it.each(WIPE_KINDS)(
+    "retains %s and dispatches its exact transition",
+    async (kind) => {
+      const retention = createSidebarRetention();
+      const first = subject("clip-2", undefined, retention);
+      fireEvent.click(screen.getByRole("tab", { name: "Transition" }));
+      fireEvent.change(screen.getByRole("combobox", { name: "Transition" }), {
+        target: { value: kind },
+      });
+      fireEvent.change(
+        screen.getByRole("spinbutton", { name: "Transition frames" }),
+        { target: { value: "12" } },
+      );
+      expect(first.onIntent).not.toHaveBeenCalled();
+      first.view.unmount();
+      const next = subject("clip-2", undefined, retention);
+      fireEvent.click(screen.getByRole("tab", { name: "Transition" }));
+      expect(
+        (
+          screen.getByRole("combobox", {
+            name: "Transition",
+          }) as HTMLSelectElement
+        ).value,
+      ).toBe(kind);
+      expect(
+        (
+          screen.getByRole("spinbutton", {
+            name: "Transition frames",
+          }) as HTMLInputElement
+        ).value,
+      ).toBe("12");
+      fireEvent.click(
+        document.querySelector<HTMLButtonElement>(
+          '[data-h3-nle-control="boundary.transition"]',
+        )!,
+      );
+      await waitFor(() => expect(next.onIntent).toHaveBeenCalledTimes(1));
+      expect(next.onIntent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          commands: [
+            {
+              kind: "set_transition",
+              payload: {
+                clip_id: "clip-2",
+                transition: { kind, duration_frames: 12 },
+              },
+            },
+          ],
+        }),
+      );
+    },
+  );
+  it.each(WIPE_KINDS)("keeps the lower-participant guard for %s", (kind) => {
+    subject("clip-0");
+    fireEvent.click(screen.getByRole("tab", { name: "Transition" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Transition" }), {
+      target: { value: kind },
+    });
+    expect(
+      document.querySelector<HTMLButtonElement>(
+        '[data-h3-nle-control="boundary.transition"]',
+      )!.disabled,
+    ).toBe(true);
+  });
+});
 
 describe("complete title decoration edits", () => {
   const field = (name: string) =>

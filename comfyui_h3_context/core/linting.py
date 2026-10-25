@@ -15,6 +15,7 @@ from .contracts import (
     ValidationSeverity,
 )
 from .errors import ProfileRegistryError, PromptLintError
+from .hard_content import REQUIRED_CONTENT_LOST, hard_content_violations
 from .profiles import PromptProfileRegistry, default_profile_registry
 
 _LABEL_PATTERN = re.compile(r"<(Subject|Picture|Video|Audio) ([1-9][0-9]*)>")
@@ -334,24 +335,29 @@ def _check_security_and_constraints(
                 f"hard_constraints.{exact_value.constraint_id}",
                 "Restore the exact caller-declared value or record an authorized transformation.",
             )
-    for required_value in plan.hard_constraints.required_content:
-        if required_value.content not in document.text:
+    required = plan.hard_constraints.required_content
+    forbidden = plan.hard_constraints.forbidden_content
+    for code, index in hard_content_violations(
+        tuple(value.content for value in required),
+        tuple(value.content for value in forbidden),
+        document.text,
+    ):
+        if code == REQUIRED_CONTENT_LOST:
             _add(
                 diagnostics,
                 ValidationSeverity.ERROR,
                 "constraint.required_content_lost",
                 "declared required content is absent from the prompt",
-                f"hard_constraints.{required_value.constraint_id}",
+                f"hard_constraints.{required[index].constraint_id}",
                 "Restore the required content in the owned prompt section.",
             )
-    for forbidden_value in plan.hard_constraints.forbidden_content:
-        if forbidden_value.content in document.text:
+        else:
             _add(
                 diagnostics,
                 ValidationSeverity.ERROR,
                 "constraint.forbidden_content_present",
                 "forbidden content appears in the prompt",
-                f"hard_constraints.{forbidden_value.constraint_id}",
+                f"hard_constraints.{forbidden[index].constraint_id}",
                 "Remove the forbidden value and re-render; do not auto-rewrite it.",
             )
 

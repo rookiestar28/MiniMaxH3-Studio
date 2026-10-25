@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 EXPECTED_AUTHOR = "rookiestar28"
-EXPECTED_REPOSITORY = "rookiestar28/ComfyUI-MiniMaxH3-Studio"
+EXPECTED_REPOSITORY = "rookiestar28/MiniMaxH3-Studio"
 EXPECTED_REGISTRY_ENVIRONMENT = "registry-production"
 EXPECTED_BUILD_SYSTEM = ["setuptools>=80,<84", "wheel>=0.46.2,<0.47"]
 # CRITICAL: the host owns ComfyUI and its frontend; package installation must not mutate either.

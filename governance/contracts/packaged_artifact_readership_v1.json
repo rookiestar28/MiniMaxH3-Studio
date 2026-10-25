@@ -17,7 +17,8 @@
       "path": "comfyui_h3_context/contracts/authoring_renderer_qualification_v2.json",
       "readers": [
         "comfyui_h3_context/adapters/authoring_renderer_qualification.py",
-        "tests/test_m23_48_packaged_readership.py"
+        "tests/test_m23_48_packaged_readership.py",
+        "tests/test_renderer_qualification_subjects.py"
       ],
       "readership": "runtime_read"
     },
@@ -159,6 +160,7 @@
         "frontend/src/host/officialAssetResolution.ts",
         "frontend/tests/e2e/host/candidate.ts",
         "frontend/tests/m17_29OfficialAssetResolution.test.ts",
+        "frontend/tests/officialAssetVariants.test.ts",
         "scripts/supply_chain_manifest.py",
         "tests/test_generation_profile_adapter.py",
         "tests/test_m23_48_packaged_readership.py",

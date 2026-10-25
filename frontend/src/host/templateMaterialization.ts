@@ -3,13 +3,9 @@
  * pinned official template workflow and splicing the H3 context pipeline into
  * it, rather than by expanding the template into an API prompt.
  *
- * The whole module is pure. It takes a template workflow and returns a new one;
- * it never touches the host, never fetches, and never mutates its input. That is
- * what lets the splice be tested against the real pinned template bytes without
- * a ComfyUI running, which is the only way the anchor-resolution rules below can
- * be trusted -- they are rules about a specific serialized shape, and reasoning
- * about that shape without exercising it is how the previous truncated graph
- * survived as long as it did.
+ * This pure splice never touches the host, fetches, or mutates its input.
+ * Tests exercise real pinned template bytes: reasoning about their serialized
+ * shape without exercising it previously allowed a truncated graph to survive.
  *
  * Two shapes matter and they are not the same:
  *
@@ -22,6 +18,7 @@
  * complaint and then cannot execute, so the two are kept apart deliberately.
  */
 
+import { applyImageCrops } from "./imageCropInsertion";
 import {
   definitionEdges,
   nodeIdentifier,
@@ -1065,32 +1062,36 @@ export function spliceContextPipeline(
     )
     .map((link) => Number(link[0]));
 
-  return {
-    workflow,
-    anchorNodeId: Number(anchor.id),
-    promptNodeId: Number(shell.id),
-    ownedNodeIds: Object.freeze(
-      [...ownedNodeIds].sort((left, right) => left - right),
-    ),
-    ownedLinkIds: Object.freeze(
-      [...new Set(ownedLinkIds)].sort((left, right) => left - right),
-    ),
-    authoredWidgetNodeIds: Object.freeze(
-      [
-        durationSourceNodeId,
-        options.canonicalLowering === undefined
-          ? undefined
-          : Number(byKey.get("request")?.id),
-        options.canonicalLowering === undefined
-          ? undefined
-          : Number(byKey.get("audit_override")?.id),
-      ].filter((value): value is number => value !== undefined),
-    ),
-    nestedAnchor: nested,
-    durationApplied,
-    artifactPrefixApplied,
-    mediaNodeIds,
-  };
+  return applyImageCrops(
+    {
+      workflow,
+      anchorNodeId: Number(anchor.id),
+      promptNodeId: Number(shell.id),
+      ownedNodeIds: Object.freeze(
+        [...ownedNodeIds].sort((left, right) => left - right),
+      ),
+      ownedLinkIds: Object.freeze(
+        [...new Set(ownedLinkIds)].sort((left, right) => left - right),
+      ),
+      authoredWidgetNodeIds: Object.freeze(
+        [
+          durationSourceNodeId,
+          options.canonicalLowering === undefined
+            ? undefined
+            : Number(byKey.get("request")?.id),
+          options.canonicalLowering === undefined
+            ? undefined
+            : Number(byKey.get("audit_override")?.id),
+        ].filter((value): value is number => value !== undefined),
+      ),
+      nestedAnchor: nested,
+      durationApplied,
+      artifactPrefixApplied,
+      mediaNodeIds,
+    },
+    media,
+    connecting,
+  );
 }
 
 /**

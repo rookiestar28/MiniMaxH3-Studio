@@ -5,6 +5,13 @@ import { isQualifiedExternalReferenceGraph } from "./graphAdapter";
 import type { OfficialAssetResolution } from "./officialAssetResolution";
 import type { SpliceMediaIds } from "./templateMaterialization";
 import { matchesReferenceBindingIdentity } from "./referenceBindingIdentity";
+import { IMAGE_CROP_NODE_TYPE } from "./imageCropCapability";
+import {
+  cropEndpoint,
+  matchesImageCropNodes,
+  matchesRequestedImageCrops,
+  validStructuralImageCrops,
+} from "./imageCropBindings";
 import {
   existingCompiledProjection,
   listAppModeMediaSources,
@@ -45,6 +52,10 @@ import {
   validatorNodeType,
 } from "./appModeContract";
 import { resolveCompiledDurationSource } from "./appModeTemplateSources";
+import {
+  preparationReferenceCounts,
+  resolvePreparationFrames,
+} from "./appModeCanvasPreparation";
 
 export function isCompatibleExistingPrompt(
   compiled: AppModeCompiledPrompt,
@@ -348,7 +359,12 @@ export function isCompatibleExistingPrompt(
       return undefined;
     return indexed.map(([, value]) => value);
   };
-  const imageSources = new Set([loadImageNodeType]);
+  // IMPORTANT: crop admission must not widen connect's existing source-type contract.
+  const imageSources = new Set([
+    loadImageNodeType,
+    ...(route === "connect" ? [] : [IMAGE_CROP_NODE_TYPE]),
+  ]);
+  if (route !== "connect" && !validStructuralImageCrops(byId)) return false;
   const videoSources = new Set([loadVideoNodeType]);
   const audioSources = new Set([loadAudioNodeType]);
   if (!isReference) {
@@ -811,6 +827,7 @@ export function resolveOpaqueSources(
   serialized: unknown,
   compiled: AppModeCompiledPrompt,
   inputs: AppModeInputs,
+  canvasOnly = false,
 ): AppModeOpaqueSources | undefined {
   if (inputs.task_mode === "t2va") return {};
   const visible = new Map(
@@ -863,6 +880,7 @@ export function resolveOpaqueSources(
   }
   const first = resolve(inputs.first_frame_source);
   const last = resolve(inputs.last_frame_source);
+  if (canvasOnly) return resolvePreparationFrames(inputs, first, last);
   if (
     (inputs.task_mode === "i2va" && first !== undefined) ||
     (inputs.task_mode === "l2va" && last !== undefined) ||
@@ -883,8 +901,14 @@ export function compiledPromptMatchesRequestedRoute(
   materialized?: SpliceMediaIds,
   existingSubject?: ExistingCompiledAdmission,
   canonicalLowering?: ProductionCanonicalLowering,
+  canvasOnly = false,
 ): boolean {
   const useExisting = route === "existing";
+  if (
+    inputs.image_crops !== undefined &&
+    (!canvasOnly || route !== "materialize")
+  )
+    return false;
   const nodes = compiledOutputNodes(compiled);
   if (useExisting && existingSubject !== undefined) {
     const projection = existingCompiledProjection(nodes, existingSubject);
@@ -933,6 +957,12 @@ export function compiledPromptMatchesRequestedRoute(
       return false;
   }
   const byId = new Map(nodes.map(({ id, node }) => [id, node] as const));
+  if (
+    (route === "materialize" || route === "prepared") &&
+    (!matchesImageCropNodes(materialized, byId) ||
+      !matchesRequestedImageCrops(inputs, materialized))
+  )
+    return false;
   const requestDuration = requestInputs.duration_seconds;
   const requestDurationSource = resolveCompiledDurationSource(
     byId,
@@ -989,12 +1019,14 @@ export function compiledPromptMatchesRequestedRoute(
         registryInputs,
         generationInputs,
         materialized,
-        {
-          images: expectedImages,
-          videos: expectedVideos,
-          audios: expectedAudios,
-          pairedAudios: expectedSoundtracks,
-        },
+        canvasOnly
+          ? preparationReferenceCounts(inputs, materialized)
+          : {
+              images: expectedImages,
+              videos: expectedVideos,
+              audios: expectedAudios,
+              pairedAudios: expectedSoundtracks,
+            },
         byId,
       );
     }
@@ -1074,12 +1106,29 @@ export function compiledPromptMatchesRequestedRoute(
   }
   const expectedFirst = useExisting
     ? inputs.first_frame_source
-    : identity(materialized?.firstFrame);
+    : identity(cropEndpoint(materialized, materialized?.firstFrame));
   const expectedLast = useExisting
     ? inputs.last_frame_source
-    : identity(materialized?.lastFrame);
+    : identity(cropEndpoint(materialized, materialized?.lastFrame));
   const typedFirst = registryInputs?.first_frame;
   const typedLast = registryInputs?.last_frame;
+  if (
+    route === "materialize" &&
+    inputs.task_mode === "i2va" &&
+    materialized !== undefined
+  ) {
+    const scales = nodes.filter(
+      ({ node }) => node.class_type === "ImageScaleToTotalPixels",
+    );
+    if (
+      scales.length !== 1 ||
+      !sameExactLink(
+        record(scales[0]!.node.inputs)?.image,
+        generationInputs.first_frame,
+      )
+    )
+      return false;
+  }
   return (
     (inputs.task_mode === "t2va" &&
       first === undefined &&

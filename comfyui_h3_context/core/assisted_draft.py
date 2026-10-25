@@ -5,10 +5,11 @@ judges the candidate is ``'s, unchanged; the conditions under which a repair rep
 original are fixed in this module; and both are pure functions of recorded inputs, so the whole
 decision replays from a transcript without a model.
 
-The repair is bounded at exactly one attempt and is adopted only when all four conditions hold: the
+The repair is bounded at exactly one attempt and is adopted only when all five conditions hold: the
 re-audit is clean, the reference inventory is unchanged and inside the allowed set, every piece of
-user-supplied dialogue and visible text survives byte-identical, and the repair did not hit its
-output limit. Any other result keeps the original candidate and records which condition failed, as
+user-supplied dialogue and visible text survives byte-identical, the repair did not hit its
+output limit, and protected required/forbidden content remains satisfied. Any other result keeps
+the original candidate and records which condition failed, as
 its own identifier -- "the re-audit still failed" and "the repair rewrote the user's dialogue" are
 different problems for the person deciding whether to accept a draft, and collapsing them into one
 message would lose exactly the distinction they need.
@@ -31,8 +32,10 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import NoReturn, Protocol
 
+from .assisted_refinement import RequestedAllowance
 from .context_reporting import ContextPlan, PromptDocument, PromptRenderStatus
 from .contracts import ValidationSeverity
+from .hard_content import FORBIDDEN_CONTENT_PRESENT, REQUIRED_CONTENT_LOST, hard_content_violations
 from .prompt_fidelity import (
     PromptFidelityAuditResult,
     PromptFidelityDiagnostic,
@@ -81,11 +84,12 @@ class RepairShape(str, Enum):
 
 
 class AdoptionCondition(str, Enum):
-    """The four conditions a repair must satisfy. Each fails on its own identifier."""
+    """The conditions a repair must satisfy, with a fixed refusal order."""
 
     REAUDIT_PASSED = "reaudit_passed"
     REFERENCE_INVENTORY_UNCHANGED = "reference_inventory_unchanged"
     USER_TEXT_PRESERVED = "user_text_preserved"
+    HARD_CONTENT_PRESERVED = "hard_content_preserved"
     OUTPUT_WITHIN_LIMIT = "output_within_limit"
 
 
@@ -93,6 +97,7 @@ _CONDITION_OUTCOMES = {
     AdoptionCondition.REAUDIT_PASSED: PromptModelOutcomeId.REPAIR_REAUDIT_FAILED,
     AdoptionCondition.REFERENCE_INVENTORY_UNCHANGED: PromptModelOutcomeId.REPAIR_REFERENCE_DRIFT,
     AdoptionCondition.USER_TEXT_PRESERVED: PromptModelOutcomeId.REPAIR_USER_TEXT_ALTERED,
+    AdoptionCondition.HARD_CONTENT_PRESERVED: PromptModelOutcomeId.REPAIR_USER_TEXT_ALTERED,
     AdoptionCondition.OUTPUT_WITHIN_LIMIT: PromptModelOutcomeId.REPAIR_OUTPUT_TRUNCATED,
 }
 
@@ -118,8 +123,15 @@ class DraftGuarantee:
     visible_text: tuple[str, ...] = ()
     hard_constraints: tuple[str, ...] = ()
     output_character_limit: int = MAX_CANDIDATE_CHARACTERS
+    requested_allowance: RequestedAllowance | None = None
+    required_content: tuple[str, ...] = ()
+    forbidden_content: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        if self.requested_allowance is not None and not isinstance(
+            self.requested_allowance, RequestedAllowance
+        ):
+            _fail("guarantee_allowance")
         for name in ("allowed_labels", "required_labels"):
             labels = _spans(getattr(self, name), f"guarantee_{name}")
             if len(labels) > MAX_REFERENCE_LABELS:
@@ -132,6 +144,8 @@ class DraftGuarantee:
         _spans(self.user_dialogue, "guarantee_user_dialogue")
         _spans(self.visible_text, "guarantee_visible_text")
         _spans(self.hard_constraints, "guarantee_hard_constraints")
+        _spans(self.required_content, "guarantee_required_content")
+        _spans(self.forbidden_content, "guarantee_forbidden_content")
         if (
             type(self.output_character_limit) is not int
             or not 0 < self.output_character_limit <= MAX_CANDIDATE_CHARACTERS
@@ -178,6 +192,14 @@ def contains_instruction_injection(text: object) -> bool:
     return any(pattern.search(text) is not None for pattern in _INJECTION_PATTERNS)
 
 
+def inventory_matches_guarantee(guarantee: DraftGuarantee, text: str) -> bool:
+    """One ordered inventory contract for the first pass, repair and publication."""
+
+    # IMPORTANT: compare with the pre-model inventory, never the drifted first candidate;
+    # otherwise repair either preserves missing labels or rejects their correct restoration.
+    return reference_inventory(text) == guarantee.required_labels
+
+
 def missing_required_labels(guarantee: object, text: object) -> tuple[str, ...]:
     """Required reference labels the candidate did not use, in declared order."""
 
@@ -205,16 +227,31 @@ def select_repair_shape(
     return RepairShape.NARROW_TEXT_CORRECTION
 
 
-def build_repair_instruction(guarantee: object, diagnostics: object, shape: object) -> str:
+def build_repair_instruction(
+    guarantee: object,
+    diagnostics: object,
+    shape: object,
+    *,
+    inventory_drift: bool = False,
+    content_violations: tuple[str, ...] = (),
+) -> str:
     """Name the violations and enumerate the exact labels, so a repair cannot renumber one."""
 
     if not isinstance(guarantee, DraftGuarantee):
         _fail("repair_guarantee")
     if not isinstance(shape, RepairShape):
         _fail("repair_shape")
-    if not isinstance(diagnostics, Sequence) or isinstance(diagnostics, (str, bytes)):
+    if not isinstance(diagnostics, Sequence) or isinstance(diagnostics, str | bytes):
         _fail("repair_diagnostics")
     violations: list[str] = []
+    if inventory_drift:
+        violations.append("reference_inventory")
+    if not isinstance(content_violations, tuple) or any(
+        code not in (REQUIRED_CONTENT_LOST, FORBIDDEN_CONTENT_PRESENT)
+        for code in content_violations
+    ):
+        _fail("repair_content_violations")
+    violations.extend(dict.fromkeys(content_violations))
     for item in diagnostics:
         if not isinstance(item, PromptFidelityDiagnostic):
             _fail("repair_diagnostics")
@@ -257,13 +294,16 @@ class RepairAdoption:
 
 
 def _refused(
-    condition: AdoptionCondition, parameters: tuple[tuple[str, str | int | bool], ...]
+    condition: AdoptionCondition,
+    parameters: tuple[tuple[str, str | int | bool], ...],
+    *,
+    outcome_id: PromptModelOutcomeId | None = None,
 ) -> RepairAdoption:
     return RepairAdoption(
         adopted=False,
         failed_condition=condition,
         outcome=build_prompt_model_outcome(
-            _CONDITION_OUTCOMES[condition],
+            _CONDITION_OUTCOMES[condition] if outcome_id is None else outcome_id,
             severity=ValidationSeverity.WARNING,
             remediation=PromptModelRemediation.NONE,
             parameters=parameters,
@@ -278,7 +318,7 @@ def evaluate_repair_adoption(
     repaired: object,
     reaudit: object,
 ) -> RepairAdoption:
-    """Apply the four conditions in a fixed order. Nothing here reads an instruction."""
+    """Apply the conditions in a fixed order. Nothing here reads an instruction."""
 
     if not isinstance(guarantee, DraftGuarantee):
         _fail("adoption_guarantee")
@@ -304,7 +344,7 @@ def evaluate_repair_adoption(
     repaired_inventory = reference_inventory(repaired.text)
     allowed = set(guarantee.allowed_labels)
     if (
-        repaired_inventory != original_inventory
+        not inventory_matches_guarantee(guarantee, repaired.text)
         or not set(repaired_inventory) <= allowed
         or not set(guarantee.required_labels) <= set(repaired_inventory)
     ):
@@ -322,6 +362,21 @@ def evaluate_repair_adoption(
                 AdoptionCondition.USER_TEXT_PRESERVED,
                 (("span_index", index), ("characters", len(span))),
             )
+
+    content = hard_content_violations(
+        guarantee.required_content, guarantee.forbidden_content, repaired.text
+    )
+    if content:
+        code, index = content[0]
+        return _refused(
+            AdoptionCondition.HARD_CONTENT_PRESERVED,
+            (("constraint_index", index),),
+            outcome_id=(
+                PromptModelOutcomeId.REPAIR_FORBIDDEN_CONTENT_ADDED
+                if code == FORBIDDEN_CONTENT_PRESENT
+                else PromptModelOutcomeId.REPAIR_USER_TEXT_ALTERED
+            ),
+        )
 
     return RepairAdoption(
         adopted=True,
@@ -532,7 +587,7 @@ def run_assisted_draft(
     previous_anchor: AssistedDraftAnchor | None = None,
     auditor: Callable[[ContextPlan, PromptDocument], PromptFidelityAuditResult] | None = None,
 ) -> AssistedDraftResult:
-    """Draft once, audit, repair at most once, and adopt only under the four fixed conditions."""
+    """Draft once, audit, repair at most once, and adopt only under the fixed conditions."""
 
     if not isinstance(guarantee, DraftGuarantee):
         _fail("draft_guarantee")
@@ -540,7 +595,15 @@ def run_assisted_draft(
         _fail("draft_instruction")
     if type(media_attached) is not bool:
         _fail("draft_media_flag")
-    audit_with = auditor if auditor is not None else audit_prompt_fidelity
+    audit_with = (
+        auditor
+        if auditor is not None
+        else (
+            lambda plan, document: audit_prompt_fidelity(
+                plan, document, allowance=guarantee.requested_allowance
+            )
+        )
+    )
 
     empty_audit = audit_with(plan, _document_for(template, template.text))
     try:
@@ -562,7 +625,11 @@ def run_assisted_draft(
         )
 
     audit = audit_with(plan, _document_for(template, candidate.text))
-    if not audit.prose_blocking:
+    inventory_drift = not inventory_matches_guarantee(guarantee, candidate.text)
+    content = hard_content_violations(
+        guarantee.required_content, guarantee.forbidden_content, candidate.text
+    )
+    if not audit.prose_blocking and not inventory_drift and not content:
         return AssistedDraftResult(
             candidate_text=candidate.text,
             audit=audit,
@@ -584,7 +651,14 @@ def run_assisted_draft(
     shape = select_repair_shape(guarantee, candidate.text, media_attached=media_attached)
     try:
         repaired = model(
-            build_repair_instruction(guarantee, audit.prose_blocking, shape), shape=shape
+            build_repair_instruction(
+                guarantee,
+                audit.prose_blocking,
+                shape,
+                inventory_drift=inventory_drift,
+                content_violations=tuple(code for code, _index in content),
+            ),
+            shape=shape,
         )
     except DraftModelExecutionError as exc:
         return _execution_failure(exc.outcome, audit, 2, previous_anchor)

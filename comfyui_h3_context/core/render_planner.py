@@ -50,6 +50,7 @@ RENDER_PRIMITIVE_IDS: Final = (
     "OpacityV1",
     "BlendV1",
     "CrossDissolveV1",
+    "WipeV1",
     "DrawTextV1",
     "TextDecorationV1",
     "PrimaryEmbeddedFollowVideoV1",

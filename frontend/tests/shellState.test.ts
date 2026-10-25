@@ -64,6 +64,37 @@ describe("shell state", () => {
     existingGraphCompatible: true,
   };
 
+  it.each([
+    ["firstFrame"],
+    ["lastFrame"],
+    ["firstFrame", "lastFrame"],
+    ["referenceImages"],
+  ] as const)(
+    "keeps unchosen preparation guidance through a compatible host rescan (%s)",
+    (...roles) => {
+      const prepared = {
+        status: "interactive",
+        reason: "canvas_ready",
+        existingGraph: true,
+        unchosenSourceRoles: roles,
+        preparedGraphFingerprint: "prepared-write",
+      } as const;
+      expect(
+        reduceShellState(prepared, {
+          type: "graph",
+          inspection: readyGraph,
+          graphFingerprint: "prepared-write",
+        }),
+      ).toMatchObject({
+        status: "interactive",
+        reason: "native_preference",
+        existingGraph: true,
+        unchosenSourceRoles: roles,
+        preparedGraphFingerprint: "prepared-write",
+      });
+    },
+  );
+
   it("classifies existing-graph authority across every shell lifecycle family", () => {
     expect(
       hasExistingGraphAuthority({

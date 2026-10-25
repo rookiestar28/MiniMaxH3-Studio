@@ -39,6 +39,10 @@ export const promptFidelityDiagnosticIds = Object.freeze([
 /** comfyui_h3_context/core/prompt_model_provider.py :: PromptModelOutcomeId */
 export const promptModelOutcomeIds = Object.freeze([
   "prompt_model.ok",
+  "prompt_model.proposal_user_text_altered",
+  "prompt_model.proposal_reference_drift",
+  "prompt_model.proposal_audit_failed",
+  "prompt_model.proposal_forbidden_content_added",
   "prompt_model.cancelled",
   "prompt_model.timeout",
   "prompt_model.authentication",
@@ -67,6 +71,7 @@ export const promptModelOutcomeIds = Object.freeze([
   "prompt_model.repair_reaudit_failed",
   "prompt_model.repair_reference_drift",
   "prompt_model.repair_user_text_altered",
+  "prompt_model.repair_forbidden_content_added",
   "prompt_model.repair_output_truncated",
   "prompt_model.consent_revoked",
   "prompt_model.network_not_permitted",

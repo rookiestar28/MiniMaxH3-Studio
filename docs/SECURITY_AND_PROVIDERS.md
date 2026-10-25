@@ -31,7 +31,6 @@ Optional features have their own setup and permission boundaries:
   No provider, model or fallback is ever chosen automatically.
 - **Media tools** are supplied by you and verified locally. The extension does not download or
   install them.
-
 - **Local perception** requires the host operator's existing local setup. Visual analysis also
   requires permission to send the selected frames to the local Ollama service. See
   [Local perception](#local-perception).
@@ -42,6 +41,9 @@ Save any open ComfyUI workflows before installing or updating this pack and rest
 Before trying an official H3 template, save your current workflow, open a new empty workflow tab
 and make it active. **Start H3 App Mode** loads the template into the active tab without queueing
 it. It does not create a separate tab or save a backup of the graph it replaces.
+
+If you start before choosing sources, the template's **Load Image** nodes keep the template's
+sample images until you set your own. The sidebar lists those nodes before you queue.
 
 When the canvas already contains nodes, App Mode asks you to choose:
 
@@ -88,8 +90,9 @@ sensitive, and other custom nodes may save their own data.
 Metadata, retained generated videos and editable draft recovery are independent settings and are
 all off by default. They require a qualified single-user Windows host on loopback with fixed local
 NTFS storage, no permissive CORS and no configured public-origin override. Remote/shared/proxied
-hosts and Linux durable storage are not qualified. Changing the ordinary browser-origin setting
-does not grant access to private recovery routes.
+hosts and Linux durable storage are not qualified; Linux support is coming in an upcoming
+update. Changing the ordinary browser-origin setting does not grant access to private recovery
+routes.
 
 Metadata excludes prompts and media. Retaining a video makes an explicit verified copy; it does
 not change the original ComfyUI output. Draft recovery includes private prompt/title text,
@@ -116,9 +119,11 @@ origin before starting ComfyUI:
 H3_CONTEXT_PUBLIC_ORIGINS=https://comfy.example.test:8443
 ```
 
-- List one to eight origins, separated by commas, each as `scheme://host[:port]`.
+- List one to eight distinct origins, separated by commas, each as `scheme://host[:port]`, in at
+  most 2,048 characters in total.
 - The proxy must pass the browser's original `Host` header; forwarding headers are ignored.
-- If any entry is invalid, the whole setting is ignored and the ComfyUI log says why.
+- If any entry is invalid or repeated, or the value is too long, the whole setting is ignored and
+  the ComfyUI log says why.
 - Refused requests are logged once per kind, without the address.
 
 These checks stop other websites from acting through your browser. They are not a login and do not
@@ -163,7 +168,8 @@ so no request is made on your behalf.
 ## Local perception
 
 The **H3 Visual Perception Producer** and **H3 Audio Perception Producer** use a separately
-configured native Windows host. Visual analysis sends selected frames to a local Ollama model;
+configured native Windows host; Linux support is coming in an upcoming update. Visual analysis
+sends selected frames to a local Ollama model;
 short English speech is transcribed on the CPU. The visual node's **local_service_consent** input
 is off by default and must be enabled before that local-service transfer. Selecting an
 assisted-authoring provider does not grant this permission or configure these nodes.
@@ -183,12 +189,15 @@ check. Treat recognized descriptions and transcripts as untrusted information.
 
 The editor, Production import, sequence assembly and final rendering use one exact FFmpeg build on
 Windows x64 with 64-bit Python (gyan.dev full build `2026-02-26-git-6695528af6`).
+Linux support is coming in an upcoming update.
 
 - **Only that build is used.** Both programs are checked against fixed SHA-256 digests when found
   and again on every use; any other copy is ignored.
 - **Finding it** looks, in order, at an administrator's override, a folder you chose in
   **Settings**, a copy set up by an earlier version, your Python environment and then `PATH` (at most
-  32 folders). It never runs a program to identify it and skips network paths and links.
+  32 folders). An administrator's override or a folder you chose is authoritative: if it fails
+  verification, the later locations are not tried. It never runs a program to identify it and skips
+  network paths and links.
 - **Manual setup**: download the exact archive linked in **Media tools**, check its displayed
   SHA-256 and extract it yourself. **Use folder** admits only the supported pair in its **bin**
   folder, without contacting any remote service. Selecting it does not retry an interrupted media
@@ -221,11 +230,17 @@ treated as untrusted. Import, perception and execution apply the media limits de
 action, including applicable size, duration, resolution and frame limits. Path tricks, link
 escapes and unsafe URL schemes are refused.
 
-The Ref2VA sidebar checks reference counts and combined file/audio limits from the selected canvas
-nodes. Selection does not read or probe their media. Its duration hints are input-preparation
-guidance rather than measured duration checks; the nodes that load and execute media apply their
+App Mode lists **Load Image**, **Load Video** and **Load Audio** nodes on the main canvas
+(outside subgraphs) as sources. Choosing a node reads its widget values, such as the file name;
+selection uploads nothing and does not probe the media. The Ref2VA picker checks reference counts
+and combined file/audio limits. Its duration hints are input-preparation guidance rather than
+measured duration checks; the nodes that load and execute media apply their
 own validation. The **H3 Reference Registry** node refuses more than three audio tracks in total,
 including video soundtracks, before generation starts.
+
+Opening **Crop image** reads the image from your ComfyUI host into the browser. The rectangle
+is kept as numbers in the request and in the visible crop node. App Mode writes no image file;
+ComfyUI's native crop node may save a preview of the cropped picture in its temporary folder.
 
 Text found in media or returned by a provider is information, never an instruction. It cannot
 change provider settings, your hard constraints, the workflow or how a run executes. Unknown facts
@@ -264,7 +279,8 @@ raw provider responses first.
 ## Licenses
 
 The project is Apache-2.0; see `LICENSE` and `NOTICE`. The bundled Noto Sans fonts use the SIL Open
-Font License 1.1. FFmpeg is not included: you provide the supported build yourself, and it is
-licensed separately under GPL-3.0-or-later. MiniMax models, provider services and other external
-assets have their own terms. This project is independent and is not affiliated with or endorsed by
-MiniMax.
+Font License 1.1. The compiled sidebar includes React, ReactDOM and Scheduler under the MIT License;
+their notice is in `NOTICE`. FFmpeg is not included: you provide the supported build yourself, and
+it is licensed separately under GPL-3.0-or-later. MiniMax models, provider services and other
+external assets have their own terms. This project is independent and is not affiliated with or
+endorsed by MiniMax.

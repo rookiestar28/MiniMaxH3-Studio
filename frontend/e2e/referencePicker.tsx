@@ -6,6 +6,9 @@ import {
 } from "../src/components/H3Sidebar";
 import { SUPPORTED_LOCALES, type Locale } from "../src/i18n/catalog";
 import { initialShellState } from "../src/state/shellState";
+import { createImageCropSources } from "../src/host/imageCropSource";
+import { seamReady } from "../src/host/hostSeams";
+import { fixtureBackedAppModeApi } from "../tests/support/hostSeamTestDouble";
 
 const mediaSources = (["image", "video", "audio"] as const).flatMap(
   (kind, group) =>
@@ -17,10 +20,27 @@ const mediaSources = (["image", "video", "audio"] as const).flatMap(
     })),
 );
 const empty: AppModeDraft = { ...initialAppModeDraft, taskMode: "ref2va" };
-export function ReferencePickerHarness() {
+export function ReferencePickerHarness({ crop = false }: { crop?: boolean }) {
   const [locale, setLocale] = useState<Locale>("en");
   const [draft, setDraft] = useState(empty);
   const [starts, setStarts] = useState(0);
+  const [payload, setPayload] = useState("");
+  const [leases, setLeases] = useState(0);
+  const [cropAvailable, setCropAvailable] = useState(true);
+  const [cropSources] = useState(() =>
+    createImageCropSources({
+      api: fixtureBackedAppModeApi({ fileURL: (path: string) => path }),
+      readGraph: () => ({
+        nodes: mediaSources
+          .filter((source) => source.kind === "image")
+          .map((source) => ({
+            id: Number(source.node_id),
+            type: "LoadImage",
+            widgets_values: ["crop-fixture.png"],
+          })),
+      }),
+    }),
+  );
   return (
     <>
       <label>
@@ -68,6 +88,22 @@ export function ReferencePickerHarness() {
         </select>
       </label>
       <output id="reference-picker-starts">{starts}</output>
+      {crop ? (
+        <>
+          <label>
+            Crop available
+            <input
+              type="checkbox"
+              checked={cropAvailable}
+              onChange={(event) =>
+                setCropAvailable(event.currentTarget.checked)
+              }
+            />
+          </label>
+          <output id="crop-guard-leases">{leases}</output>
+          <output id="crop-request">{payload}</output>
+        </>
+      ) : null}
       <div id="reference-picker-sidebar" style={{ width: "100%" }}>
         <H3Sidebar
           locale={locale}
@@ -75,6 +111,26 @@ export function ReferencePickerHarness() {
           appModeDraft={draft}
           onAppModeDraftChange={setDraft}
           appMode={{
+            ...(crop
+              ? {
+                  imageCrop: {
+                    available: cropAvailable,
+                    actions: cropSources,
+                    acquireKeyboardGuard: () => {
+                      setLeases((n) => n + 1);
+                      let released = false;
+                      return seamReady({
+                        release() {
+                          if (!released) {
+                            released = true;
+                            setLeases((n) => n - 1);
+                          }
+                        },
+                      });
+                    },
+                  },
+                }
+              : {}),
             capability: { status: "ready" },
             mediaSources,
             imageSources: mediaSources.filter(
@@ -91,7 +147,8 @@ export function ReferencePickerHarness() {
                 snapped: true,
               },
             },
-            onStart: () => {
+            onStart: (inputs) => {
+              setPayload(JSON.stringify(inputs));
               setStarts((value) => value + 1);
             },
             onCancel: () => {},

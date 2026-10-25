@@ -13,6 +13,7 @@
 import {
   CompositionContractError,
   ENGINE_PROFILE_ID,
+  isWipeKind,
   RESOLVED_SCENE_SCHEMA,
   textDecorationWire,
   hasTextDecorations,
@@ -349,11 +350,13 @@ export function resolveCompositionScene(
     operationIds.push("OpacityV1", "BlendV1");
     let transitionElapsed: number | null = null;
     if (
-      clip.transition.kind === "cross_dissolve_v1" &&
+      clip.transition.kind !== "none" &&
       localFrame < clip.transition.durationFrames
     ) {
       transitionElapsed = localFrame;
-      operationIds.push("CrossDissolveV1");
+      operationIds.push(
+        isWipeKind(clip.transition.kind) ? "WipeV1" : "CrossDissolveV1",
+      );
     }
     if (clipTrack.kind === "text_overlay") operationIds.push("DrawTextV1");
     if (clipTrack.kind === "text_overlay" && hasTextDecorations(clip.text))
@@ -365,6 +368,14 @@ export function resolveCompositionScene(
       source_frame: timing.sourceFrame,
       source_pts: timing.sourcePts,
       transition_elapsed_frames: transitionElapsed,
+      ...(isWipeKind(clip.transition.kind)
+        ? {
+            wipe: {
+              kind: clip.transition.kind,
+              duration_frames: clip.transition.durationFrames,
+            },
+          }
+        : {}),
       operation_ids: operationIds,
       transform: { ...clip.transform },
       crop: { ...clip.crop },

@@ -397,3 +397,75 @@ for (const shape of ["modal", "canvas"] as const)
         shape === "canvas" ? "absent" : "ready",
     });
   });
+
+for (const shape of [
+  "prototype getter/setter",
+  "own accessor",
+  "prototype getter without setter",
+] as const)
+  test(`the live readonly probe checks a canvas ${shape} without invoking it`, async ({
+    page,
+  }) => {
+    await openIntegratedShell(page, "smoke", { expandOverlay: false });
+    await page.route("**/scripts/app.js", (route) =>
+      route.fulfill({
+        contentType: "text/javascript",
+        body: 'export { app } from "/hostKeyboard.ts";',
+      }),
+    );
+    await page.route("**/scripts/api.js", (route) =>
+      route.fulfill({
+        contentType: "text/javascript",
+        body: 'export { api } from "/hostKeyboard.ts";',
+      }),
+    );
+    await page.evaluate(async (shape) => {
+      const modulePath = "/hostKeyboard.ts";
+      const { app } = (await import(
+        /* @vite-ignore */ modulePath
+      )) as typeof import("../../../e2e/hostKeyboard");
+      const owner = Reflect.getOwnPropertyDescriptor(
+        app,
+        "canvasInternal",
+      )?.value;
+      const calls = { get: 0, set: 0 };
+      (
+        window as Window & {
+          canvasAccessorCalls?: { get: number; set: number };
+        }
+      ).canvasAccessorCalls = calls;
+      const descriptor: PropertyDescriptor = {
+        configurable: true,
+        set: undefined,
+        get() {
+          calls.get += 1;
+          return owner;
+        },
+      };
+      if (shape !== "prototype getter without setter")
+        descriptor.set = () => {
+          calls.set += 1;
+        };
+      Object.defineProperty(
+        shape === "own accessor" ? app : Reflect.getPrototypeOf(app),
+        "canvas",
+        descriptor,
+      );
+    }, shape);
+    const result = await page.evaluate(observeFrontendHostSeamsInPage);
+    expect(
+      result.observations.find(
+        (row) => row.seam_id === "frontend.app.canvas.keyboard_capture",
+      )?.readiness_state,
+    ).toBe(shape === "prototype getter/setter" ? "ready" : "absent");
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window as Window & {
+              canvasAccessorCalls?: { get: number; set: number };
+            }
+          ).canvasAccessorCalls,
+      ),
+    ).toEqual({ get: 0, set: 0 });
+  });

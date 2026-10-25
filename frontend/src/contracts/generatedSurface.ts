@@ -11,7 +11,7 @@
  * handwritten in the codec that owns it -- those are refinements this file has no
  * authority over.
  *
- * Surface fingerprint: sha256:9cf245c43ad004246615d70297a2d01442b7a9ce70c718146dd7bbe0cb65039c
+ * Surface fingerprint: sha256:3e47783ef8d4668270515b3b5d97176f6d297c64e0f59e96a928158c52ceca4f
  */
 
 /** comfyui_h3_context/core/assisted_authoring_scope.py :: AssistedAuthoringState */
@@ -414,6 +414,7 @@ export const resolvedLayerKeys: readonly string[] = [
   "track_id",
   "transform",
   "transition_elapsed_frames",
+  "wipe",
 ];
 
 /** comfyui_h3_context/core/composition_contract.py :: ResolvedScene */

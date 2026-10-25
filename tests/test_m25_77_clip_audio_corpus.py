@@ -293,7 +293,7 @@ def test_the_base_is_registered_with_every_stage_that_resolves_a_row() -> None:
 def test_the_family_expands_to_its_twenty_two_rows_on_its_own_base() -> None:
     corpus = build_corpus()
     # The 22 family rows and the two rows of the `set_clip_audio` command.
-    assert len(corpus.cases) == 334
+    assert len(corpus.cases) == 374
     leaves = [
         f"{domain.field}.{leaf}"
         for domain in CLIP_AUDIO_DOMAINS

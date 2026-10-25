@@ -59,6 +59,139 @@ const appMode = {
 };
 
 describe("H3Sidebar", () => {
+  describe.each(SUPPORTED_LOCALES)(
+    "managed Execute frame requirements in %s",
+    (locale) => {
+      it.each([
+        ["i2va", "", "", "firstFrame"],
+        ["l2va", "", "", "lastFrame"],
+        ["fl2va", "", "", "firstFrame"],
+        ["fl2va", "17", "", "lastFrame"],
+        ["fl2va", "", "18", "firstFrame"],
+        ["fl2va", "17", "17", "distinctFrames"],
+      ] as const)(
+        "blocks %s with first=%s last=%s",
+        (taskMode, firstFrameSource, lastFrameSource, reason) => {
+          const text = sidebarCopy(locale);
+          const onStart = vi.fn();
+          render(
+            <H3Sidebar
+              locale={locale}
+              state={initialShellState}
+              appMode={{ ...appMode, onStart }}
+              appModeDraft={{
+                ...initialAppModeDraft,
+                activeStage: "execute",
+                taskMode,
+                firstFrameSource,
+                lastFrameSource,
+              }}
+            />,
+          );
+          const action = screen.getByRole("button", {
+            name: text.stageActionExecute,
+          }) as HTMLButtonElement;
+          expect(action.disabled).toBe(true);
+          expect(screen.getByText(text.sourceBlockers[reason])).toBeTruthy();
+          fireEvent.click(action);
+          expect(onStart).not.toHaveBeenCalled();
+        },
+      );
+      it.each(["i2va", "l2va", "fl2va"] as const)(
+        "preserves the chosen %s Execute request",
+        (taskMode) => {
+          const text = sidebarCopy(locale);
+          const onStart = vi.fn();
+          render(
+            <H3Sidebar
+              locale={locale}
+              state={initialShellState}
+              appMode={{ ...appMode, onStart }}
+              appModeDraft={{
+                ...initialAppModeDraft,
+                activeStage: "execute",
+                taskMode,
+                firstFrameSource: "17",
+                lastFrameSource: "18",
+              }}
+            />,
+          );
+          const action = screen.getByRole("button", {
+            name: text.stageActionExecute,
+          }) as HTMLButtonElement;
+          expect(action.disabled).toBe(false);
+          fireEvent.click(action);
+          expect(onStart).toHaveBeenCalledWith(
+            {
+              task_mode: taskMode,
+              user_intent: text.intentSeed,
+              duration_milliseconds: 5000,
+              frame_count: 124,
+              ...(taskMode !== "l2va" ? { first_frame_source: "17" } : {}),
+              ...(taskMode !== "i2va" ? { last_frame_source: "18" } : {}),
+            },
+            undefined,
+          );
+        },
+      );
+    },
+  );
+  describe.each(SUPPORTED_LOCALES)(
+    "optional preparation media in %s",
+    (locale) => {
+      it.each(["i2va", "l2va", "fl2va", "ref2va"] as const)(
+        "enables %s Start and Replace without sending empty role ids",
+        (taskMode) => {
+          const text = sidebarCopy(locale);
+          for (const replace of [false, true]) {
+            const onStart = vi.fn();
+            const view = render(
+              <H3Sidebar
+                locale={locale}
+                state={
+                  replace
+                    ? {
+                        status: "interactive",
+                        reason: "incompatible_graph",
+                        existingGraph: true,
+                      }
+                    : initialShellState
+                }
+                appMode={{
+                  ...appMode,
+                  imageSources: [],
+                  mediaSources: [],
+                  onStart,
+                }}
+                appModeDraft={{ ...initialAppModeDraft, taskMode }}
+              />,
+            );
+            const action = screen.getByRole("button", {
+              name: replace ? text.replaceAppMode : text.startAppMode,
+            }) as HTMLButtonElement;
+            expect(action.disabled).toBe(false);
+            for (const picker of document.querySelectorAll<HTMLSelectElement>(
+              '[data-h3-focus-key="app-first-frame"], [data-h3-focus-key="app-last-frame"]',
+            ))
+              expect(picker.required).toBe(false);
+            fireEvent.submit(action.closest("form")!);
+            expect(onStart).toHaveBeenCalledOnce();
+            const [inputs, options] = onStart.mock.calls[0]!;
+            expect(inputs).not.toHaveProperty("first_frame_source");
+            expect(inputs).not.toHaveProperty("last_frame_source");
+            expect(inputs).not.toHaveProperty("reference_image_sources");
+            expect(options).toEqual(
+              replace
+                ? { prepareOnly: true, replaceExisting: true }
+                : { prepareOnly: true },
+            );
+            view.unmount();
+          }
+        },
+      );
+    },
+  );
+
   const referenceCases = JSON.parse(
     readFileSync(
       resolve(
@@ -75,6 +208,159 @@ describe("H3Sidebar", () => {
     soundtrack: "included" | "excluded" | "unavailable";
     allowed: boolean;
   }>;
+  it.each(referenceCases)(
+    "preserves the current-graph $name capacity verdict",
+    (row) => {
+      const onStart = vi.fn();
+      render(
+        <H3Sidebar
+          state={{
+            status: "interactive",
+            reason: "canvas_ready",
+            existingGraph: true,
+          }}
+          appMode={{ ...appMode, onStart }}
+          appModeDraft={{
+            ...initialAppModeDraft,
+            taskMode: "ref2va",
+            referenceImages: Array.from({ length: row.images }, (_, i) =>
+              String(100 + i),
+            ),
+            referenceVideos: Array.from({ length: row.videos }, (_, i) =>
+              String(200 + i),
+            ),
+            referenceAudios: Array.from({ length: row.audios }, (_, i) =>
+              String(300 + i),
+            ),
+            referenceVideoSoundtrack: row.soundtrack,
+          }}
+        />,
+      );
+      const queue = screen.getByRole("button", {
+        name: sidebarCopy("en").queueCurrentGraph,
+      }) as HTMLButtonElement;
+      expect(queue.disabled).toBe(!row.allowed);
+      fireEvent.submit(queue.closest("form")!);
+      expect(onStart).toHaveBeenCalledTimes(row.allowed ? 1 : 0);
+      if (row.allowed)
+        expect(onStart.mock.calls[0]![1]).toEqual({ useExisting: true });
+    },
+  );
+
+  describe.each(SUPPORTED_LOCALES)("source guidance in %s", (locale) => {
+    it.each(["i2va", "l2va", "fl2va", "ref2va"] as const)(
+      "links the empty %s guidance and removes it after sources appear",
+      (taskMode) => {
+        const text = sidebarCopy(locale);
+        const props = {
+          locale,
+          state: initialShellState,
+          appModeDraft: { ...initialAppModeDraft, taskMode },
+        };
+        const view = render(
+          <H3Sidebar
+            {...props}
+            appMode={{ ...appMode, imageSources: [], mediaSources: [] }}
+          />,
+        );
+        const expected =
+          taskMode === "ref2va"
+            ? text.sourceGuidance.noReferenceMedia
+            : taskMode === "fl2va"
+              ? text.sourceGuidance.needTwoImages.replace("{count}", "0")
+              : text.sourceGuidance.noImage;
+        const hint = screen.getByText(expected);
+        const controls =
+          taskMode === "ref2va"
+            ? [text.referenceImages, text.referenceVideos, text.referenceAudios]
+            : taskMode === "fl2va"
+              ? [text.firstFrameSource, text.lastFrameSource]
+              : [
+                  taskMode === "i2va"
+                    ? text.firstFrameSource
+                    : text.lastFrameSource,
+                ];
+        for (const name of controls)
+          expect(
+            screen
+              .getByRole("combobox", { name })
+              .getAttribute("aria-describedby"),
+          ).toBe(hint.id);
+        view.rerender(<H3Sidebar {...props} appMode={appMode} />);
+        expect(screen.queryByText(expected)).toBeNull();
+      },
+    );
+    it.each([
+      ["firstFrame"],
+      ["lastFrame"],
+      ["firstFrame", "lastFrame"],
+      ["referenceImages"],
+    ] as const)(
+      "names exactly the unchosen template roles %s, then clears on the next run",
+      (...roles) => {
+        const text = sidebarCopy(locale);
+        const unchosenSourceRoles = roles.flat();
+        const state = {
+          status: "interactive" as const,
+          reason: "canvas_ready" as const,
+          existingGraph: true,
+          unchosenSourceRoles,
+          preparedGraphFingerprint: "private-prepared-digest",
+        };
+        const view = render(
+          <H3Sidebar locale={locale} state={state} appMode={appMode} />,
+        );
+        const line = document.querySelector(
+          "[data-h3-prepared-source-guidance]",
+        )!;
+        const roleNames = unchosenSourceRoles
+          .map((role) => text.sourceGuidance.roles[role])
+          .join(text.sourceGuidance.roleSeparator);
+        const template = unchosenSourceRoles.includes("referenceImages")
+          ? text.sourceGuidance.readyReferences
+          : text.sourceGuidance.readyFrames;
+        expect(line.textContent).toBe(
+          template
+            .replace("{roles}", roleNames)
+            .replace("{queue}", text.queueCurrentGraph),
+        );
+        view.rerender(
+          <H3Sidebar
+            locale={locale}
+            state={{ ...state, reason: "native_preference" }}
+            appMode={appMode}
+          />,
+        );
+        expect(
+          document.querySelector("[data-h3-prepared-source-guidance]")
+            ?.textContent,
+        ).toBe(line.textContent);
+        expect(document.body.textContent).not.toContain(
+          "private-prepared-digest",
+        );
+        view.rerender(
+          <H3Sidebar
+            locale={locale}
+            state={{ status: "working", phase: "compiling", transactionId: 1 }}
+            appMode={appMode}
+          />,
+        );
+        expect(
+          document.querySelector("[data-h3-prepared-source-guidance]"),
+        ).toBeNull();
+        view.rerender(
+          <H3Sidebar
+            locale={locale}
+            state={{ ...state, unchosenSourceRoles: [] }}
+            appMode={appMode}
+          />,
+        );
+        expect(
+          document.querySelector("[data-h3-prepared-source-guidance]"),
+        ).toBeNull();
+      },
+    );
+  });
   it.each(referenceCases)(
     "enforces the restored $name capacity verdict at submission",
     (row) => {
@@ -102,9 +388,11 @@ describe("H3Sidebar", () => {
       const start = screen.getByRole("button", {
         name: "Start H3 App Mode",
       }) as HTMLButtonElement;
-      expect(start.disabled).toBe(!row.allowed);
+      const preparationAllowed =
+        row.allowed || row.images + row.videos + row.audios === 0;
+      expect(start.disabled).toBe(!preparationAllowed);
       fireEvent.submit(start.closest("form")!);
-      expect(onStart).toHaveBeenCalledTimes(row.allowed ? 1 : 0);
+      expect(onStart).toHaveBeenCalledTimes(preparationAllowed ? 1 : 0);
     },
   );
   it("labels clip duration and shows the workflow Production destination near Start", () => {
@@ -829,7 +1117,7 @@ describe("H3Sidebar", () => {
         ),
     },
   ] as const)(
-    "keeps $mode authoring editable while only invalid submission is blocked",
+    "keeps $mode preparation editable without a source and still blocks unresolved duration",
     ({ mode, blocker, complete }) => {
       const onStart = vi.fn();
       render(
@@ -849,8 +1137,8 @@ describe("H3Sidebar", () => {
 
       expect((intent as HTMLTextAreaElement).disabled).toBe(false);
       expect((duration as HTMLInputElement).disabled).toBe(false);
-      expect((submit as HTMLButtonElement).disabled).toBe(true);
-      expect(screen.getByText(blocker).getAttribute("role")).toBe("status");
+      expect((submit as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.queryByText(blocker)).toBeNull();
       fireEvent.change(intent, { target: { value: `${mode} revised intent` } });
       // the duration stays editable, but a value the backend has not
       // derived a length for keeps submission closed. App Mode writes a length

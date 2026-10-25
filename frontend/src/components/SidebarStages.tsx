@@ -9,6 +9,7 @@ import type { SidebarWorkspaceActionName } from "../state/sidebarWorkspace";
 import type { Locale } from "../i18n/catalog";
 import {
   translate,
+  providerCopy,
   stageChromeCatalog,
   stageLabelsCatalog,
   stageStatusCatalog,
@@ -240,6 +241,14 @@ export function SidebarStages({
   const stageLabels = stageLabelsCatalog[locale];
   const stageStatuses = stageStatusCatalog[locale];
   const text = stageChromeCatalog[locale];
+  const outcomeCopy = providerCopy(locale).outcome;
+  const outcomeKey = assistedFailure?.replace(/^prompt_model\./, "");
+  const assistedOutcomeText =
+    outcomeKey !== undefined &&
+    /^(draft_|repair_|proposal_)/.test(outcomeKey) &&
+    outcomeKey in outcomeCopy
+      ? outcomeCopy[outcomeKey as keyof typeof outcomeCopy]
+      : text.assistedFailure;
   const guideReadinessText = {
     ready: text.guideReady,
     incomplete: text.guideIncomplete,
@@ -974,7 +983,7 @@ export function SidebarStages({
                 <p role="alert">
                   {assistedFailure === "prompt_model.profile_not_qualified"
                     ? text.assistedProfileNotQualified
-                    : text.assistedFailure}
+                    : assistedOutcomeText}
                 </p>
               )}
             </div>

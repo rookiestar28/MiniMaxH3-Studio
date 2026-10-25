@@ -263,6 +263,11 @@ class AdoptionConditionTests(unittest.TestCase):
                     ),
                 },
             ),
+            (
+                AdoptionCondition.HARD_CONTENT_PRESERVED,
+                PromptModelOutcomeId.REPAIR_USER_TEXT_ALTERED,
+                {"guarantee": guarantee(required_content=("missing protected content",))},
+            ),
         )
         seen: set[AdoptionCondition] = set()
         for condition, outcome_id, overrides in cases:
@@ -283,13 +288,13 @@ class AdoptionConditionTests(unittest.TestCase):
         self.assertEqual(seen, set(AdoptionCondition))
 
     def test_reference_drift_is_caught_in_both_directions(self) -> None:
-        for original, repaired_text in (
-            ("uses <Picture 1>", CLEAN_WITH_DIALOGUE),
-            (CLEAN_WITH_DIALOGUE, CLEAN_WITH_DIALOGUE + " see <Picture 1>"),
+        for required, original, repaired_text in (
+            (("<Picture 1>",), "uses <Picture 1>", CLEAN_WITH_DIALOGUE),
+            ((), CLEAN_WITH_DIALOGUE, CLEAN_WITH_DIALOGUE + " see <Picture 1>"),
         ):
             with self.subTest(original=original[:24]):
                 adoption = evaluate_repair_adoption(
-                    guarantee=guarantee(),
+                    guarantee=guarantee(required_labels=required),
                     original_text=original,
                     repaired=DraftCandidate(text=repaired_text),
                     reaudit=self.clean_reaudit(),

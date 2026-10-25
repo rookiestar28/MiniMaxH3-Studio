@@ -19,6 +19,18 @@
       "path": "comfyui_h3_context/core/__init__.py"
     },
     {
+      "binding_id": "app-mode.canvas-preparation-unchosen-replace",
+      "kind": "criterion",
+      "owner": "M19-04",
+      "path": "frontend/tests/e2e/journeys/managedLifecycle.spec.ts"
+    },
+    {
+      "binding_id": "app-mode.canvas-preparation-unchosen-start",
+      "kind": "criterion",
+      "owner": "M19-04",
+      "path": "frontend/tests/e2e/journeys/managedLifecycle.spec.ts"
+    },
+    {
       "binding_id": "build_context_preview",
       "kind": "public_python_abi",
       "owner": "M19-02",
@@ -753,6 +765,13 @@
       ],
       "source": "adapters.comfyui_sidebar_workspace",
       "target": "core.assisted_refinement"
+    },
+    {
+      "kinds": [
+        "function_local"
+      ],
+      "source": "adapters.comfyui_sidebar_workspace",
+      "target": "core.hard_content"
     },
     {
       "kinds": [
@@ -1921,11 +1940,11 @@
     }
   ],
   "edge_kind_totals": {
-    "function_local": 113,
-    "module_level": 1766,
+    "function_local": 114,
+    "module_level": 1773,
     "type_checking": 128
   },
-  "fingerprint": "sha256:d7000bcd7e67d5bff9c9aec75ab8be4c1b16833b223bb5c8bb2ae6aef744989d",
+  "fingerprint": "sha256:5e2e8a711dcdbca2a38d555b646840d06914c1a17118200e448c2b5bdc096e34",
   "forbidden_imports": [],
   "layer_inversions": [],
   "modules": [
@@ -2018,6 +2037,7 @@
         "tests/test_retained_asset_route.py",
         "tests/test_retained_asset_service.py",
         "tests/test_seam_observation_media.py",
+        "tests/test_title_glyph_admission.py",
         "tests/test_workspace_route_workers.py",
         "tests/test_workspace_state_route.py"
       ],
@@ -2027,13 +2047,14 @@
       "disposition": "movable",
       "inbound": 1,
       "layer": "adapters",
-      "lines": 423,
+      "lines": 465,
       "module": "adapters.assisted_draft_execution",
-      "outbound": 13,
+      "outbound": 14,
       "owning_rules": [
         "direct_module"
       ],
       "owning_tests": [
+        "tests/test_assisted_hard_content.py",
         "tests/test_comfyui_assisted_draft.py",
         "tests/test_dialogue_speakers.py",
         "tests/test_instruction_refinement.py",
@@ -2127,7 +2148,7 @@
     },
     {
       "disposition": "movable",
-      "inbound": 6,
+      "inbound": 7,
       "layer": "adapters",
       "lines": 732,
       "module": "adapters.authoring_fonts",
@@ -2152,7 +2173,8 @@
         "tests/test_m25_render_job_leases.py",
         "tests/test_m25_render_source_currentness.py",
         "tests/test_renderer_qualification_subjects.py",
-        "tests/test_title_decorations.py"
+        "tests/test_title_decorations.py",
+        "tests/test_title_glyph_admission.py"
       ],
       "reasons": []
     },
@@ -2306,7 +2328,7 @@
       "disposition": "movable",
       "inbound": 2,
       "layer": "adapters",
-      "lines": 607,
+      "lines": 651,
       "module": "adapters.authoring_render_graph",
       "outbound": 6,
       "owning_rules": [
@@ -2321,7 +2343,8 @@
         "tests/test_m25_authoring_render_jobs.py",
         "tests/test_m25_native_renderer.py",
         "tests/test_renderer_qualification_subjects.py",
-        "tests/test_title_decorations.py"
+        "tests/test_title_decorations.py",
+        "tests/test_wipe_render_schedule.py"
       ],
       "reasons": []
     },
@@ -2475,7 +2498,7 @@
       "disposition": "movable",
       "inbound": 3,
       "layer": "adapters",
-      "lines": 234,
+      "lines": 236,
       "module": "adapters.authoring_renderer_qualification",
       "outbound": 6,
       "owning_rules": [
@@ -2746,9 +2769,9 @@
       "disposition": "movable",
       "inbound": 8,
       "layer": "adapters",
-      "lines": 2507,
+      "lines": 2556,
       "module": "adapters.comfyui_authoring_workspace",
-      "outbound": 26,
+      "outbound": 27,
       "owning_rules": [
         "direct_module",
         "submodule_as_name"
@@ -2772,6 +2795,7 @@
         "tests/test_project_document_relink.py",
         "tests/test_project_document_route.py",
         "tests/test_project_document_service.py",
+        "tests/test_title_glyph_admission.py",
         "tests/test_workspace_route_workers.py"
       ],
       "reasons": []
@@ -3104,6 +3128,7 @@
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_comfyui_assisted_draft.py",
         "tests/test_m23_47_route_seam.py",
@@ -3200,14 +3225,15 @@
       "disposition": "movable",
       "inbound": 8,
       "layer": "adapters",
-      "lines": 2327,
+      "lines": 2398,
       "module": "adapters.comfyui_sidebar_workspace",
-      "outbound": 23,
+      "outbound": 25,
       "owning_rules": [
         "direct_module",
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_authoring_workspace.py",
         "tests/test_comfyui_assisted_draft.py",
@@ -4288,6 +4314,7 @@
       "owning_tests": [
         "tests/test_asr_perception.py",
         "tests/test_assisted_draft.py",
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_audio_acceptance.py",
         "tests/test_audio_analysis.py",
@@ -4488,18 +4515,20 @@
       "disposition": "movable",
       "inbound": 3,
       "layer": "core",
-      "lines": 657,
+      "lines": 731,
       "module": "core.assisted_draft",
-      "outbound": 4,
+      "outbound": 6,
       "owning_rules": [
         "direct_module"
       ],
       "owning_tests": [
         "tests/test_assisted_draft.py",
         "tests/test_assisted_draft_orchestration.py",
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_comfyui_assisted_draft.py",
         "tests/test_dialogue_speakers.py",
+        "tests/test_instruction_refinement.py",
         "tests/test_prompt_model_dialects.py"
       ],
       "reasons": []
@@ -4523,15 +4552,16 @@
     },
     {
       "disposition": "movable",
-      "inbound": 2,
+      "inbound": 4,
       "layer": "core",
-      "lines": 19,
+      "lines": 101,
       "module": "core.assisted_refinement",
       "outbound": 0,
       "owning_rules": [
         "direct_module"
       ],
       "owning_tests": [
+        "tests/test_comfyui_assisted_draft.py",
         "tests/test_instruction_refinement.py"
       ],
       "reasons": []
@@ -4954,6 +4984,7 @@
         "tests/test_m25_40_import_preparation.py",
         "tests/test_m25_77_clip_audio_render.py",
         "tests/test_m25_authoring_initialization.py",
+        "tests/test_m25_authoring_render_graph.py",
         "tests/test_m25_authoring_render_jobs.py",
         "tests/test_m25_authoring_render_receipts.py",
         "tests/test_m25_causal_clip_editor.py",
@@ -4982,6 +5013,7 @@
         "tests/test_timeline_authoring.py",
         "tests/test_transaction_transparency.py",
         "tests/test_validation_lifecycle.py",
+        "tests/test_wipe_render_schedule.py",
         "tests/test_workflow_fixtures.py",
         "tests/test_workflow_migration.py"
       ],
@@ -5081,7 +5113,7 @@
       "disposition": "movable",
       "inbound": 27,
       "layer": "core",
-      "lines": 2238,
+      "lines": 2249,
       "module": "core.composition_contract",
       "outbound": 2,
       "owning_rules": [
@@ -5114,6 +5146,7 @@
         "tests/test_m25_authoring_audio_rate_compatibility.py",
         "tests/test_m25_authoring_output_service.py",
         "tests/test_m25_authoring_render_executor.py",
+        "tests/test_m25_authoring_render_graph.py",
         "tests/test_m25_authoring_render_jobs.py",
         "tests/test_m25_authoring_render_receipts.py",
         "tests/test_m25_authoring_video_facts.py",
@@ -5137,7 +5170,12 @@
         "tests/test_renderer_qualification_subjects.py",
         "tests/test_retained_asset_restore.py",
         "tests/test_semantic_parity.py",
-        "tests/test_title_decorations.py"
+        "tests/test_title_decorations.py",
+        "tests/test_title_glyph_admission.py",
+        "tests/test_wipe_render_schedule.py",
+        "tests/test_wipe_sampling_boundaries.py",
+        "tests/test_wipe_sampling_observer.py",
+        "tests/test_wipe_transitions.py"
       ],
       "reasons": []
     },
@@ -5172,6 +5210,7 @@
         "hub_symbol"
       ],
       "owning_tests": [
+        "tests/test_assisted_hard_content.py",
         "tests/test_audio_analysis.py",
         "tests/test_audit_override.py",
         "tests/test_base_planning.py",
@@ -5656,6 +5695,7 @@
       ],
       "owning_tests": [
         "tests/test_asr_perception.py",
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_audio_acceptance.py",
         "tests/test_audio_analysis.py",
@@ -6042,6 +6082,21 @@
       "disposition": "movable",
       "inbound": 4,
       "layer": "core",
+      "lines": 24,
+      "module": "core.hard_content",
+      "outbound": 0,
+      "owning_rules": [
+        "direct_module"
+      ],
+      "owning_tests": [
+        "tests/test_assisted_hard_content.py"
+      ],
+      "reasons": []
+    },
+    {
+      "disposition": "movable",
+      "inbound": 4,
+      "layer": "core",
       "lines": 908,
       "module": "core.hierarchical_evidence_reduction",
       "outbound": 5,
@@ -6222,13 +6277,15 @@
       "disposition": "movable",
       "inbound": 6,
       "layer": "core",
-      "lines": 379,
+      "lines": 385,
       "module": "core.linting",
-      "outbound": 4,
+      "outbound": 5,
       "owning_rules": [
+        "direct_module",
         "hub_symbol"
       ],
       "owning_tests": [
+        "tests/test_assisted_hard_content.py",
         "tests/test_linting.py",
         "tests/test_security_corpus.py"
       ],
@@ -6532,8 +6589,10 @@
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_comfyui_assisted_draft.py",
+        "tests/test_instruction_refinement.py",
         "tests/test_m17_14_production_closeout.py",
         "tests/test_m17_17_ref2va_soundtrack_ownership.py",
         "tests/test_m21_03_sidebar_diagnostic_parameters.py",
@@ -6660,7 +6719,8 @@
         "tests/test_m25_nle_authoring_state.py",
         "tests/test_m25_timeline_history_v2.py",
         "tests/test_nle_timeline_fixture.py",
-        "tests/test_renderer_qualification_subjects.py"
+        "tests/test_renderer_qualification_subjects.py",
+        "tests/test_title_glyph_admission.py"
       ],
       "reasons": []
     },
@@ -7285,17 +7345,19 @@
       "disposition": "movable",
       "inbound": 7,
       "layer": "core",
-      "lines": 1099,
+      "lines": 1109,
       "module": "core.prompt_fidelity",
-      "outbound": 7,
+      "outbound": 8,
       "owning_rules": [
         "direct_module",
         "hub_symbol"
       ],
       "owning_tests": [
         "tests/test_assisted_draft.py",
+        "tests/test_comfyui_assisted_draft.py",
         "tests/test_dialogue_language.py",
         "tests/test_dialogue_speakers.py",
+        "tests/test_instruction_refinement.py",
         "tests/test_m21_01_prompt_fidelity.py",
         "tests/test_m21_02_vlm_binding_contact_sheet.py",
         "tests/test_m24_05_guide_conformance.py",
@@ -7420,9 +7482,9 @@
     },
     {
       "disposition": "movable",
-      "inbound": 22,
+      "inbound": 23,
       "layer": "core",
-      "lines": 2912,
+      "lines": 2917,
       "module": "core.prompt_model_provider",
       "outbound": 3,
       "owning_rules": [
@@ -7432,6 +7494,7 @@
         "tests/test_assisted_authoring_closeout.py",
         "tests/test_assisted_draft.py",
         "tests/test_assisted_draft_orchestration.py",
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_chosen_model_budget.py",
         "tests/test_comfyui_assisted_draft.py",
@@ -7981,7 +8044,7 @@
       "disposition": "movable",
       "inbound": 9,
       "layer": "core",
-      "lines": 1250,
+      "lines": 1251,
       "module": "core.render_planner",
       "outbound": 3,
       "owning_rules": [
@@ -8252,7 +8315,7 @@
       "disposition": "movable",
       "inbound": 4,
       "layer": "core",
-      "lines": 1152,
+      "lines": 1177,
       "module": "core.semantic_conformance",
       "outbound": 2,
       "owning_rules": [
@@ -8269,7 +8332,9 @@
         "tests/test_m25_45_highres_conformance.py",
         "tests/test_m25_77_clip_audio_command.py",
         "tests/test_m25_77_clip_audio_corpus.py",
-        "tests/test_m25_render_conformance.py"
+        "tests/test_m25_render_conformance.py",
+        "tests/test_wipe_sampling_boundaries.py",
+        "tests/test_wipe_sampling_observer.py"
       ],
       "reasons": []
     },
@@ -8277,7 +8342,7 @@
       "disposition": "movable",
       "inbound": 2,
       "layer": "core",
-      "lines": 2350,
+      "lines": 2379,
       "module": "core.semantic_conformance_cases",
       "outbound": 2,
       "owning_rules": [
@@ -8293,7 +8358,9 @@
         "tests/test_m25_20_render_stage_rules.py",
         "tests/test_m25_45_highres_conformance.py",
         "tests/test_m25_77_clip_audio_command.py",
-        "tests/test_m25_77_clip_audio_corpus.py"
+        "tests/test_m25_77_clip_audio_corpus.py",
+        "tests/test_wipe_sampling_boundaries.py",
+        "tests/test_wipe_sampling_observer.py"
       ],
       "reasons": []
     },
@@ -8342,7 +8409,7 @@
       "disposition": "movable",
       "inbound": 0,
       "layer": "core",
-      "lines": 2988,
+      "lines": 3096,
       "module": "core.semantic_conformance_expect",
       "outbound": 6,
       "owning_rules": [
@@ -8360,7 +8427,11 @@
         "tests/test_m25_45_highres_conformance.py",
         "tests/test_m25_45_preview_size_parity.py",
         "tests/test_m25_77_clip_audio_command.py",
-        "tests/test_m25_77_clip_audio_corpus.py"
+        "tests/test_m25_77_clip_audio_corpus.py",
+        "tests/test_wipe_sampling_boundaries.py",
+        "tests/test_wipe_sampling_observer.py",
+        "tests/test_wipe_spatial_boundaries.py",
+        "tests/test_wipe_transitions.py"
       ],
       "reasons": []
     },
@@ -8397,7 +8468,9 @@
         "tests/test_m25_20_conformance_join.py",
         "tests/test_m25_20_extractor_rules.py",
         "tests/test_m25_20_render_stage_rules.py",
-        "tests/test_m25_77_clip_audio_corpus.py"
+        "tests/test_m25_77_clip_audio_corpus.py",
+        "tests/test_wipe_sampling_boundaries.py",
+        "tests/test_wipe_sampling_observer.py"
       ],
       "reasons": []
     },
@@ -8598,7 +8671,9 @@
         "hub_symbol"
       ],
       "owning_tests": [
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
+        "tests/test_comfyui_assisted_draft.py",
         "tests/test_m17_17_ref2va_soundtrack_ownership.py",
         "tests/test_m21_03_sidebar_diagnostic_parameters.py",
         "tests/test_m24_05_native_declaration.py",
@@ -8797,7 +8872,8 @@
         "tests/test_m25_77_clip_audio_command.py",
         "tests/test_m25_77_clip_audio_edits.py",
         "tests/test_m25_source_time_history.py",
-        "tests/test_m25_timeline_history.py"
+        "tests/test_m25_timeline_history.py",
+        "tests/test_title_glyph_admission.py"
       ],
       "reasons": []
     },
@@ -8815,7 +8891,8 @@
         "tests/test_editor_recovery.py",
         "tests/test_m25_77_clip_audio_command.py",
         "tests/test_m25_timeline_history_v2.py",
-        "tests/test_title_decorations.py"
+        "tests/test_title_decorations.py",
+        "tests/test_title_glyph_admission.py"
       ],
       "reasons": []
     },
@@ -8880,9 +8957,11 @@
         "hub_symbol"
       ],
       "owning_tests": [
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_comfyui_assisted_draft.py",
         "tests/test_generation_sequence.py",
+        "tests/test_instruction_refinement.py",
         "tests/test_m17_14_production_closeout.py",
         "tests/test_m17_17_ref2va_soundtrack_ownership.py",
         "tests/test_m21_03_sidebar_diagnostic_parameters.py",
@@ -9272,6 +9351,7 @@
       "owning_tests": [
         "tests/test_assisted_draft.py",
         "tests/test_assisted_draft_orchestration.py",
+        "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_audit_override.py",
         "tests/test_base_assistant_subgraph.py",

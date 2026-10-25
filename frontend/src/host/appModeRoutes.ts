@@ -3,6 +3,8 @@
 // or connecting the context pipeline into a user canvas. Nothing here calls the host or writes
 // the canvas; the controller owns the transaction around these resolutions ( split).
 import { classifyHostMappingReadiness } from "./hostSeamContract";
+import { readImageCropCapability } from "./imageCropCapability";
+import { validateImageCrops } from "./imageCropContract";
 import {
   OfficialAssetResolutionError,
   readOfficialAssetInventoryFromNodeDefinitions,
@@ -64,6 +66,7 @@ export type ResolvedMaterializeRoute = ResolvedRouteCandidate &
   }>;
 
 export type MaterializeRouteOptions = Readonly<{
+  canvasOnly?: boolean;
   signal: AbortSignal | undefined;
   artifactScope: AppModeStartOptions["artifactScope"];
   loadTemplate: AppModeTemplateLoader;
@@ -230,10 +233,15 @@ export async function resolveMaterializeRoute(
   // decode and sink chain arrive from the template unmodified, which is
   // what makes the materialized graph directly generation-capable instead
   // of the conditioning-only graph this item replaces.
+  validateImageCrops(inputs, options.canvasOnly === true);
   // The request contract used to be enforced by the API-prompt builder.
   // The builder is gone, so the route enforces it directly -- before the
   // template is fetched, and therefore before anything is loaded.
-  const media = resolveSpliceMedia(serialized, inputs);
+  const media = resolveSpliceMedia(
+    serialized,
+    inputs,
+    options.canvasOnly === true,
+  );
   const templateName = MODE_TEMPLATE[inputs.task_mode];
   if (media === undefined || templateName === undefined)
     throw new AppModeError(
@@ -253,10 +261,20 @@ export async function resolveMaterializeRoute(
     // Connect/adopt never enter this block, so a later user choice cannot
     // be overwritten by the materialization ladder.
     const nodeDefinitions = options.readNodeDefinitions();
+    const definitionsReady = options.nodeDefinitionReadinessReached();
     const nodeDefinitionReadiness = classifyHostMappingReadiness(
       nodeDefinitions,
-      options.nodeDefinitionReadinessReached(),
+      definitionsReady,
     );
+    if (
+      inputs.image_crops !== undefined &&
+      !readImageCropCapability(nodeDefinitions, definitionsReady)
+    )
+      throw new AppModeError(
+        "incompatible_seam",
+        "the native crop node is unavailable",
+        { kind: "image_crop_unavailable" },
+      );
     if (nodeDefinitionReadiness === "ready") {
       const family = TASK_MODE_FAMILY[inputs.task_mode];
       if (family === undefined)

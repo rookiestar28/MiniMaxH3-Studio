@@ -9,6 +9,54 @@ import { nleCopy } from "../src/components/nle/nleCopy";
 
 afterEach(cleanup);
 
+describe("packaged title glyph guidance", () => {
+  it.each([
+    [
+      "en",
+      "The bundled title font cannot render some of these characters. Use supported Latin, Greek or Cyrillic characters.",
+    ],
+    [
+      "zh-TW",
+      "封裝的標題字型無法顯示其中部分字元。請使用支援的拉丁文、希臘文或西里爾文字元。",
+    ],
+    [
+      "zh-CN",
+      "随附的标题字体无法显示其中部分字符。请使用支持的拉丁文、希腊文或西里尔文字符。",
+    ],
+  ] as const)(
+    "retains refused drafts and recovers in %s",
+    (locale, message) => {
+      const onIntent = vi.fn(async () => undefined);
+      const view = render(
+        <NleTextBin
+          locale={locale}
+          snapshot={{ ...snapshotFixture(SMOKE_SHAPE), clips: [] }}
+          busy={false}
+          currentFrame={() => 0}
+          onIntent={onIntent}
+        />,
+      );
+      const input = view.getByRole("textbox") as HTMLTextAreaElement;
+      const button = view.container.querySelector<HTMLButtonElement>(
+        '[data-h3-nle-control="title.insert"]',
+      )!;
+      for (const content of ["中文", "한국어", "😀"]) {
+        fireEvent.change(input, { target: { value: content } });
+        expect(button.disabled).toBe(true);
+        expect(view.getByRole("status").textContent).toBe(message);
+        expect(input.value).toBe(content);
+        fireEvent.click(button);
+      }
+      expect(onIntent).not.toHaveBeenCalled();
+      fireEvent.change(input, { target: { value: "Café Ελληνικά Кириллица" } });
+      expect(button.disabled).toBe(false);
+      expect(view.queryByRole("status")).toBeNull();
+      fireEvent.click(button);
+      expect(onIntent).toHaveBeenCalledTimes(1);
+    },
+  );
+});
+
 describe("M25-48 Text bin", () => {
   it.each(["en", "zh-TW", "zh-CN"] as const)(
     "disables an exhausted track pool with current %s refusal copy and no intent",

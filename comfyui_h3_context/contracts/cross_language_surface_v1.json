@@ -1,5 +1,5 @@
 {
-  "fingerprint": "sha256:9cf245c43ad004246615d70297a2d01442b7a9ce70c718146dd7bbe0cb65039c",
+  "fingerprint": "sha256:3e47783ef8d4668270515b3b5d97176f6d297c64e0f59e96a928158c52ceca4f",
   "schema": "h3-context-cross-language-surface/1",
   "shapes": [
     {
@@ -495,6 +495,9 @@
       "class_name": "ResolvedLayer",
       "export_name": "resolvedLayerKeys",
       "module_path": "comfyui_h3_context/core/composition_contract.py",
+      "optional_keys": [
+        "wipe"
+      ],
       "required_keys": [
         "asset_id",
         "blend",

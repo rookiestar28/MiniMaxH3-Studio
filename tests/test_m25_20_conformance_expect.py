@@ -106,6 +106,17 @@ FIXTURES = ROOT / "tests" / "fixtures"
 BOOK = build_recipes()
 
 
+@pytest.mark.parametrize("kind", ("left", "right", "top", "bottom"))
+def test_wipe_claims_include_empty_interior_last_and_full_pixels(kind: str) -> None:
+    recipe = BOOK.by_id[f"transition.wipe_from_{kind}_v1.legal"]
+    wire = _composed(recipe)
+    clip = _clip(wire, OVERLAY_CLIP)
+    start = clip["start_frame"]
+    points = [point for point in patch_sample_points(wire) if ".wipe@" in point.label]
+    assert {point.output_frame for point in points} == {start, start + 2, start + 3, start + 4}
+    assert not derive_alphas(wire), "a hard wipe has spatial coverage, not a uniform alpha ramp"
+
+
 def _base(base: str = CORPUS_BASE) -> dict[str, Any]:
     """A corpus base's snapshot; a row is always composed on the base its own recipe names."""
 

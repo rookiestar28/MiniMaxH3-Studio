@@ -478,12 +478,6 @@ export function setGraphInitialized(initialized: boolean): void {
   graphInitialized = initialized;
 }
 
-const FixtureAppConstructor = function FixtureAppConstructor() {};
-Object.defineProperty(FixtureAppConstructor, "maskeditor_is_opended", {
-  value: null,
-  configurable: true,
-  writable: true,
-});
 const fixtureCanvas = {
   canvas: document.createElement("canvas"),
   _events_binded: true,
@@ -492,26 +486,38 @@ const fixtureCanvas = {
   state: { ghostNodeId: null as string | null },
 };
 
-export const app = {
-  constructor: FixtureAppConstructor,
-  canvas: fixtureCanvas,
+// ComfyUI_frontend v1.55.11+ stores the canvas behind this prototype pair.
+class FixtureAppConstructor {
+  canvasInternal = fixtureCanvas;
+  get canvas() {
+    return this.canvasInternal;
+  }
+  set canvas(value: typeof fixtureCanvas) {
+    this.canvasInternal = value;
+  }
   get graph(): typeof graphHost {
     return (graphInitialized
       ? graphHost
       : undefined) as unknown as typeof graphHost;
-  },
-  loadApiJson,
-  graphToPrompt,
-  loadGraphData,
-  extensionManager: {
+  }
+  loadApiJson = loadApiJson;
+  graphToPrompt = graphToPrompt;
+  loadGraphData = loadGraphData;
+  extensionManager = {
     registerSidebarTab,
     unregisterSidebarTab,
     getSidebarTabs,
     workflow: workflowStore,
-  },
-  registerExtension,
-  ui: { settings: uiSettings },
-};
+  };
+  registerExtension = registerExtension;
+  ui = { settings: uiSettings };
+}
+Object.defineProperty(FixtureAppConstructor, "maskeditor_is_opended", {
+  value: null,
+  configurable: true,
+  writable: true,
+});
+export const app = new FixtureAppConstructor();
 
 export const api = {
   addEventListener: apiEvents.addEventListener.bind(apiEvents),

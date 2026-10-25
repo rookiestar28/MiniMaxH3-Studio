@@ -1,4 +1,12 @@
 import { ReferenceSourcePicker } from "./ReferenceSourcePicker";
+import { ImageCropDialog, type ImageCropBinding } from "./ImageCropDialog";
+import { ImageCropAction, type ImageCropRowActions } from "./ImageCropAction";
+import type { ImageCrops } from "../host/imageCropContract";
+import {
+  frameSourceGuidance,
+  requiredFrameSourceBlocker,
+  PreparedSourceGuidance,
+} from "./CanvasSourceGuidance";
 import { referenceCapacity } from "../host/referenceSelection";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
@@ -136,6 +144,7 @@ export type AppModeDraft = {
    * reference video is selected, because the state is a claim about that video.
    */
   referenceVideoSoundtrack: ReferenceVideoSoundtrack;
+  imageCrops?: ImageCrops;
   activeStage: StageId;
 };
 
@@ -175,6 +184,7 @@ export type AppModeDurationResolutionState =
   | Readonly<{ status: "refused"; requestedSeconds: number }>;
 
 type AppModeView = {
+  imageCrop?: ImageCropBinding;
   capability: AppModeCapability;
   imageSources?: AppModeImageSource[];
   mediaSources?: AppModeMediaSource[];
@@ -268,9 +278,32 @@ function AppModeEntry({
   // so it is not in the draft the shell persists: it means nothing once the
   // canvas changes.
   const [designatedAnchor, setDesignatedAnchor] = useState<string>("");
+  const [croppingSource, setCroppingSource] = useState<string>();
   const currentDraft = draft ?? localDraft;
   const updateDraft = (patch: Partial<AppModeDraft>): void => {
     const next = { ...currentDraft, ...patch };
+    const selected = new Set(
+      next.taskMode === "ref2va"
+        ? next.referenceImages
+        : [
+            ...(next.taskMode === "i2va" || next.taskMode === "fl2va"
+              ? [next.firstFrameSource]
+              : []),
+            ...(next.taskMode === "l2va" || next.taskMode === "fl2va"
+              ? [next.lastFrameSource]
+              : []),
+          ],
+    );
+    const crops = Object.fromEntries(
+      Object.entries(next.imageCrops ?? {}).filter(
+        ([id]) => selected.has(id) && next.taskMode === currentDraft.taskMode,
+      ),
+    );
+    for (const id of Object.keys(currentDraft.imageCrops ?? {})) {
+      if (!(id in crops)) appMode?.imageCrop?.actions.apply(id, undefined);
+    }
+    if (Object.keys(crops).length) next.imageCrops = crops;
+    else delete next.imageCrops;
     if (onDraftChange !== undefined) onDraftChange(next);
     else setLocalDraft(next);
   };
@@ -290,8 +323,10 @@ function AppModeEntry({
   const setUserIntent = (value: string) => updateDraft({ userIntent: value });
   const setDurationSeconds = (value: number) =>
     updateDraft({ requestedSeconds: value });
-  const setTaskMode = (value: AppModeTaskMode) =>
+  const setTaskMode = (value: AppModeTaskMode) => {
+    appMode?.imageCrop?.actions.clear();
     updateDraft({ taskMode: value });
+  };
   const setFirstFrameSource = (value: string) =>
     updateDraft({ firstFrameSource: value });
   const setLastFrameSource = (value: string) =>
@@ -337,6 +372,13 @@ function AppModeEntry({
     state.status === "interactive" && state.reason === "native_preference"
   );
   const useExistingAction = existingGraph && !needsDecision;
+  useEffect(() => {
+    if (useExistingAction && currentDraft.imageCrops !== undefined) {
+      appMode?.imageCrop?.actions.clear();
+      updateDraft({ imageCrops: undefined });
+      setCroppingSource(undefined);
+    }
+  }, [useExistingAction, currentDraft.imageCrops]);
   const referenceVerdict = referenceCapacity({
     images: referenceImages.length,
     videos: referenceVideos.length,
@@ -346,22 +388,65 @@ function AppModeEntry({
   const sourceSelectionBlocker =
     !useExistingAction &&
     taskMode === "fl2va" &&
-    (firstFrameSource === "" ||
-      lastFrameSource === "" ||
-      firstFrameSource === lastFrameSource)
+    firstFrameSource !== "" &&
+    lastFrameSource !== "" &&
+    firstFrameSource === lastFrameSource
       ? text.sourceBlockers.distinctFrames
-      : // IMPORTANT (B-M1605-EXIST-03): the existing route observes no first-frame identity
-        //, so an unselected first frame must not gate it; materialization still needs one.
-        !useExistingAction && taskMode === "i2va" && firstFrameSource === ""
-        ? text.sourceBlockers.firstFrame
-        : !useExistingAction && taskMode === "l2va" && lastFrameSource === ""
-          ? text.sourceBlockers.lastFrame
-          : taskMode === "ref2va" && !referenceVerdict.allowed
-            ? referenceVerdict.reason === "visual"
-              ? text.sourceBlockers.reference
-              : text.referenceActions.reasons[referenceVerdict.reason!]
-            : null;
+      : taskMode === "ref2va" &&
+          !referenceVerdict.allowed &&
+          (useExistingAction ||
+            referenceImages.length +
+              referenceVideos.length +
+              referenceAudios.length >
+              0)
+        ? referenceVerdict.reason === "visual"
+          ? text.sourceBlockers.reference
+          : text.referenceActions.reasons[referenceVerdict.reason!]
+        : null;
+  const sourceGuidance = frameSourceGuidance(
+    taskMode,
+    appMode?.imageSources?.length ?? 0,
+    text.sourceGuidance,
+  );
+  const executeSourceBlocker = useExistingAction
+    ? null
+    : requiredFrameSourceBlocker(
+        taskMode,
+        firstFrameSource,
+        lastFrameSource,
+        text.sourceBlockers,
+      );
   const editingDisabled = busy || capability.status !== "ready";
+  const cropSubmitBlocker: Readonly<{
+    kind: "crop_requires_preparation";
+    message: string;
+  }> | null =
+    Object.keys(currentDraft.imageCrops ?? {}).length > 0
+      ? {
+          kind: "crop_requires_preparation",
+          message: text.crop.prepareRequired,
+        }
+      : null;
+  const executeBlocker = cropSubmitBlocker?.message ?? executeSourceBlocker;
+  const cropReason = useExistingAction
+    ? text.crop.useExisting
+    : appMode?.imageCrop?.available !== true
+      ? text.crop.unavailable
+      : busy
+        ? text.working
+        : capability.status !== "ready" &&
+            state.status === "interactive" &&
+            state.reason === "pending_capability"
+          ? text.pending
+          : capability.status !== "ready"
+            ? text.crop.unavailable
+            : undefined;
+  const cropActions: ImageCropRowActions = {
+    crops: currentDraft.imageCrops ?? {},
+    label: text.crop.action,
+    reason: cropReason,
+    open: setCroppingSource,
+  };
   const resolutionState = appMode?.durationResolution;
   const resolutionRequestedSeconds =
     resolutionState?.status === "resolved"
@@ -438,17 +523,19 @@ function AppModeEntry({
   );
   const connectBlocker = busy
     ? text.connect.blockers.busy
-    : capability.status !== "ready"
-      ? text.connect.blockers.capability
-      : intentInvalid
-        ? text.connect.blockers.intent
-        : lengthUnconfirmed
-          ? text.connect.blockers.duration
-          : connectAnchor === undefined
-            ? text.connect.blockers.designation
-            : connectAnchor.taskMode !== taskMode
-              ? text.connect.blockers.mode
-              : null;
+    : cropSubmitBlocker !== null
+      ? cropSubmitBlocker.message
+      : capability.status !== "ready"
+        ? text.connect.blockers.capability
+        : intentInvalid
+          ? text.connect.blockers.intent
+          : lengthUnconfirmed
+            ? text.connect.blockers.duration
+            : connectAnchor === undefined
+              ? text.connect.blockers.designation
+              : connectAnchor.taskMode !== taskMode
+                ? text.connect.blockers.mode
+                : null;
   const connectDisabled = connectBlocker !== null;
   const refusalMessage =
     (state.status === "interactive" || state.status === "error") &&
@@ -490,8 +577,22 @@ function AppModeEntry({
 
   const submit = (options?: AppModeStartOptions) => {
     const connecting = options?.connectExisting !== undefined;
+    // IMPORTANT: draft crops must never be silently omitted. Only canvas preparation
+    // applies them; block every other submit route, including connect and stale actions.
     if (
-      (connecting ? connectDisabled : submitDisabled) ||
+      cropSubmitBlocker !== null &&
+      (options?.prepareOnly !== true ||
+        options?.useExisting === true ||
+        connecting)
+    )
+      return;
+    if (
+      (connecting
+        ? connectDisabled
+        : submitDisabled ||
+          (options?.prepareOnly !== true &&
+            options?.useExisting !== true &&
+            executeSourceBlocker !== null)) ||
       appMode === undefined
     )
       return;
@@ -505,12 +606,20 @@ function AppModeEntry({
     if (!connecting) {
       const usingExisting = options?.useExisting === true;
       if (
+        options?.prepareOnly === true &&
+        !usingExisting &&
+        currentDraft.imageCrops !== undefined
+      )
+        inputs.image_crops = currentDraft.imageCrops;
+      if (
         (taskMode === "i2va" || taskMode === "fl2va") &&
+        (options?.prepareOnly !== true || firstFrameSource !== "") &&
         (!usingExisting || firstFrameSource !== "")
       )
         inputs.first_frame_source = firstFrameSource;
       if (
         (taskMode === "l2va" || taskMode === "fl2va") &&
+        (options?.prepareOnly !== true || lastFrameSource !== "") &&
         (!usingExisting || lastFrameSource !== "")
       )
         inputs.last_frame_source = lastFrameSource;
@@ -571,47 +680,76 @@ function AppModeEntry({
             </select>
           </label>
           {taskMode === "i2va" || taskMode === "fl2va" ? (
-            <label>
-              <span>{text.firstFrameSource}</span>
-              <select
-                data-h3-focus-key="app-first-frame"
-                aria-label={text.firstFrameSource}
-                value={firstFrameSource}
-                disabled={editingDisabled}
-                required={!useExistingAction}
-                onChange={(event) => setFirstFrameSource(event.target.value)}
-              >
-                <option value="">{text.chooseImageSource}</option>
-                {(appMode?.imageSources ?? []).map((source) => (
-                  <option key={source.node_id} value={source.node_id}>
-                    {source.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="h3-frame-source">
+              <label>
+                <span>{text.firstFrameSource}</span>
+                <select
+                  data-h3-focus-key="app-first-frame"
+                  aria-label={text.firstFrameSource}
+                  value={firstFrameSource}
+                  disabled={editingDisabled}
+                  aria-describedby={
+                    sourceGuidance === undefined
+                      ? undefined
+                      : "h3-app-mode-source-guidance"
+                  }
+                  onChange={(event) => setFirstFrameSource(event.target.value)}
+                >
+                  <option value="">{text.chooseImageSource}</option>
+                  {(appMode?.imageSources ?? []).map((source) => (
+                    <option key={source.node_id} value={source.node_id}>
+                      {source.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <ImageCropAction
+                id={firstFrameSource}
+                actions={{
+                  ...cropActions,
+                  reason:
+                    firstFrameSource === "" ? text.crop.choose : cropReason,
+                }}
+              />
+            </div>
           ) : null}
           {taskMode === "l2va" || taskMode === "fl2va" ? (
-            <label>
-              <span>{text.lastFrameSource}</span>
-              <select
-                data-h3-focus-key="app-last-frame"
-                aria-label={text.lastFrameSource}
-                value={lastFrameSource}
-                disabled={editingDisabled}
-                required={!useExistingAction}
-                onChange={(event) => setLastFrameSource(event.target.value)}
-              >
-                <option value="">{text.chooseImageSource}</option>
-                {(appMode?.imageSources ?? []).map((source) => (
-                  <option key={source.node_id} value={source.node_id}>
-                    {source.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="h3-frame-source">
+              <label>
+                <span>{text.lastFrameSource}</span>
+                <select
+                  data-h3-focus-key="app-last-frame"
+                  aria-label={text.lastFrameSource}
+                  value={lastFrameSource}
+                  disabled={editingDisabled}
+                  aria-describedby={
+                    sourceGuidance === undefined
+                      ? undefined
+                      : "h3-app-mode-source-guidance"
+                  }
+                  onChange={(event) => setLastFrameSource(event.target.value)}
+                >
+                  <option value="">{text.chooseImageSource}</option>
+                  {(appMode?.imageSources ?? []).map((source) => (
+                    <option key={source.node_id} value={source.node_id}>
+                      {source.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <ImageCropAction
+                id={lastFrameSource}
+                actions={{
+                  ...cropActions,
+                  reason:
+                    lastFrameSource === "" ? text.crop.choose : cropReason,
+                }}
+              />
+            </div>
           ) : null}
           {taskMode === "ref2va" ? (
             <ReferenceSourcePicker
+              imageCrop={cropActions}
               images={referenceImages}
               videos={referenceVideos}
               audios={referenceAudios}
@@ -629,6 +767,14 @@ function AppModeEntry({
               onSoundtrack={setReferenceVideoSoundtrack}
             />
           ) : null}
+          {sourceGuidance === undefined ? null : (
+            <p
+              id="h3-app-mode-source-guidance"
+              className="h3-reference-guidance"
+            >
+              {sourceGuidance}
+            </p>
+          )}
           <>
             <label>
               <span>{text.intent}</span>
@@ -705,6 +851,7 @@ function AppModeEntry({
           ) : existingGraph ? (
             <p className="h3-app-mode-existing">{text.existing}</p>
           ) : null}
+          <PreparedSourceGuidance state={state} text={text} />
           {sourceSelectionBlocker !== null ? (
             <p
               id="h3-app-mode-source-blocker"
@@ -939,12 +1086,28 @@ function AppModeEntry({
           type="button"
           data-h3-focus-key="app-stage-action"
           onClick={action}
+          aria-describedby={
+            activeStage === "execute" && executeBlocker !== null
+              ? "h3-execute-source-blocker"
+              : undefined
+          }
           disabled={
-            activeStage === "execute" ? submitDisabled : editingDisabled
+            activeStage === "execute"
+              ? submitDisabled || executeBlocker !== null
+              : editingDisabled
           }
         >
           {actionLabels[activeStage]}
         </button>
+        {activeStage === "execute" && executeBlocker !== null ? (
+          <p
+            id="h3-execute-source-blocker"
+            role="status"
+            data-crop-blocker={cropSubmitBlocker?.kind}
+          >
+            {executeBlocker}
+          </p>
+        ) : null}
       </div>
     );
   };
@@ -984,6 +1147,25 @@ function AppModeEntry({
       >
         {renderStagePanel()}
       </section>
+      {croppingSource !== undefined && appMode?.imageCrop !== undefined ? (
+        <ImageCropDialog
+          sourceId={croppingSource}
+          initialCrop={currentDraft.imageCrops?.[croppingSource]}
+          text={text.crop}
+          acquireKeyboardGuard={appMode.imageCrop.acquireKeyboardGuard}
+          actions={{
+            ...appMode.imageCrop.actions,
+            apply(id, crop) {
+              appMode.imageCrop!.actions.apply(id, crop);
+              const crops = { ...currentDraft.imageCrops };
+              if (crop) crops[id] = crop;
+              else delete crops[id];
+              updateDraft({ imageCrops: crops });
+            },
+          }}
+          onClose={() => setCroppingSource(undefined)}
+        />
+      ) : null}
       {capability.status !== "ready" ? (
         <p className="h3-context-capability" role="status">
           {text.capability}

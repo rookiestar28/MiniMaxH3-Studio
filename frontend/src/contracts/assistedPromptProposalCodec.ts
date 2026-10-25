@@ -27,6 +27,7 @@ const adoptionConditions = [
   "reference_inventory_unchanged",
   "user_text_preserved",
   "output_within_limit",
+  "hard_content_preserved",
 ] as const;
 const remediations = [
   "none",
@@ -42,6 +43,10 @@ const remediations = [
 
 export const ASSISTED_OUTCOME_IDS = [
   "prompt_model.ok",
+  "prompt_model.proposal_user_text_altered",
+  "prompt_model.proposal_reference_drift",
+  "prompt_model.proposal_audit_failed",
+  "prompt_model.proposal_forbidden_content_added",
   "prompt_model.cancelled",
   "prompt_model.timeout",
   "prompt_model.authentication",
@@ -70,6 +75,7 @@ export const ASSISTED_OUTCOME_IDS = [
   "prompt_model.repair_reaudit_failed",
   "prompt_model.repair_reference_drift",
   "prompt_model.repair_user_text_altered",
+  "prompt_model.repair_forbidden_content_added",
   "prompt_model.repair_output_truncated",
   "prompt_model.consent_revoked",
   "prompt_model.network_not_permitted",

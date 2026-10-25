@@ -16,6 +16,10 @@ import {
   TEMPLATE_UNAVAILABLE_REASON,
 } from "./appModeContract";
 import { probeFileUrl } from "./hostSeams";
+import {
+  preserveTemplateReferenceMedia,
+  unresolvedFrameMedia,
+} from "./appModeCanvasPreparation";
 
 /**
  * How the shell reaches the pinned template bytes.
@@ -125,6 +129,7 @@ export function serializedWidgetValues(
 export function resolveSpliceMedia(
   serialized: unknown,
   inputs: AppModeInputs,
+  canvasOnly = false,
 ): SpliceMedia | undefined {
   const visible = new Map<string, Record<string, unknown>>();
   for (const value of graphNodes(serialized)) {
@@ -140,7 +145,13 @@ export function resolveSpliceMedia(
     const widgetValues = serializedWidgetValues(node?.widgets_values);
     return node === undefined || widgetValues === undefined
       ? undefined
-      : { type: String(node.type), widgetValues };
+      : {
+          type: String(node.type),
+          widgetValues,
+          ...(inputs.image_crops?.[id] === undefined
+            ? {}
+            : { crop: inputs.image_crops[id] }),
+        };
   };
   const many = (
     ids: readonly string[] | undefined,
@@ -151,6 +162,7 @@ export function resolveSpliceMedia(
       : undefined;
   };
   if (inputs.task_mode === "t2va") return {};
+  if (preserveTemplateReferenceMedia(inputs, canvasOnly)) return {};
   if (inputs.task_mode === "ref2va") {
     const referenceImages = many(inputs.reference_image_sources);
     const referenceVideos = many(inputs.reference_video_sources);
@@ -170,12 +182,7 @@ export function resolveSpliceMedia(
   }
   const firstFrame = source(inputs.first_frame_source);
   const lastFrame = source(inputs.last_frame_source);
-  if (
-    (inputs.task_mode === "i2va" && firstFrame === undefined) ||
-    (inputs.task_mode === "l2va" && lastFrame === undefined) ||
-    (inputs.task_mode === "fl2va" &&
-      (firstFrame === undefined || lastFrame === undefined))
-  )
+  if (unresolvedFrameMedia(inputs, firstFrame, lastFrame, canvasOnly))
     return undefined;
   const media: { firstFrame?: LoaderSource; lastFrame?: LoaderSource } = {};
   if (firstFrame !== undefined) media.firstFrame = firstFrame;

@@ -3,6 +3,7 @@
 
 import { sha256Text } from "../contracts/canonicalFingerprint";
 import { referenceCapacity } from "./referenceSelection";
+import { validateImageCrops, type ImageCrops } from "./imageCropContract";
 import type {
   GenerationAssetSlot,
   GenerationFamilyDisposition,
@@ -293,6 +294,7 @@ export type AppModeInputs = {
   reference_image_sources?: string[];
   reference_video_sources?: string[];
   reference_audio_sources?: string[];
+  image_crops?: ImageCrops;
   /**
    * whether the reference videos submit their own soundtrack.
    *
@@ -602,6 +604,10 @@ export type AppModeRefusalReason = Readonly<
   | { kind: "connect_missing_first_frame" }
   | { kind: "connect_missing_last_frame" }
   | { kind: "source_image_changed" }
+  | {
+      kind:
+        "image_crop_invalid" | "image_crop_unavailable" | "image_crop_stale";
+    }
   | { kind: "template_unavailable" }
   | {
       kind: "queue_rejected";
@@ -874,7 +880,7 @@ export function isBindableDurationSeconds(value: unknown): boolean {
   );
 }
 
-function validateCommonInputs(inputs: AppModeInputs): void {
+export function validateCommonInputs(inputs: AppModeInputs): void {
   if (!APP_MODE_TASK_MODES.includes(inputs.task_mode))
     throw new AppModeError(
       "invalid_request",
@@ -915,6 +921,7 @@ function validateCommonInputs(inputs: AppModeInputs): void {
 /** Validate a request that will materialize repository-owned media bindings. */
 export function validateInputs(inputs: AppModeInputs): void {
   validateCommonInputs(inputs);
+  validateImageCrops(inputs, false);
   const first = inputs.first_frame_source;
   const last = inputs.last_frame_source;
   const validSource = (value: unknown): value is string =>
@@ -982,6 +989,7 @@ export function validateInputs(inputs: AppModeInputs): void {
  */
 export function validateConnectInputs(inputs: AppModeInputs): void {
   validateCommonInputs(inputs);
+  validateImageCrops(inputs, false);
   if (
     inputs.first_frame_source !== undefined ||
     inputs.last_frame_source !== undefined ||
@@ -999,6 +1007,7 @@ export function validateConnectInputs(inputs: AppModeInputs): void {
 /** Validate sidebar fields without claiming ownership of existing media wiring. */
 export function validateExistingInputs(inputs: AppModeInputs): void {
   validateCommonInputs(inputs);
+  validateImageCrops(inputs, false);
 }
 
 /**
@@ -1130,6 +1139,9 @@ export function appModeArtifactPrefix(
     // excluding a reference video's soundtrack is a different request,
     // so it must not resolve to the location the included revision wrote to.
     reference_video_soundtrack: referenceVideoSoundtrackOf(inputs),
+    ...(inputs.image_crops === undefined
+      ? {}
+      : { image_crops: inputs.image_crops }),
   }).slice(-APP_MODE_ARTIFACT_REVISION_LENGTH);
   return `${APP_MODE_ARTIFACT_PREFIX_ROOT}/${scoped}/${revision}`;
 }

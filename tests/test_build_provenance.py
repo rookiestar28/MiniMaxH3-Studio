@@ -242,6 +242,20 @@ def test_provenance_digest_inventory_covers_the_complete_frontend_source_surface
     assert "frontend/src/state/managedJournal.ts" in paths
 
 
+def test_provenance_binds_the_packaged_manifest_compiled_into_title_admission() -> None:
+    manifest = provenance_script.ROOT / "comfyui_h3_context/fonts/font_manifest_v1.json"
+    assert manifest in _source_input_paths()
+    original_read = Path.read_bytes
+    before = provenance_script._source_inputs_digest()
+
+    def changed_read(path: Path) -> bytes:
+        payload = original_read(path)
+        return payload + b"\n" if path == manifest else payload
+
+    with patch.object(Path, "read_bytes", changed_read):
+        assert provenance_script._source_inputs_digest() != before
+
+
 class _Routes(list[SimpleNamespace]):
     def get(self, path: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorate(handler: Callable[..., Any]) -> Callable[..., Any]:

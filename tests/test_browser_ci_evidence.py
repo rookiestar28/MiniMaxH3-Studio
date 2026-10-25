@@ -334,6 +334,157 @@ def presentation_report() -> dict[str, Any]:
     return value
 
 
+def stage_report() -> dict[str, Any]:
+    value = presentation_report()
+    attachment = value["suites"][0]["specs"][0]["tests"][0]["results"][0]["attachments"][0]
+    attachment["name"] = "integrated-navigation-stages"
+    attachment["body"] = base64.b64encode(
+        json.dumps(
+            {
+                "version": 1,
+                "eventsDropped": 0,
+                "callbackCount": 9,
+                "events": [
+                    {"navigation": 1, "stage": stage, "atMs": index * 2.5}
+                    for index, stage in enumerate(
+                        (
+                            "keydown",
+                            "seek-request",
+                            "runtime-seek",
+                            "video-seeking",
+                            "video-seeked",
+                            "native-frame",
+                            "paint-start",
+                            "paint-end",
+                            "delivered",
+                        )
+                    )
+                ],
+                "snapshots": [{"atMs": 24, "durationMs": 0.4}],
+            }
+        ).encode()
+    ).decode()
+    return value
+
+
+def test_navigation_stages_survive_the_actual_report_sanitizer() -> None:
+    safe = browser_ci.sanitize_report(stage_report())
+    attachments = safe["suites"][0]["specs"][0]["tests"][0]["results"][0]["attachments"]
+    assert len(attachments) == 1, "stage evidence must survive report sanitization"
+    facts = json.loads(base64.b64decode(attachments[0]["body"]))
+    assert facts["events"][-1] == {"navigation": 1, "stage": "delivered", "atMs": 20}
+    assert facts["snapshots"] == [{"atMs": 24, "durationMs": 0.4}]
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "content",
+        "stage",
+        "boolean",
+        "nan",
+        "negative",
+        "unordered",
+        "oversize",
+        "dropped",
+        "snapshot",
+        "navigation",
+        "huge",
+        "counter",
+        "counter-underflow",
+    ],
+)
+def test_navigation_stages_refuse_unclosed_or_incomplete_evidence(damage: str) -> None:
+    report = stage_report()
+    attachment = report["suites"][0]["specs"][0]["tests"][0]["results"][0]["attachments"][0]
+    value = json.loads(base64.b64decode(attachment["body"]))
+    if damage == "content":
+        value["events"][0]["content"] = "must-never-survive"
+    elif damage == "stage":
+        value["events"][0]["stage"] = "unknown"
+    elif damage == "boolean":
+        value["events"][0]["atMs"] = True
+    elif damage == "nan":
+        value["events"][0]["atMs"] = float("nan")
+    elif damage == "negative":
+        value["events"][0]["atMs"] = -1
+    elif damage == "unordered":
+        value["events"][1]["atMs"] = 0
+        value["events"][0]["atMs"] = 1
+    elif damage == "oversize":
+        value["events"] *= 3000
+    elif damage == "dropped":
+        value["eventsDropped"] = 1
+    elif damage == "snapshot":
+        value["snapshots"][0]["private"] = "must-never-survive"
+    elif damage == "huge":
+        value["events"][0]["atMs"] = 10**1000
+    elif damage == "counter":
+        value["callbackCount"] = True
+    elif damage == "counter-underflow":
+        value["callbackCount"] = 1
+    else:
+        value["events"][0]["navigation"] = True
+    attachment["body"] = base64.b64encode(json.dumps(value).encode()).decode()
+    with pytest.raises(ValueError):
+        browser_ci.sanitize_report(report)
+
+
+def continuous_stage_report() -> dict[str, Any]:
+    report = stage_report()
+    attachment = report["suites"][0]["specs"][0]["tests"][0]["results"][0]["attachments"][0]
+    attachment["name"] = "continuous-preview-stages"
+    attachment["body"] = base64.b64encode(
+        json.dumps(
+            {
+                "version": 1,
+                "windows": [
+                    {"index": index, "frames": [{"frame": first, "atMs": first * 42}]}
+                    for index, first in enumerate((4, 52, 100))
+                ],
+                "samplerIntervalsMs": [16.6, 16.7],
+                "samplerIntervalsDropped": 0,
+            }
+        ).encode()
+    ).decode()
+    return report
+
+
+def test_continuous_window_first_seen_times_and_sampler_intervals_survive() -> None:
+    safe = browser_ci.sanitize_report(continuous_stage_report())
+    attachment = safe["suites"][0]["specs"][0]["tests"][0]["results"][0]["attachments"][0]
+    facts = json.loads(base64.b64decode(attachment["body"]))
+    assert len(facts["windows"]) == 3
+    assert facts["samplerIntervalsMs"] == [16.6, 16.7]
+
+
+@pytest.mark.parametrize(
+    "damage", ["content", "duplicate", "bounds", "boolean", "window", "interval", "dropped"]
+)
+def test_continuous_stage_refuses_unclosed_facts(damage: str) -> None:
+    report = continuous_stage_report()
+    attachment = report["suites"][0]["specs"][0]["tests"][0]["results"][0]["attachments"][0]
+    value = json.loads(base64.b64decode(attachment["body"]))
+    frame = value["windows"][0]["frames"][0]
+    if damage == "content":
+        frame["content"] = "must-never-survive"
+    elif damage == "duplicate":
+        value["windows"][0]["frames"].append(dict(frame))
+    elif damage == "bounds":
+        frame["frame"] = 44
+    elif damage == "boolean":
+        frame["atMs"] = True
+    elif damage == "window":
+        value["windows"][0]["index"] = 3
+    elif damage == "interval":
+        value["samplerIntervalsMs"][0] = -1
+    else:
+        value["samplerIntervalsDropped"] = 1
+    attachment["body"] = base64.b64encode(json.dumps(value).encode()).decode()
+    with pytest.raises(ValueError):
+        browser_ci.sanitize_report(report)
+
+
 def test_presentation_timeline_retains_maximum_and_neighbours_without_raw_payload() -> None:
     report = presentation_report()
     safe = browser_ci.sanitize_report(report)

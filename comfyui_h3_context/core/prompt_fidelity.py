@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
 
+from .assisted_refinement import RequestedAllowance
 from .constraints import ExactTextKind
 from .context_reporting import ContextPlan, PromptDocument
 from .contracts import AssetRole, EvidenceLevel, TaskMode, ValidationSeverity
@@ -494,7 +495,10 @@ def _requested_terms(plan: ContextPlan) -> str:
 
 
 def _check_camera_and_cuts(
-    plan: ContextPlan, text: str, diagnostics: list[PromptFidelityDiagnostic]
+    plan: ContextPlan,
+    text: str,
+    diagnostics: list[PromptFidelityDiagnostic],
+    allowance: RequestedAllowance | None = None,
 ) -> None:
     """Guide 4.2 and 4.3: neither a move nor a cut may be invented on the user's behalf."""
 
@@ -503,8 +507,10 @@ def _check_camera_and_cuts(
     # A camera intent in the typed plan is an explicit request, and so is the user naming the move
     # in their own words. Detection is lexical over prose, so this stays a warning: a false error
     # would reject a legitimate prompt.
-    motion_requested = bool(plan.intent_graph.cameras) or any(
-        pattern.search(intent) for _, pattern in _CAMERA_MOTION_TERMS
+    motion_requested = (
+        bool(allowance and allowance.camera_motion)
+        or bool(plan.intent_graph.cameras)
+        or any(pattern.search(intent) for _, pattern in _CAMERA_MOTION_TERMS)
     )
     if not motion_requested:
         for term, pattern in _CAMERA_MOTION_TERMS:
@@ -521,8 +527,10 @@ def _check_camera_and_cuts(
                 )
                 break
     # More than one authored segment is a request for a cut; so is the user naming one.
-    cut_requested = len(plan.intent_graph.segments) > 1 or any(
-        term in intent for term in ("cut", "transition", "dissolve")
+    cut_requested = (
+        bool(allowance and allowance.cut)
+        or len(plan.intent_graph.segments) > 1
+        or any(term in intent for term in ("cut", "transition", "dissolve"))
     )
     if not cut_requested:
         for term, pattern in _CUT_TERMS:
@@ -1039,7 +1047,9 @@ def _check_keyframe_readiness(
             )
 
 
-def audit_prompt_fidelity(plan: ContextPlan, document: PromptDocument) -> PromptFidelityAuditResult:
+def audit_prompt_fidelity(
+    plan: ContextPlan, document: PromptDocument, *, allowance: RequestedAllowance | None = None
+) -> PromptFidelityAuditResult:
     """Audit a rendered prompt against the official prose rules, without mutating anything."""
 
     if not isinstance(plan, ContextPlan):
@@ -1052,7 +1062,7 @@ def audit_prompt_fidelity(plan: ContextPlan, document: PromptDocument) -> Prompt
 
     diagnostics: list[PromptFidelityDiagnostic] = []
     _check_shot_timestamps(plan, text, diagnostics)
-    _check_camera_and_cuts(plan, text, diagnostics)
+    _check_camera_and_cuts(plan, text, diagnostics, allowance)
     _check_speaker_identity(text, diagnostics)
     _check_dialogue_languages(plan, text, diagnostics)
     _check_internal_vocabulary(text, diagnostics)

@@ -112,7 +112,8 @@ def test_inventory_covers_both_stacks_and_the_shipped_entrypoint() -> None:
     # IMPORTANT: count every scanner-admitted source owner, including the continuation canary and
     # adapter plus the two seam instruments; inactive product routes do not remove their modules.
     # The shared native audio capacity adds one dependency-free policy owner.
-    assert len([row for row in document["modules"] if row["language"] == "python"]) == 348
+    # Validation and assisted proposals share one pure literal-content predicate owner.
+    assert len([row for row in document["modules"] if row["language"] == "python"]) == 349
     # /48 add the toolbar/decisions and Media/Text; adds filmstrip ownership;
     #  replaces one legacy Inspector module with separate tabs and timeline-menu owners;
     #  adds the monitor transform overlay and its pure gesture mapper; adds the
@@ -141,7 +142,10 @@ def test_inventory_covers_both_stacks_and_the_shipped_entrypoint() -> None:
     # The SaveVideo artifact decoder shared by the event and history reads is one pure module, and
     # the managed output wait with its history exit is one lifecycle owner that keeps the App Mode
     # correlation owner within its enforced module budget.
-    assert len([row for row in document["modules"] if row["language"] == "typescript"]) == 279
+    # Canvas preparation adds bounded sources, source guidance and write-bound state.
+    # Reference cropping adds two UI owners and six bounded host geometry/contract owners.
+    # Title admission shares the exact packaged coverage between insertion and Inspector.
+    assert len([row for row in document["modules"] if row["language"] == "typescript"]) == 291
     assert document["entrypoints"] == [
         {
             "kind": "shipped_frontend_runtime",

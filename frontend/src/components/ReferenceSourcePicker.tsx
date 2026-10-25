@@ -9,6 +9,7 @@ import {
   type ReferenceCapacityReason,
 } from "../host/referenceSelection";
 import { NleIconButton, NleIconGroup } from "./nle/NleIconActions";
+import type { ImageCropRowActions } from "./ImageCropAction";
 
 type Kind = "image" | "video" | "audio";
 export type ReferencePickerCopy = {
@@ -18,6 +19,12 @@ export type ReferencePickerCopy = {
   referenceSelectionHelp: string;
   referenceVideoSoundtrack: string;
   referenceVideoSoundtrackOptions: Record<ReferenceVideoSoundtrack, string>;
+  sourceGuidance: {
+    noReferenceMedia: string;
+    noKind: string;
+    kinds: Record<Kind, string>;
+    loaders: Record<Kind, string>;
+  };
   referenceActions: {
     add: string;
     moveUp: string;
@@ -38,6 +45,7 @@ export function ReferenceSourcePicker({
   text,
   onSources,
   onSoundtrack,
+  imageCrop,
 }: {
   images: string[];
   videos: string[];
@@ -48,6 +56,7 @@ export function ReferenceSourcePicker({
   text: ReferencePickerCopy;
   onSources: (kind: Kind, values: string[]) => void;
   onSoundtrack: (value: ReferenceVideoSoundtrack) => void;
+  imageCrop?: ImageCropRowActions;
 }) {
   const root = useRef<HTMLFieldSetElement>(null);
   const pendingFocus = useRef<string | null>(null);
@@ -74,6 +83,9 @@ export function ReferenceSourcePicker({
   };
   const capacity = referenceCapacity(selection);
   const labels = referenceLabels(selection);
+  const noVisualSource = !sources.some(
+    (source) => source.kind === "image" || source.kind === "video",
+  );
   const groups = [
     {
       kind: "image",
@@ -100,6 +112,11 @@ export function ReferenceSourcePicker({
   return (
     <fieldset ref={root} className="h3-reference-source-fieldset">
       <legend>{text.referenceSelectionHelp}</legend>
+      {noVisualSource ? (
+        <p id="h3-reference-source-guidance" className="h3-reference-guidance">
+          {text.sourceGuidance.noReferenceMedia}
+        </p>
+      ) : null}
       {groups.map(({ kind, name, values, labels: groupLabels, key }) => {
         const available = sources.filter(
           (source) => source.kind === kind && !values.includes(source.node_id),
@@ -112,7 +129,17 @@ export function ReferenceSourcePicker({
         const reason =
           atCapacity && next.reason !== null
             ? text.referenceActions.reasons[next.reason]
-            : undefined;
+            : !sources.some((source) => source.kind === kind)
+              ? text.sourceGuidance.noKind
+                  .replace("{kind}", text.sourceGuidance.kinds[kind])
+                  .replace("{node}", text.sourceGuidance.loaders[kind])
+              : undefined;
+        const reasonId =
+          reason === undefined
+            ? undefined
+            : noVisualSource && !atCapacity
+              ? "h3-reference-source-guidance"
+              : `h3-reference-${kind}-guidance`;
         return (
           <section key={kind} className="h3-reference-kind" aria-label={name}>
             <ol className="h3-reference-list">
@@ -138,6 +165,9 @@ export function ReferenceSourcePicker({
                     key={id}
                     className="h3-reference-row"
                     data-h3-reference-source={id}
+                    data-h3-has-crop={
+                      kind === "image" && imageCrop ? "" : undefined
+                    }
                   >
                     <span className="h3-reference-labels">
                       <span className="h3-reference-label">
@@ -155,8 +185,26 @@ export function ReferenceSourcePicker({
                       title={source?.label ?? id}
                     >
                       {source?.label ?? id}
+                      {kind === "image" && imageCrop?.crops[id] ? (
+                        <span className="h3-crop-chip">
+                          {" "}
+                          · {imageCrop.crops[id]!.w} × {imageCrop.crops[id]!.h}
+                        </span>
+                      ) : null}
                     </span>
                     <NleIconGroup label={`${name} ${groupLabels[index]}`}>
+                      {kind === "image" && imageCrop ? (
+                        <NleIconButton
+                          icon="crop"
+                          hue="edit"
+                          control={actionKey("crop")}
+                          label={imageCrop.label}
+                          description={imageCrop.reason ?? imageCrop.label}
+                          disabled={imageCrop.reason !== undefined}
+                          focusableWhenDisabled
+                          onActivate={() => imageCrop.open(id)}
+                        />
+                      ) : null}
                       <NleIconButton
                         icon="moveUp"
                         hue="edit"
@@ -208,6 +256,7 @@ export function ReferenceSourcePicker({
                 value=""
                 disabled={disabled || atCapacity || available.length === 0}
                 title={reason}
+                aria-describedby={reasonId}
                 onChange={(event) => {
                   const id = event.currentTarget.value;
                   if (
@@ -225,7 +274,11 @@ export function ReferenceSourcePicker({
                 ))}
               </select>
             </label>
-            {reason ? <p className="h3-reference-guidance">{reason}</p> : null}
+            {reason && !(noVisualSource && !atCapacity) ? (
+              <p id={reasonId} className="h3-reference-guidance">
+                {reason}
+              </p>
+            ) : null}
           </section>
         );
       })}

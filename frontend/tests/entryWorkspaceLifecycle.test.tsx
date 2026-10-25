@@ -131,8 +131,13 @@ vi.mock("../src/host/appMode", async () => {
   const actual = await vi.importActual<typeof import("../src/host/appMode")>(
     "../src/host/appMode",
   );
+  const { createImageCropSources } = await vi.importActual<
+    typeof import("../src/host/imageCropSource")
+  >("../src/host/imageCropSource");
   return {
     ...actual,
+    // IMPORTANT: supply every controller member presentationBinding and appModeSession read;
+    // an omitted member crashes EntrySidebar for every lifecycle test in this file.
     createAppModeController: (
       app: {
         graph?: { serialize?: () => unknown };
@@ -142,6 +147,11 @@ vi.mock("../src/host/appMode", async () => {
         beginOwnedGraphConfigure?: () => () => void;
       } = {},
     ) => ({
+      cropAvailable: () => false,
+      cropSources: createImageCropSources({
+        api: {},
+        readGraph: () => app.graph,
+      }),
       capability: () => {
         ownedConfigureHarness.begin =
           controllerOptions.beginOwnedGraphConfigure;
@@ -1613,6 +1623,54 @@ afterEach(async () => {
   document.body.replaceChildren();
   window.sessionStorage.clear();
   vi.restoreAllMocks();
+});
+
+describe("entry canvas preparation readiness", () => {
+  for (const replaceExisting of [false, true]) {
+    it.each([
+      ["i2va", "first frame Load Image node"],
+      ["l2va", "last frame Load Image node"],
+      ["fl2va", "first frame Load Image node, last frame Load Image node"],
+      ["ref2va", "two reference Load Image nodes"],
+    ] as const)(
+      "carries unchosen %s roles through canvas_ready (replace=" +
+        replaceExisting +
+        ")",
+      async (taskMode, roles) => {
+        const { container } = await loadEntry(undefined, {
+          nodes: replaceExisting ? [{ id: 88, type: "UnrelatedNode" }] : [],
+          links: [],
+        });
+        fireEvent.change(await screen.findByLabelText("Task mode"), {
+          target: { value: taskMode },
+        });
+        fireEvent.change(screen.getByRole("textbox", { name: "Intent" }), {
+          target: { value: "Prepare before choosing an image." },
+        });
+        const submit = container.querySelector<HTMLButtonElement>(
+          '[data-h3-focus-key="app-submit"]',
+        )!;
+        await waitFor(() => expect(submit.disabled).toBe(false));
+        expect(submit.textContent).toBe(
+          replaceExisting
+            ? "Replace canvas and start H3 App Mode"
+            : "Start H3 App Mode",
+        );
+        fireEvent.click(submit);
+        await waitFor(() =>
+          expect(
+            container.querySelector('[data-shell-reason="canvas_ready"]'),
+          ).not.toBeNull(),
+        );
+        const guidance = container.querySelector(
+          "[data-h3-prepared-source-guidance]",
+        );
+        expect(guidance?.textContent).toBe(
+          `Before using Apply and queue current H3 graph, set your images in: ${roles}. These nodes still use the template's samples.${taskMode === "ref2va" ? " Then choose the references in the pickers above." : ""}`,
+        );
+      },
+    );
+  }
 });
 
 describe("entry App Mode terminal recovery", () => {

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { buildPresentationStageReport } from "../../../e2e/presentationStageReport";
 
 import { openIntegratedShell, shellSnapshot } from "../helpers/nleShell";
 import { playheadFrame, playheadSlider } from "../helpers/nleTimeline";
@@ -13,6 +14,13 @@ type PixelSample = Readonly<{
   atMs: number;
 }>;
 
+type SamplerClock = { intervalsMs: number[]; dropped: number };
+declare global {
+  interface Window {
+    __continuousSamplerClock?: SamplerClock;
+  }
+}
+
 async function startPixelRecorder(page: Page): Promise<void> {
   await page.evaluate(() => {
     const target = window as typeof window & {
@@ -20,6 +28,9 @@ async function startPixelRecorder(page: Page): Promise<void> {
       __m25_58_pixel_stop?: () => void;
     };
     const samples: PixelSample[] = [];
+    const sampler: SamplerClock = { intervalsMs: [], dropped: 0 };
+    window.__continuousSamplerClock = sampler;
+    let previousTick: number | undefined;
     const probe = document.createElement("canvas");
     probe.width = 32;
     probe.height = 18;
@@ -27,6 +38,13 @@ async function startPixelRecorder(page: Page): Promise<void> {
     let lastFrame: number | null = null;
     let handle = 0;
     const tick = () => {
+      const atMs = performance.now();
+      if (previousTick !== undefined) {
+        if (sampler.intervalsMs.length < 20_000)
+          sampler.intervalsMs.push(atMs - previousTick);
+        else sampler.dropped += 1;
+      }
+      previousTick = atMs;
       const presentation = window.nleShellHarness.lastPresentation();
       const canvas = document.querySelector(
         '[data-h3-nle-canvas="composition"]',
@@ -240,6 +258,24 @@ test("M25-58 product playback continuously presents the 1920x1080 composition at
           : (((lastFrame - firstFrame) / FRAME_RATE) * 1000) / windowElapsedMs,
     };
   });
+  const sampler = await page.evaluate(() => window.__continuousSamplerClock!);
+  const continuousStages = {
+    version: 1,
+    windows: steadyWindows.map(([first, last], index) => ({
+      index,
+      frames: [...timedByFrame.values()]
+        .filter(
+          ({ frame }) => frame !== null && frame >= first && frame <= last,
+        )
+        .map(({ frame, atMs }) => ({ frame, atMs })),
+    })),
+    samplerIntervalsMs: sampler.intervalsMs,
+    samplerIntervalsDropped: sampler.dropped,
+  };
+  await testInfo.attach("continuous-preview-stages", {
+    body: Buffer.from(JSON.stringify(continuousStages)),
+    contentType: "application/json",
+  });
   const cutCoverage = cutFrames.map((cutFrame) => ({
     cutFrame,
     nearestDistance: Math.min(
@@ -267,6 +303,7 @@ test("M25-58 product playback continuously presents the 1920x1080 composition at
     contentType: "application/json",
   });
   console.log(JSON.stringify(report));
+  console.log(buildPresentationStageReport("continuous", continuousStages));
 
   expect(coverageRatio).toBeGreaterThanOrEqual(0.95);
   expect(maximumMisses).toBeLessThanOrEqual(2);

@@ -13,6 +13,10 @@ import pytest
 from comfyui_h3_context.adapters import authoring_renderer_qualification as qualification
 from comfyui_h3_context.adapters.authoring_render_service import RenderServiceError
 from comfyui_h3_context.core.canonical import canonical_fingerprint
+from comfyui_h3_context.core.render_planner import (
+    RENDER_PRIMITIVE_IDS,
+    required_unqualified_renderer_profile,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,11 +41,12 @@ def test_packaged_public_subject_matches_current_public_redaction() -> None:
 
 
 def _envelope() -> dict[str, Any]:
+    # Current admission needs the current primitive/raster set. Retained v1 stays a legacy fixture.
     source = json.loads(
         (
-            ROOT / "comfyui_h3_context/contracts/authoring_renderer_qualification_v1.json"
+            ROOT / "comfyui_h3_context/contracts/authoring_renderer_qualification_v2.json"
         ).read_bytes()
-    )
+    )["subjects"]["source"]
     public = copy.deepcopy(source)
     public["implementation"][next(iter(public["implementation"]))] = canonical_fingerprint(
         {"unit-only-public-input": 1}
@@ -58,6 +63,33 @@ def _install(document: dict[str, Any], path: Path, monkeypatch: pytest.MonkeyPat
     )
     monkeypatch.setattr(qualification, "_EVIDENCE", path)
     monkeypatch.setattr(qualification, "_ACCEPTED_EVIDENCE", canonical_fingerprint(document))
+
+
+def test_complete_report_requires_all_wipe_raster_observations() -> None:
+    # A unit-only shape extends the retained49-row legacy fixture; it is never installed.
+    report = json.loads(
+        (
+            ROOT / "comfyui_h3_context/contracts/authoring_renderer_qualification_v1.json"
+        ).read_bytes()
+    )
+    report["primitives"] = {
+        kind: canonical_fingerprint({"unit-only-primitive": kind}) for kind in RENDER_PRIMITIVE_IDS
+    }
+    report["profile"] = required_unqualified_renderer_profile().profile_fingerprint
+    for direction in ("left", "right", "top", "bottom"):
+        for rotated in (False, True):
+            report["raster_rows"][f"unit-wipe-{direction}-{int(rotated)}"] = {
+                "artifact": canonical_fingerprint({"unit-only-artifact": direction}),
+                "observation": canonical_fingerprint({"unit-only-rotation": rotated}),
+            }
+    identity = qualification._report_identity(report, report["implementation"], complete=True)
+    assert identity.qualification_fingerprint == canonical_fingerprint(report)
+    row = report["raster_rows"].pop("unit-wipe-left-0")
+    with pytest.raises(ValueError):
+        qualification._report_identity(report, report["implementation"], complete=True)
+    report["raster_rows"].update({"unit-wipe-left-0": row, "unit-extra": row})
+    with pytest.raises(ValueError):
+        qualification._report_identity(report, report["implementation"], complete=True)
 
 
 @pytest.mark.parametrize("subject", ["source", "public"])

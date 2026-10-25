@@ -407,6 +407,269 @@ function composePromptOutput(
 }
 
 describe("H3 App Mode host seam", () => {
+  describe.each([false, true])(
+    "canvas preparation without chosen canvas sources (replace=%s)",
+    (replaceExisting) => {
+      it.each(["t2va", "i2va", "l2va", "fl2va", "ref2va"] as const)(
+        "prepares %s while retaining template loader values and never compiling the unrelated canvas",
+        async (task_mode) => {
+          const inputs: AppModeInputs = {
+            task_mode,
+            user_intent: "Prepare the official graph before choosing media.",
+            duration_milliseconds: 5167,
+            frame_count: 124,
+          };
+          const fixtureInputs: AppModeInputs = {
+            ...inputs,
+            ...(task_mode === "i2va" || task_mode === "fl2va"
+              ? { first_frame_source: "17" }
+              : {}),
+            ...(task_mode === "l2va" || task_mode === "fl2va"
+              ? { last_frame_source: "18" }
+              : {}),
+            ...(task_mode === "ref2va"
+              ? { reference_image_sources: ["17", "18"] }
+              : {}),
+          };
+          const image = {
+            class_type: "LoadImage",
+            inputs: { image: "fixture.png" },
+          };
+          const expectedOutput = createMaterializedPrompt(fixtureInputs, {
+            first_frame: image,
+            last_frame: image,
+            reference_images: [image, image],
+          });
+          const before = {
+            nodes: replaceExisting ? [{ id: 88, type: "UnrelatedNode" }] : [],
+            links: [],
+          };
+          const graphToPrompt = vi.fn((detached?: unknown) => {
+            if (detached === undefined)
+              throw new Error("the unrelated canvas cannot compile");
+            return { output: expectedOutput, workflow: {} };
+          });
+          const { app, api } = fixtureBackedAppModeHost(
+            {
+              loadApiJson: vi.fn(),
+              loadGraphData: vi.fn(),
+              graphToPrompt,
+              graph: { serialize: () => before },
+            },
+            { queuePrompt: vi.fn() },
+          );
+          const result = await createAppModeController(app, api, {
+            loadTemplate,
+            loadProfile,
+            createDetachedGraph: (candidate) => ({ candidate }),
+          }).prepareCanvas(inputs, { replaceExisting });
+          expect(result.route).toBe(replaceExisting ? "replace" : "new");
+          expect(graphToPrompt).toHaveBeenCalledOnce();
+          expect(app.loadGraphData).toHaveBeenCalledOnce();
+          expect(api.queuePrompt).not.toHaveBeenCalled();
+          const prepared = app.loadGraphData.mock.calls[0]![0] as Json;
+          const loaders = (prepared.nodes as Json[]).filter(
+            (node) => node.type === "LoadImage",
+          );
+          expect(loaders).toHaveLength(
+            task_mode === "t2va"
+              ? 0
+              : task_mode === "fl2va" || task_mode === "ref2va"
+                ? 2
+                : 1,
+          );
+          const template = syntheticTemplate(
+            task_mode === "ref2va"
+              ? "video_minimax_h3_r2v"
+              : "video_minimax_h3_i2v",
+          );
+          const templateLoaders = (template.nodes as Json[]).filter(
+            (node) => node.type === "LoadImage",
+          );
+          for (const loader of loaders)
+            expect(
+              templateLoaders.some(
+                (node) =>
+                  JSON.stringify(node.widgets_values) ===
+                  JSON.stringify(loader.widgets_values),
+              ),
+            ).toBe(true);
+        },
+      );
+    },
+  );
+
+  it.each([
+    { task_mode: "fl2va", first_frame_source: "17" },
+    { task_mode: "fl2va", last_frame_source: "17" },
+    { task_mode: "ref2va", reference_video_sources: ["17"] as string[] },
+  ] as const)(
+    "prepares partial selected media without retaining unchosen reference kinds: %j",
+    async (roles) => {
+      const inputs: AppModeInputs = {
+        user_intent: "Prepare exactly the chosen media.",
+        duration_milliseconds: 5167,
+        frame_count: 124,
+        ...roles,
+      };
+      const video = roles.task_mode === "ref2va";
+      const source = {
+        class_type: video ? "LoadVideo" : "LoadImage",
+        inputs: video ? { file: "chosen.mp4" } : { image: "chosen.png" },
+      };
+      const fixtureInputs: AppModeInputs = video
+        ? inputs
+        : { ...inputs, first_frame_source: "17", last_frame_source: "18" };
+      const expected = createMaterializedPrompt(
+        fixtureInputs,
+        video
+          ? { reference_videos: [source] }
+          : { first_frame: source, last_frame: source },
+      );
+      const graphToPrompt = vi
+        .fn()
+        .mockResolvedValueOnce({ output: { "17": source }, workflow: {} })
+        .mockResolvedValue({ output: expected, workflow: {} });
+      const { app, api } = fixtureBackedAppModeHost(
+        {
+          loadApiJson: vi.fn(),
+          loadGraphData: vi.fn(),
+          graphToPrompt,
+          graph: {
+            serialize: () => ({
+              nodes: [
+                {
+                  id: 17,
+                  type: source.class_type,
+                  widgets_values: [video ? "chosen.mp4" : "chosen.png"],
+                },
+              ],
+              links: [],
+            }),
+          },
+        },
+        { queuePrompt: vi.fn() },
+      );
+      await createAppModeController(app, api, {
+        loadTemplate,
+        loadProfile,
+      }).prepareCanvas(inputs, { replaceExisting: true });
+      expect(graphToPrompt).toHaveBeenCalledTimes(2);
+      expect(api.queuePrompt).not.toHaveBeenCalled();
+      const nodes = (app.loadGraphData.mock.calls[0]![0] as Json)
+        .nodes as Json[];
+      const images = nodes.filter((node) => node.type === "LoadImage");
+      expect(images).toHaveLength(video ? 0 : 2);
+      if (!video) {
+        expect(
+          images.filter(
+            (node) => (node.widgets_values as unknown[])[0] === "chosen.png",
+          ),
+        ).toHaveLength(1);
+        const template = syntheticTemplate("video_minimax_h3_i2v");
+        const samples = (template.nodes as Json[])
+          .filter((node) => node.type === "LoadImage")
+          .map((node) => JSON.stringify(node.widgets_values));
+        expect(
+          images.filter((node) =>
+            samples.includes(JSON.stringify(node.widgets_values)),
+          ),
+        ).toHaveLength(1);
+      }
+      expect(nodes.filter((node) => node.type === "LoadVideo")).toHaveLength(
+        video ? 1 : 0,
+      );
+    },
+  );
+
+  it.each(["missing", "wrong_kind", "compile_failure"] as const)(
+    "still refuses a chosen frame when its source has %s",
+    async (failure) => {
+      const graphToPrompt =
+        failure === "compile_failure"
+          ? vi
+              .fn()
+              .mockRejectedValue(new Error("unrelated canvas cannot compile"))
+          : vi.fn().mockResolvedValue({
+              output: {
+                "17": {
+                  class_type:
+                    failure === "wrong_kind" ? "LoadAudio" : "LoadImage",
+                  inputs: { image: "chosen.png" },
+                },
+              },
+              workflow: {},
+            });
+      const { app, api } = fixtureBackedAppModeHost(
+        {
+          loadApiJson: vi.fn(),
+          loadGraphData: vi.fn(),
+          graphToPrompt,
+          graph: {
+            serialize: () => ({
+              nodes:
+                failure === "missing"
+                  ? []
+                  : [
+                      {
+                        id: 17,
+                        type: "LoadImage",
+                        widgets_values: ["chosen.png"],
+                      },
+                    ],
+              links: [],
+            }),
+          },
+        },
+        { queuePrompt: vi.fn() },
+      );
+      await expect(
+        createAppModeController(app, api, {
+          loadTemplate,
+          loadProfile,
+        }).prepareCanvas(
+          {
+            task_mode: "fl2va",
+            user_intent: "A chosen source must qualify.",
+            duration_milliseconds: 5167,
+            frame_count: 124,
+            first_frame_source: "17",
+          },
+          { replaceExisting: true },
+        ),
+      ).rejects.toMatchObject({ code: "incompatible_graph" });
+      expect(app.loadGraphData).not.toHaveBeenCalled();
+      expect(api.queuePrompt).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["i2va", "l2va", "fl2va", "ref2va"] as const)(
+    "keeps the managed non-preparation %s start strict when no sources are chosen",
+    async (task_mode) => {
+      const { app, api } = fixtureBackedAppModeHost(
+        {
+          loadApiJson: vi.fn(),
+          loadGraphData: vi.fn(),
+          graphToPrompt: vi.fn(),
+          graph: { serialize: () => ({ nodes: [] }) },
+        },
+        { queuePrompt: vi.fn() },
+      );
+      await expect(
+        createAppModeController(app, api, { loadTemplate, loadProfile }).start(
+          {
+            task_mode,
+            user_intent: "A queued start still needs media.",
+            duration_milliseconds: 5167,
+            frame_count: 124,
+          },
+          { prepareManaged: vi.fn() },
+        ),
+      ).rejects.toMatchObject({ code: "invalid_request" });
+      expect(api.queuePrompt).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(["t2va", "i2va", "fl2va", "l2va", "ref2va"] as const)(
     "prepares %s on the canvas without acquiring generation or queue authority",
     async (taskMode) => {

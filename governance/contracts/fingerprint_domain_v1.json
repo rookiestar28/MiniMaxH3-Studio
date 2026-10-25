@@ -2993,6 +2993,17 @@
     },
     {
       "authority_paths": [
+        "governance/contracts/host_seam_census_transition_reference_crop_v1.json"
+      ],
+      "consumer_id": "h3.context.host_seam_census_transition_reference_crop.v1",
+      "domain": "semantic",
+      "domain_version": 1,
+      "evidence": "a typed runtime wire carries the instance values that decide execution, cache reuse or a receipt",
+      "kind": "contract",
+      "rule": "typed_runtime_wire_is_semantic"
+    },
+    {
+      "authority_paths": [
         "governance/contracts/host_seam_census_transition_retained_media_v1.json"
       ],
       "consumer_id": "h3.context.host_seam_census_transition_retained_media.v1",
@@ -6275,6 +6286,6 @@
       "rule": "declared_identity_site"
     }
   ],
-  "fingerprint": "sha256:2f2b27513d2dad7d67f99796a6ecb7ca85737103e9d888b35f7c7b4cbfa1f84d",
+  "fingerprint": "sha256:441c1796c2f4468208b41b929dca5651f7934e46ae3ddcb26d933ecefab70adb",
   "schema": "h3-context-fingerprint-domain-assignment/1"
 }

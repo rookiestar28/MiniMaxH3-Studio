@@ -41,6 +41,64 @@ function compositionSnapshotWire(): Record<string, unknown> {
   >;
 }
 
+for (const [name, encode] of [
+  ["v1", encodeTimelineTransaction],
+  ["v2", encodeTimelineTransactionV2],
+] as const) {
+  describe(`${name} transaction transition boundaries`, () => {
+    const snapshot = compositionFixture.snapshot;
+    const nonIdentityKinds = [
+      "cross_dissolve_v1",
+      "wipe_from_left_v1",
+      "wipe_from_right_v1",
+      "wipe_from_top_v1",
+      "wipe_from_bottom_v1",
+    ] as const;
+    const transaction = (kind: string, duration: number) =>
+      encode({
+        requestId: "req-transition-bounds",
+        transactionId: "tx-transition-bounds",
+        workspaceHandle: snapshot.workspace_handle,
+        expectedWorkspaceRevision: snapshot.workspace_revision,
+        expectedTimelineRevision: snapshot.timeline_revision,
+        expectedTimelineFingerprint: snapshot.timeline_fingerprint,
+        expectedAuthoringFingerprint: FP,
+        commands: [
+          {
+            kind: "set_transition",
+            payload: {
+              clip_id: snapshot.clips[1]!.clip_id,
+              transition: { kind, duration_frames: duration },
+            },
+          },
+        ],
+      });
+
+    it.each(
+      nonIdentityKinds.flatMap((kind) =>
+        [1, 300].map((duration) => [kind, duration] as const),
+      ),
+    )("preserves %s at duration %i", (kind, duration) => {
+      expect(transaction(kind, duration).commands).toEqual([
+        {
+          kind: "set_transition",
+          payload: {
+            clip_id: snapshot.clips[1]!.clip_id,
+            transition: { kind, duration_frames: duration },
+          },
+        },
+      ]);
+    });
+
+    it.each([
+      ["none", 1],
+      ...nonIdentityKinds.map((kind) => [kind, 0] as const),
+    ] as const)("refuses inconsistent %s duration %i", (kind, duration) => {
+      expect(() => transaction(kind, duration)).toThrow(/duration_frames/);
+    });
+  });
+}
+
 function receiptWire(
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {

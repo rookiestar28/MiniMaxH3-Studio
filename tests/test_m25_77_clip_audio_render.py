@@ -155,11 +155,14 @@ def test_the_live_profile_retains_current_commands_and_render_primitives() -> No
     profile = required_unqualified_renderer_profile()
     assert profile.semantic_command_ids == NLE_OPERATION_IDS
     assert profile.render_primitive_ids == render_planner.RENDER_PRIMITIVE_IDS
-    after = BASE_RENDER_PRIMITIVE_IDS.index("DrawTextV1") + 1
+    # Keep the historical profile intact; this live expectation includes later primitives.
+    before_text = BASE_RENDER_PRIMITIVE_IDS.index("DrawTextV1")
     assert profile.render_primitive_ids == (
-        *BASE_RENDER_PRIMITIVE_IDS[:after],
+        *BASE_RENDER_PRIMITIVE_IDS[:before_text],
+        "WipeV1",
+        "DrawTextV1",
         "TextDecorationV1",
-        *BASE_RENDER_PRIMITIVE_IDS[after:],
+        *BASE_RENDER_PRIMITIVE_IDS[before_text + 1 :],
     )
     assert profile.profile_fingerprint == canonical_fingerprint(profile.fingerprint_material())
     assert profile.profile_fingerprint != BASE_IDENTITY["renderer_capability_profile_fingerprint"]

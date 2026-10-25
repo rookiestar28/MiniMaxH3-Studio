@@ -192,8 +192,39 @@ export async function observeFrontendHostSeamsInPage(): Promise<FrontendHostSeam
       (predicate.value === null || typeof predicate.value === "function")
     );
   });
+  const canvasOwner = (): unknown => {
+    // CRITICAL: admit the same descriptor-only canvas shapes as canvasOwner() in
+    // src/host/canvasKeyboardGuard.ts; never invoke a host getter. Divergence makes
+    // the fixture and frontend v1.55.11+ hosts report
+    // frontend.app.canvas.keyboard_capture absent, breaking the editor
+    // key-containment journey and the HC09 allReady capture.
+    let current: unknown = app;
+    for (let depth = 0; depth < 8; depth += 1) {
+      if (
+        current === null ||
+        (typeof current !== "object" && typeof current !== "function")
+      )
+        return undefined;
+      const descriptor = Reflect.getOwnPropertyDescriptor(current, "canvas");
+      if (descriptor !== undefined) {
+        if ("value" in descriptor) return descriptor.value;
+        if (
+          current === app ||
+          typeof descriptor.get !== "function" ||
+          typeof descriptor.set !== "function"
+        )
+          return undefined;
+        const backing = Reflect.getOwnPropertyDescriptor(app, "canvasInternal");
+        return backing !== undefined && "value" in backing
+          ? backing.value
+          : undefined;
+      }
+      current = Reflect.getPrototypeOf(current);
+    }
+    return undefined;
+  };
   const canvasKeyboardReady = keyboardShape(() => {
-    const owner = dataDescriptor(app, "canvas")?.value;
+    const owner = canvasOwner();
     const element = dataDescriptor(owner, "canvas")?.value;
     const key = dataDescriptor(owner, "_key_callback")?.value;
     const ghost = dataDescriptor(owner, "_ghostKeyHandler")?.value;

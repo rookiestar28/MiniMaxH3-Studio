@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from ..core.authoring_render_jobs import render_plan_fingerprint
 from ..core.canonical import canonical_fingerprint
 from ..core.clip_audio import SAMPLES_PER_FRAME, clip_audio_run
-from ..core.composition_contract import ResolvedLayer
+from ..core.composition_contract import WIPE_KINDS, ResolvedLayer, Transition
 from ..core.render_planner import PlanClipAudio, RenderPlanV1
 from .authoring_render_executor import PreparedRenderAssets
 
@@ -53,7 +53,9 @@ def _constant(layer: ResolvedLayer) -> ResolvedLayer:
         source_frame=None,
         source_pts=None,
         transition_elapsed_frames=None,
-        operation_ids=tuple(value for value in layer.operation_ids if value != "CrossDissolveV1"),
+        operation_ids=tuple(
+            value for value in layer.operation_ids if value not in {"CrossDissolveV1", "WipeV1"}
+        ),
     )
 
 
@@ -155,6 +157,16 @@ def compile_render_schedule(plan: RenderPlanV1) -> RenderSchedule:
                 prior_source, prior_pts = layer.source_frame, layer.source_pts
             elif layer.source_pts is not None:
                 raise RenderGraphError()
+        if first.wipe is not None and (
+            type(first.wipe) is not Transition
+            or first.wipe.kind not in WIPE_KINDS
+            or type(first.wipe.duration_frames) is not int
+            or not 1 <= first.wipe.duration_frames <= min(300, len(rows))
+            or len(elapsed) != first.wipe.duration_frames
+        ):
+            # CRITICAL: the descriptor lowers the entire clip, but the resolved active window
+            # is authoritative. A mismatched duration shifts the export edge independently.
+            raise RenderGraphError()
         layers.append(
             RenderLayerRun(
                 first,
@@ -162,7 +174,7 @@ def compile_render_schedule(plan: RenderPlanV1) -> RenderSchedule:
                 start + len(rows),
                 tuple(row.source_frame for _, row in rows),
                 tuple(row.source_pts for _, row in rows),
-                len(elapsed),
+                len(elapsed) if first.wipe is None else 0,
             )
         )
     return RenderSchedule(expected, tuple(layers), tuple(audio), emits)
@@ -453,6 +465,34 @@ def build_render_graph(*, plan: RenderPlanV1, prepared: PreparedRenderAssets) ->
             f",crop=w={crop_w}:h={crop_h}:x={left}:y={top},"
             f"scale=w={scaled_w}:h={scaled_h}:flags=bilinear,setsar=1"
         )
+        if layer.wipe is not None:
+            wipe = layer.wipe
+            horizontal = wipe.kind in {"wipe_from_left_v1", "wipe_from_right_v1"}
+            dimension = scaled_w if horizontal else scaled_h
+            # CRITICAL: overlay n starts at one on the admitted renderer. Using n reveals
+            # the first stripe a frame early; masking after rotate makes the edge screen-local.
+            extent = (
+                f"floor({dimension}*min(max(n-1,0),{wipe.duration_frames})/{wipe.duration_frames})"
+            )
+            x = {
+                "wipe_from_left_v1": f"{extent}-{scaled_w}",
+                "wipe_from_right_v1": f"{scaled_w}-{extent}",
+            }.get(wipe.kind, "0")
+            y = {
+                "wipe_from_top_v1": f"{extent}-{scaled_h}",
+                "wipe_from_bottom_v1": f"{scaled_h}-{extent}",
+            }.get(wipe.kind, "0")
+            filters += [
+                source + f",format=rgba,split=2[{prefix}wrgb][{prefix}wa]",
+                f"[{prefix}wa]alphaextract,format=gray[{prefix}walpha]",
+                f"color=c=black:s={scaled_w}x{scaled_h}:r=24,format=rgb24,trim=end_frame={duration},settb=1/24,setpts=N[{prefix}wb]",
+                f"color=c=white:s={scaled_w}x{scaled_h}:r=24,format=rgb24,trim=end_frame={duration},settb=1/24,setpts=N[{prefix}ww]",
+                f"[{prefix}wb][{prefix}ww]overlay=x='{x}':y='{y}':eval=frame:format=rgb:shortest=1,format=gray[{prefix}wmask]",
+                f"[{prefix}walpha][{prefix}wmask]blend=all_mode=multiply[{prefix}wm]",
+            ]
+            # Multiply the source alpha; replacing it would make transparent media opaque.
+            # The clamped full mask preserves every tail frame from D onward.
+            source = f"[{prefix}wrgb][{prefix}wm]alphamerge"
         angle = transform.rotation_mdeg * math.pi / 180000
         if transform.rotation_mdeg:
             source += (
@@ -570,11 +610,15 @@ def build_render_graph(*, plan: RenderPlanV1, prepared: PreparedRenderAssets) ->
         if schedule.emits_audio_stream
         else ["-an"]
     )
+    # IMPORTANT: keep export quality explicit; implicit libx264 quality can push flat
+    # composite colors outside the preview/final tolerance even away from an edge.
     args += [
         "-frames:v",
         str(count),
         "-c:v",
         "libx264",
+        "-crf",
+        "18",
         "-threads:v",
         "2",
         "-bf",

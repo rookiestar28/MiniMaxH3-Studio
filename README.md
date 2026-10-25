@@ -1,6 +1,6 @@
-# ComfyUI-MiniMaxH3-Studio
+# MiniMaxH3-Studio
 
-https://github.com/user-attachments/assets/ac7c74e5-69b0-459f-b4e2-925e4c182308
+https://github.com/user-attachments/assets/18875fe5-be58-47e6-b41c-9ab7e6ba8c04
 
 Turn a description into a MiniMax H3 video without leaving ComfyUI. Build a prompt you can
 inspect, generate clips with the official H3 workflows, plan a longer video, then cut and render
@@ -15,6 +15,44 @@ implementation.
 </p>
 
 <details><summary><h2>Latest Updates - Click to expand</h2></summary>
+
+<details>
+
+<summary><strong>1.4.0 — Directional wipes, image cropping and easier App Mode setup</strong></summary>
+
+- The clip editor adds four directional wipes, **Wipe from left**, **Wipe from right**,
+  **Wipe from top** and **Wipe from bottom**. They appear beside **Cross dissolve** in the
+  Inspector's **Transition** tab, and the final render closely matches the preview.
+- A project or saved draft that uses a directional wipe needs 1.4.0 or later; earlier versions
+  refuse it rather than dropping the wipe.
+- The final render now encodes H.264 at a fixed, higher quality setting, so flat colours match the
+  preview more closely. Rendered files can be larger than before.
+- The clip editor now opens with ComfyUI frontend 1.55.11 and later, which current ComfyUI
+  versions use. Versions of this extension up to 1.3.2 could not open it there.
+- The clip editor now refuses a title that uses characters the bundled fonts cannot draw, such as
+  Chinese, Japanese, Korean or emoji, and says why as soon as you add or edit it, instead of
+  failing at the final render. The text you typed stays in place.
+- App Mode can crop a first frame, last frame or reference image: use **Crop image** beside the
+  image, drag the rectangle or pick an aspect ratio, then **Apply**. Starting or replacing the
+  canvas adds ComfyUI's native **Crop Image** node, which you can still edit on the canvas.
+- **Start H3 App Mode** and **Replace canvas and start H3 App Mode** now work for I2VA, FL2VA, L2VA
+  and Ref2VA before you choose a source. They place the template's **Load Image** nodes, and the
+  sidebar lists which nodes still need your images before you queue.
+- Empty source lists explain which node to add to the main canvas, in English, Traditional Chinese
+  and Simplified Chinese.
+- App Mode recognizes the installed official H3 weight variants that ComfyUI's templates select,
+  such as their video VAE and model precision variants, and prefers the template's own choice when
+  you have it installed.
+- **Refine prompt** now follows instructions that ask for camera moves or cuts between shots, while
+  dialogue, on-screen text, reference labels and timing stay exact. If a suggestion cannot keep
+  them, it says why instead of offering a changed prompt.
+- **Optimize prompt** and **Refine prompt** keep the required content that is already in your
+  prompt and never add forbidden content, as set on the **H3 Hard Constraint Producer** node.
+- The GitHub repository is now named **MiniMaxH3-Studio**. GitHub redirects the old address, so
+  existing clones and links keep working, and an existing installation folder can keep its name.
+  The Comfy Registry name **ComfyUI-MiniMaxH3-Studio** is unchanged.
+
+</details>
 
 <details>
 
@@ -130,6 +168,7 @@ implementation.
 - [The sidebar at a glance](#the-sidebar-at-a-glance)
 - [Create a clip](#create-a-clip)
   - [Task modes and references](#task-modes-and-references)
+  - [Crop frame and reference images](#crop-frame-and-reference-images)
   - [Dialogue and exact text](#dialogue-and-exact-text)
   - [Duration](#duration)
   - [Review the prompt](#review-the-prompt)
@@ -171,7 +210,8 @@ implementation.
 - **One-click official workflows.** App Mode writes the official MiniMax H3 workflow for your mode
   into the active workflow tab using the H3 weights you have installed, or connects your prompt to
   an H3 graph you already have. Use a separate empty tab to try the official template while keeping
-  your current workflow.
+  your current workflow. Crop a first frame, last frame or reference image before the canvas is
+  prepared.
 - **Production workbench.** Collect generated clips as segments of a project; reorder, replace or
   regenerate them, preview them and pick which ones to edit.
 - **Longer videos.** Plan a 4 to 60 second video as a storyboard, generate its segments one after
@@ -201,7 +241,7 @@ Public source and Registry packages include the test suites and their support fi
   prompts needs no weights.
 - **Windows x64 with 64-bit Python** for the clip editor, Production import, longer-video assembly
   and final rendering, plus the [media tools](#media-tools), which you provide and the extension
-  verifies.
+  verifies. Linux support for these features is coming in an upcoming update.
 
 The package has no required Python dependencies and never installs or changes ComfyUI, its
 frontend or your models.
@@ -212,9 +252,10 @@ The sidebar checks what your host actually provides (the native H3 nodes, their 
 templates and the frontend functions it uses), not a version number. If something is missing, the
 message names it. The canvas nodes keep working even when the sidebar cannot load.
 
-- The prompt pipeline runs on Windows, Linux and WSL. The media features need Windows x64.
-- The clip editor has been tested on ComfyUI 0.38.0 with frontend 1.53.6. This is a tested
-  combination, not a minimum version.
+- The prompt pipeline runs on Windows, Linux and WSL. The media features need Windows x64 for now;
+  Linux support for them is coming in an upcoming update.
+- The clip editor and image crop have been tested on ComfyUI 0.41.0 with frontend 1.55.18. This is
+  a tested combination, not a minimum version.
 - Longer-video generation checks the installed H3 implementation separately. If it reports an
   incompatibility, use a complete, compatible ComfyUI installation; installing FFmpeg or waiting
   does not fix it.
@@ -229,11 +270,11 @@ see [opening ComfyUI from another address](docs/SECURITY_AND_PROVIDERS.md#openin
 To install manually:
 
 1. Save any open ComfyUI workflows and download the videos you want to keep, then stop ComfyUI.
-2. Clone or copy the complete repository into `ComfyUI/custom_nodes/ComfyUI-MiniMaxH3-Studio`:
+2. Clone or copy the complete repository into `ComfyUI/custom_nodes/MiniMaxH3-Studio`:
 
    ```bash
    cd ComfyUI/custom_nodes
-   git clone https://github.com/rookiestar28/ComfyUI-MiniMaxH3-Studio.git
+   git clone https://github.com/rookiestar28/MiniMaxH3-Studio.git
    ```
 
    Keep both the root `__init__.py` and the `comfyui_h3_context/` folder.
@@ -255,7 +296,10 @@ comfy node install minimax-h3-studio
 2. Replace the whole package with the new version. Do not mix files from two versions, and do not
    keep a second copy of this pack beside the first.
 3. Restart ComfyUI and refresh the browser. If the old interface still shows, hard-refresh after
-   checking that the host loaded the intended version. The sidebar header shows the loaded version.
+   checking that the host loaded the intended version. The sidebar header shows the loaded version
+   and, when the host provides them, short **sources** and **bundle** build identifiers. A **!**
+   beside them means the loaded browser file does not match its build record, which can happen
+   when files from two versions are mixed.
 
 Keep the previous version for rollback. Save accepted Production/editor work as a `.h3proj` file
 and preserve its media separately before updating. A workflow save or downloaded video does not
@@ -266,6 +310,7 @@ still waiting in the browser.
 
 The clip editor, Production import, longer-video assembly and final rendering use one exact FFmpeg
 build on Windows x64 with 64-bit Python: the gyan.dev full build `2026-02-26-git-6695528af6`.
+Linux support is coming in an upcoming update.
 
 - **Provide the supported tools.** In **Settings → Media tools**, choose **Open download page**
   (the [release page](https://github.com/GyanD/codexffmpeg/releases/tag/2026-02-26-git-6695528af6)),
@@ -301,10 +346,16 @@ FFmpeg is licensed separately under GPL-3.0-or-later and is not shipped with thi
 2. Open **MiniMax H3 Studio** in the ComfyUI sidebar.
 3. On the **Context** page, choose a task mode, describe the video and set a duration of 4 to 15
    seconds.
-4. Select the images, video or audio that mode needs.
-5. Press **Start H3 App Mode**. The official workflow appears in the active tab; check its settings
-   and queue it.
-6. When the video is ready it appears on the **Production** page. Each new run from the same
+4. If the canvas already has image, video or audio nodes you want to use, choose them for that
+   mode. In an empty tab there is nothing to choose yet; leave the sources unchosen.
+5. Press **Start H3 App Mode**. The official workflow appears in the active tab. For I2VA, FL2VA
+   and L2VA, each frame you left unchosen becomes its **Load Image** node from the template. For
+   Ref2VA, leaving every reference unchosen keeps the template's **Load Image** nodes. They hold
+   sample images until you set your own, and the sidebar lists the nodes that still need them.
+   For Ref2VA, then choose the references in the pickers.
+6. Check the workflow's settings and queue it with **Apply and queue current H3 graph** or
+   ComfyUI's own Queue button.
+7. When the video is ready it appears on the **Production** page. Each new run from the same
    workflow adds a segment to the same project.
 
 To use your own H3 workflow, keep its tab active and follow
@@ -319,14 +370,15 @@ Open **MiniMax H3 Studio** from the ComfyUI sidebar. It has three pages:
 | ---------- | --------------------------------------------------------------------------------------------- |
 | Context    | Choose a task mode, describe the video, pick references, review the prompt and start App Mode |
 | Production | Your generated clips as a project, longer-video planning, and the entry to the clip editor    |
-| Settings   | Language, media tools, local-perception status and the optional assisted-authoring provider |
+| Settings   | Language, media tools, recovery metadata, retained media, local-perception status and the optional assisted-authoring provider |
 
 **Settings → Language** offers **Automatic (ComfyUI locale)**, English, 繁體中文 and 简体中文.
 
 **Settings → Local perception** shows whether the host's existing visual and audio setup is
 available. **Refresh status** reads its readiness; it does not install dependencies, launch a
 model or reread startup configuration. Local perception runs only on its supported native
-Windows setup. Ask the host operator to configure it using the
+Windows setup; Linux support is coming in an upcoming update. Ask the host operator to
+configure it using the
 [local-perception setup instructions](docs/HOST_INTEGRATION.md#local-perception-visual-and-audio),
 then restart ComfyUI after changing the startup file. These host settings are separate from
 assisted-authoring provider connections and cannot be edited on this page.
@@ -342,41 +394,80 @@ and the canvas never disagree.
 
 The **Context** page walks through five stages, shown as numbered tabs: **Intent / Mode**,
 **Media / Roles**, **Understand / Plan**, **Audit / Validate** and **Execute / Export**. You can
-also simply fill in the request and choose **Start H3 App Mode**.
+also simply fill in the request and choose **Start H3 App Mode**. Describe the video in **Intent**,
+which takes up to 4,096 characters.
 
 ### Task modes and references
 
 | Task mode | You provide                                                           |
 | --------- | --------------------------------------------------------------------- |
 | T2VA      | Text to video: a description only                                     |
-| I2VA      | Image to video: a **First frame source**                              |
-| FL2VA     | First and last frame: two different images                            |
-| L2VA      | Last frame: a **Last frame source**                                   |
+| I2VA      | Image to video: a **First frame source** in a **Load Image** node       |
+| FL2VA     | First and last frame: two different images in two **Load Image** nodes  |
+| L2VA      | Last frame: a **Last frame source** in a **Load Image** node             |
 | Ref2VA    | Reference set: an image, a video and/or audio, each with a clear role |
 
-References are image, video and audio nodes already on your canvas. For a reference set, choose
-up to nine images, three videos and three standalone audio files under **Reference images**,
-**Reference videos** and **Reference audio**. Add sources in order; the arrow and remove controls
-update their labels as you edit. The total limit is 12 files and three audio files, including
-video soundtracks. Audio cannot be the only reference in the sidebar; add an image or a video.
-**Reference video soundtrack** submits all selected videos' own soundtracks by default; you can
-exclude them together. Each video or audio clip should be 2–15 seconds, with at most 15 seconds
-per kind in total. The live counter includes submitted soundtracks.
+Sources are **Load Image**, **Load Video** and **Load Audio** nodes on the main canvas, outside
+subgraphs. You can choose existing sources, or leave the sources unchosen and use **Start H3 App
+Mode** or **Replace canvas and start H3 App Mode** to place the template's loaders. A frame you
+leave unchosen uses the template's own **Load Image** node, which holds a sample image until you set
+yours there. If you choose both frames for FL2VA, they must be two different **Load Image** nodes.
+Set the images in those **Load Image** nodes before choosing **Apply and queue current H3 graph**.
+For Ref2VA, also choose the references in the pickers before queueing. The sidebar does not upload
+files.
+
+For a reference set, choose up to nine images, three videos and three standalone audio files under
+**Reference images**, **Reference videos** and **Reference audio**. Add sources in order; the arrow
+and remove controls update their labels as you edit. The total limit is 12 files and three audio
+files, including video soundtracks. Audio cannot be the only reference in the sidebar; add an image
+or a video. Once a reference video is chosen, **Reference video soundtrack** appears with three
+options: **Submit all selected videos’ own soundtracks** (the default), **Do not submit
+soundtracks** and **Soundtracks unavailable**. The last two both leave the soundtracks out, and the
+first is disabled when including them would exceed the file or audio limits. Each video or audio
+clip should be 2–15 seconds, with at most 15 seconds per kind in total. The live counter includes
+submitted soundtracks.
 
 Roles and order are never guessed: a missing or conflicting role is reported so you can fix it.
 
+### Crop frame and reference images
+
+Choose an image source, then use **Crop image** beside a first frame, last frame or reference
+image. Drag the rectangle or its eight handles. The arrow keys move a focused rectangle by one
+source pixel, or ten with Shift. On a focused handle they resize by the same amount in Free mode,
+and in whole ratio steps with Original or a fixed aspect ratio, always within the image. Choose
+Free, Original or a fixed aspect ratio, then **Apply**. The source row shows the cropped width and
+height. To remove a crop, choose **Reset**, which returns the rectangle to the full image, then
+**Apply**.
+
+In I2VA, the output follows the crop's aspect ratio; in FL2VA and L2VA, the output size comes
+from the canvas resolution setting, so choose a crop ratio that matches it.
+
+Starting or replacing a canvas inserts one native **Crop Image** node per cropped source, before
+all its consumers. On a canvas that is already prepared, **Crop image** is unavailable; edit that
+visible node directly. Videos and audio have
+no crop action. Changing modes or removing an image clears its sidebar crop. A host without the
+native Crop Image node cannot prepare a cropped canvas.
+
+With a crop applied, prepare the canvas with **Start H3 App Mode** or
+**Replace canvas and start H3 App Mode** in **Intent / Mode**, or reset the crop, before using
+**Execute / Export**.
+
 ### Dialogue and exact text
 
-Enter dialogue, lyrics, on-screen text and anything that must or must not appear as **hard
-constraints** when the exact wording matters. They are kept word for word.
+The sidebar has no fields for dialogue or exact text. Enter them on the canvas, in the **H3 Hard
+Constraint Producer** node, and connect its `hard_constraints` output to the optional
+`hard_constraints` input of **H3 Context Request** (see [Canvas nodes](#canvas-nodes)). Its
+`dialogue`, `visible_text`, `required_content` and `forbidden_content` inputs hold dialogue,
+on-screen text and anything that must or must not appear. They are kept word for word.
 
-For dialogue you can also set:
+For dialogue the node also has:
 
-- the **language**: `auto` or one of Arabic, Chinese, English, French, German, Italian, Japanese,
+- `dialogue_language`: `auto` or one of Arabic, Chinese, English, French, German, Italian, Japanese,
   Korean, Portuguese, Russian and Spanish. `auto` recognizes Korean, Japanese and Chinese from
   their scripts; other scripts stay untagged with a warning. The spoken words never change;
-- the **speaker**, as a short identity phrase such as `the guide`;
-- the **delivery**: spoken on screen, or an off-screen voiceover (the speaker's lips stay closed).
+- `dialogue_speaker`, as a short identity phrase such as `the guide`;
+- `dialogue_delivery`: `on_screen` for spoken on screen, or `voiceover` for an off-screen voice (the
+  speaker's lips stay closed).
 
 ### Duration
 
@@ -388,15 +479,19 @@ length settings.
 
 ### Review the prompt
 
-Before generating, the Context page shows the prompt, the plan behind it and a validation report.
-Fix errors before queueing; warnings point out uncertainties you may accept. You can also:
+Once App Mode has prepared the graph and its Context, the numbered tabs fill in. **Understand /
+Plan** shows the plan behind the prompt. **Audit / Validate** holds the prompt and the validation
+diagnostics. **Execute / Export** shows the validation status and guide readiness. Fix errors
+before queueing; warnings point out uncertainties you may accept. You can also:
 
 - type `@` in the prompt to insert a reference;
-- edit the prompt and choose **Validate revision** to check your edit;
+- edit the prompt, give a **Revision reason** and choose **Stage revision**, then choose
+  **Validate revision** to check it;
 - **Copy prompt**, **Export JSON** or **Import JSON**;
 - choose **Optimize prompt** when [assisted authoring](#assisted-authoring-optional) is set up, then
   edit, accept or reject the proposal;
-- open **Revision instruction** to give a wording or style direction and choose **Refine prompt**;
+- open **Revision instruction** to request wording, style, camera moves or cuts between shots and
+  choose **Refine prompt**;
 - use **Reader** for the complete prompt, or **Compare with current report** for an active AI proposal.
 
 **Guide readiness** is a separate check against the official H3 prompt guide: **Ready** means every
@@ -418,7 +513,9 @@ App Mode uses these official templates:
 | I2VA, FL2VA, L2VA | the `video_minimax_h3_i2v` family |
 | Ref2VA            | `video_minimax_h3_r2v`            |
 
-Model loaders are filled from your installed official H3 weights. If a model cannot be matched, it
+Model loaders are filled from your installed official H3 weights. When the template's own choice,
+such as a particular video VAE or model precision variant, is installed, it is kept; otherwise an
+installed official variant for that role is used. If a model cannot be matched, it
 is named as a warning and left for you to pick on the canvas; ComfyUI checks the models when the
 workflow is queued. The workflow is a normal ComfyUI graph that you can inspect and change. Queue it
 with **Apply and queue current H3 graph** or ComfyUI's own Queue button.
@@ -440,16 +537,17 @@ work. Saving a ComfyUI workflow does not back up the separate Production or edit
 Connect works with your own H3 workflows, not only the official ones. It looks for the native H3
 generation nodes on the canvas and one subgraph level inside it; when there are several, choose
 one under **H3 generation node to connect**. The task mode must match how that node is wired: a
-connected first frame means I2VA, a last frame L2VA, both FL2VA, and neither T2VA. Connect is not
-offered when the canvas already contains H3 Context nodes; use **Apply and queue current H3 graph**
-instead.
+connected first frame means I2VA, a last frame L2VA, both FL2VA, and neither T2VA; a native
+reference-to-video node means Ref2VA. Connect is not offered when the canvas already contains
+H3 Context nodes; use **Apply and queue current H3 graph** instead.
 
 If an existing canvas is replaced without a choice being shown, report the loaded sidebar version
 and the actions you took. Include **Copy diagnostics** when available so the unexpected change
 can be investigated.
 
-**Cancel App Mode** stops while App Mode is working, and **Continue with native nodes** leaves App
-Mode so you can work on the canvas yourself.
+**Cancel App Mode** is offered only while App Mode is still preparing the graph and the Context.
+Once generation is queued, use ComfyUI's own queue controls. **Continue with native nodes** leaves
+App Mode so you can work on the canvas yourself.
 
 ### During and after a run
 
@@ -465,7 +563,8 @@ to Project …" or "Creates Project …"):
 
 - every new run from the same workflow adds one segment to the same project;
 - choose **New project** before starting when the next result should go elsewhere;
-- **Edit App Mode setup** returns to the request for the next run.
+- **Edit App Mode setup** returns to the request for the next run; **Cancel edit** leaves the setup
+  and keeps the previous result unchanged.
 
 If App Mode declines a run, it shows the reason and a remedy, with **Retry H3 App Mode** or **Retry
 output verification** where they apply. **Copy diagnostics** copies a short report for support; it
@@ -497,8 +596,8 @@ The **Production** page has two views, switched at the top: **Production** for y
 - **Reorder** by dragging a tile in the segment overview, with the arrows on a selected segment, or
   by typing its **Position** and choosing **Apply**.
 - **Add current Context** adds a segment from the current Context request. With one segment
-  selected, **Replace segment N with current Context** or **Delete segment N** (the last segment
-  cannot be deleted).
+  selected, **Replace segment N with current Context** or **Delete segment N** (the only remaining
+  segment cannot be deleted). A project holds up to 64 segments.
 - **Relationship for segment N** sets how a segment joins the previous one: **Independent**,
   **Predecessor**, **Adjacent pair**, **Cut** or **Reset**; the second and third need an earlier
   segment. Choose **Apply relationship to segment N** to keep it. Changing a segment only reruns
@@ -551,31 +650,43 @@ has three tabs: **Media**, **Text** and **Sequence** (for [longer videos](#longe
 - The top bar shows the edit status: **Saving…**, **Saved**, **Edit refused**, **Save status
   unknown** and similar. **Saved** means ComfyUI accepted the edit; it is not a project file. If the
   status is unknown, let the editor re-read the host and follow its message before editing again.
-- Use **Project file** in Production, the Editor summary or the editor's Project menu to save or
-  open an editable `.h3proj` document. See [Project files](docs/PROJECT_FILES.md) for media relinking
-  and the difference between a written file and a prepared download.
+- Use **Project file** to save or open an editable `.h3proj` document. It appears in Production, in
+  the **Clip editor project** summary and in the editor's top bar, with **Open project**, **Save
+  project** and, where the browser supports a save-file picker, **Download project**. See
+  [Project files](docs/PROJECT_FILES.md) for media relinking and the difference between a written
+  file and a prepared download. A project that uses a directional wipe needs 1.4.0 or later to
+  open.
 
 ### Media bin
 
-The **Media** tab holds the clips available to this editor project.
+The **Media** tab holds the clips available to this editor project. It starts with the reference
+images and videos of the Context the project was started from; pictures in the bin come from those
+reference images.
 
 - **Import** brings in the outputs selected in Production: up to three finished segments. If the
   selection also contains unfinished segments, the button reads **Import ready (2 of 3)** and imports
   only the finished ones. Importing adds sources to the bin; it does not place them on the
-  timeline or start a generation.
+  timeline or start a generation. The bin holds up to 128 items.
 - **Search media**, **Sort and filter** (source or reverse order; all media, videos, pictures, or
   those already added to the timeline) and **Grid view** / **List view** help in a full bin.
-- Click a card, or its **+**, to add it: a video goes to the end of the **Main** track, a picture
-  goes to a picture overlay track at the playhead.
-- Right-click a card, or use its **More clip actions** button, for **Add to timeline**, **Insert at
-  playhead** and **Overwrite at playhead**.
+- Click a card to add it: a video goes to the end of the **Main** track, a picture goes to a
+  **Picture overlay** track at the playhead. A new project has only **Main**, so add a picture
+  overlay track from a track menu first (see [Timeline](#timeline)). You can also drag a card onto
+  a track. Clips on one track cannot overlap, so a picture added at the playhead, or a card dropped
+  on a track, needs free space there.
+- Right-click a card or press **Shift+F10** on it (touch screens show a **More clip actions**
+  button) for **Add to timeline**, **Insert at
+  playhead** and **Overwrite at playhead**. **Insert at playhead** moves the later clips on that
+  track along and does not cut through a clip, so put the playhead on a cut or in a gap, or split
+  the clip first. **Overwrite at playhead** replaces whatever the new clip covers.
 
-The **Text** tab adds titles: enter **Title text**, pick a **Font** and choose **Add title**. The
-title is placed at the playhead on the first unlocked text track that is free there; if there is no
-such track, the editor creates one within the eight-track limit. A new title lasts one second;
-trim it like any clip to change its length. One **Undo** removes both the new track and its
-title. You can add the first title to an empty project. If insertion is unavailable, the disabled
-button's explanation says what to change, such as freeing a track or choosing a font.
+The **Text** tab adds titles: enter **Title text**, pick a **Font** and choose **Add title**. A
+title holds 1 to 2,048 characters on at most 32 lines. The title is placed at the playhead on the
+first unlocked text track that is free there; if there is no such track, the editor creates one
+within the eight-track limit. A new title lasts one second; trim it like any clip to change its
+length. One **Undo** removes both the new track and its title. You can add the first title to an
+empty project. If insertion is unavailable, the disabled button's explanation says what to change,
+such as freeing a track or choosing a font.
 
 ### Timeline
 
@@ -583,8 +694,10 @@ The timeline has the **Main** video track plus video, picture and text overlay t
 tracks, 128 clips and 2.5 minutes in total.
 
 - **Track headers** show or hide a track (eye button) and lock or unlock it. The track name opens
-  its menu, where you can **Add track**, **Reorder track** or **Remove track**; **Main** cannot be
-  removed.
+  its menu. Pick the **Kind** of a new track (**Video overlay**, **Picture overlay** or **Text
+  overlay**) and its **Order** (the position), then choose **Add track**; **Reorder track** moves
+  the current track to the **Order** you set. **Remove track** works only on an empty track, and
+  **Main** cannot be removed.
 - **Selecting**: click a clip; **Shift**-click to extend the selection, **Ctrl**-click to add or
   remove one, or drag across an empty lane to box-select.
 - **Moving**: drag a clip to another time or a compatible track (hold **Alt** to suspend snapping).
@@ -594,42 +707,45 @@ tracks, 128 clips and 2.5 minutes in total.
   **Escape**. Turn on **Ripple edits** to make trims and deletes shift the clips that follow on
   the same track.
 - **Roll edits** move a shared cut between two neighbouring clips with the handle on the cut.
-- **Clip menu** (right-click a clip): one-frame trims, **Replace clip asset**, **Slip clip**,
-  **Slide clip**, **Merge clips** with the next one, and **Clip enabled**. Menus close when you
-  press elsewhere.
+- **Clip menu** (right-click a clip, or press **Shift+F10** on a focused clip): one-frame trims,
+  **Replace clip asset**, **Slip clip**, **Slide clip**, **Merge clips** with the next one, and
+  **Clip enabled**. Menus close when you press elsewhere.
 - **Toolbar**: **Undo**, **Redo**, **Split at playhead**, **Trim start to playhead**, **Trim end to
   playhead**, **Delete** (or **Ripple delete**), **Snapping**, **Ripple edits**, zoom and
   **Fit timeline**. **More timeline tools** adds roll edits, numeric moves, selection, clip
   navigation and panning.
-- **Ruler**: click or drag to move the playhead. **Ctrl** + mouse wheel zooms; **Shift** + wheel
-  pans.
+- **Ruler**: click or drag to move the playhead. Over the tracks, **Ctrl** + mouse wheel zooms;
+  **Shift** or **Alt** + wheel pans.
 
-Each completed edit is one undo step. An edit can be refused, for example by a locked track or the
-source's length; read the reason before trying again. Refused edits are never replayed
-automatically. If the timeline changed under you, a banner offers **Rebase rejected edit**.
+Each completed edit is one undo step. One edit or group move covers at most 32 clips. An edit can
+be refused, for example by a locked track or the source's length; read the reason before trying
+again. Refused edits are never replayed automatically. If the timeline changed under you, a banner
+offers **Rebase rejected edit**.
 
-The workspace summary shows **Content extent** (up to the end of the last placed clip, including a
-disabled one) and **Edit capacity** (the space available). The final video covers the content
-extent, gaps included. An empty timeline cannot be rendered.
+The workspace summary shows **Content extent** (up to the end of the last placed clip, counting
+every clip, including disabled clips and clips on hidden tracks) and **Edit capacity** (the space
+available). The final video covers the content extent, gaps included. An empty timeline cannot be
+rendered.
 
 ### Keyboard shortcuts
 
-| Action                       | Keys                  |
-| ---------------------------- | --------------------- |
-| Undo / Redo                  | Ctrl+Z / Ctrl+Shift+Z |
-| Split at playhead            | Ctrl+B                |
-| Trim start / end to playhead | Q / W                 |
-| Delete / Ripple delete       | Delete / Shift+Delete |
-| Select all clips             | Ctrl+A                |
-| Zoom in / out                | Ctrl+= / Ctrl+-       |
-| Fit timeline                 | Shift+Z               |
-| Play or pause                | Space                 |
-| Step one frame               | , and .               |
+| Action                       | Keys                       |
+| ---------------------------- | -------------------------- |
+| Undo / Redo                  | Ctrl+Z / Ctrl+Shift+Z      |
+| Split at playhead            | Ctrl+B                     |
+| Trim start / end to playhead | Q / W                      |
+| Delete / Ripple delete       | Delete / Shift+Delete      |
+| Select all clips             | Ctrl+A                     |
+| Zoom in / out                | Ctrl+= / Ctrl+- (or = / -) |
+| Fit timeline                 | Shift+Z                    |
+| Play or pause                | Space                      |
+| Step one frame               | , and .                    |
 
-Edit and view shortcuts also work after clicking a clip, a timeline tool, a trim grip or a roll
-handle. Space and Enter keep the focused button's own action. A keyboard move, trim or roll draft
-keeps its keys until you commit or cancel it. Fields, value controls, menus and buttons outside the
-timeline keep their own keys, so typing in the Inspector never edits the timeline.
+**Cmd** works in place of **Ctrl**. Edit and view shortcuts also work after clicking a clip, a
+timeline tool, a trim grip or a roll handle. Space and Enter keep the focused button's own action.
+A keyboard move, trim or roll draft keeps its keys until you commit or cancel it. Fields, value
+controls, menus and buttons outside the timeline keep their own keys, so typing in the Inspector
+never edits the timeline.
 
 Keys used inside the editor stay within its window, including undo and redo. If the host cannot
 keep the editor's keys separate from ComfyUI's own shortcuts, the full editor reports that it is
@@ -644,11 +760,17 @@ Select a clip to edit its properties. The tabs depend on the clip:
 | Basic      | Scale, position, rotation, anchor and alignment; opacity and blend mode         |
 | Crop       | The four edges                                                                  |
 | Colour     | Brightness, contrast and saturation (choose **Color adjustment** as the effect) |
-| Text       | Text, font style, alignment, spacing, colour, stroke, shadow and background     |
-| Transition | A **Cross dissolve** with the neighbouring clip, and its length in frames       |
-| Audio      | Volume (−60 to +12 dB), mute, fade in and fade out (up to 10 seconds each)      |
+| Text       | Text, size (8–512 px), weight, italic, alignment, line height, colour, stroke, shadow and background |
+| Transition | **None**, **Cross dissolve**, **Wipe from left**, **Wipe from right**, **Wipe from top** or **Wipe from bottom**, and its length in frames (1 up to the smallest of 300, the clip's length and the room on the clip below) |
+| Audio      | Volume (−60 to +12 dB), mute, fade in and fade out (up to 10 seconds each, and no longer than the clip together) |
 
 The **Text** tab appears for titles and the **Audio** tab for videos with sound.
+
+A transition belongs to the start of the selected clip and plays it in over an enabled clip on a
+visible lower track that is already playing there and covers the whole transition. A wipe reveals
+the clip across its own cropped and scaled frame. A transition changes the picture only: sound
+follows the **Main** track and is not blended. Two clips on the **Main** track cannot transition
+into each other; place the incoming clip on an overlay track above instead.
 
 Titles preserve literal line breaks, including blank and trailing lines. Text alignment places
 each line inside the title canvas; clip alignment in **Basic** places the whole canvas. Stroke
@@ -685,10 +807,18 @@ The monitor is a preview. Render the final video to check the exact result.
 ### Render the final video
 
 Open **Export** in the top bar and choose **Render final video**. The host renders a 1920 × 1080,
-24 fps MP4 (H.264, with 48 kHz mono AAC sound when the main track has audio) using each clip's
-audio settings. You can follow progress, **Cancel render**, **Preview output** and **Download
-original**. A render made before later edits is labelled **Output from an earlier revision**.
-Titles use the bundled Noto Sans fonts.
+24 fps MP4 (H.264 at a fixed high-quality setting, with 48 kHz mono AAC sound when the main track
+has audio) using each clip's audio settings. You can follow progress, **Cancel render**, **Preview
+output** and **Download original**. **Preview output** plays a smaller 640 × 360 copy, while
+**Download original** gives the full-size file. A render made before later edits is labelled
+**Output from an earlier revision**.
+
+Titles use the bundled Noto Sans fonts, which cover Latin, Greek and Cyrillic characters only.
+**Add title** and the Inspector refuse title text or a style change that needs other characters,
+such as Chinese, Japanese, Korean or emoji, and say why; the text you typed stays in place. A
+title like this from an older project still opens and can be moved, trimmed or deleted. It cannot
+be rendered, and its style cannot be changed, until you edit its text to characters the fonts
+cover.
 
 Rendered files are kept for about an hour, at most 16 at a time. Download the ones you want to keep.
 
@@ -724,9 +854,10 @@ in the clip editor's **Sequence** tab.
    [storyboard script](#write-a-storyboard-script), choose **Split script into shots**, check the
    rows (you can edit them or **Add shot**) and choose **Use reviewed rows**. **Use generated
    storyboard** is enough when the target equals the Context's own clip length.
-4. Choose **Propose segments**. Cuts fall on shot boundaries where 4 to 15 second segments allow
-   it. If the proposal cannot be used, the reason is shown, for example a cut inside a line of
-   dialogue.
+4. Choose **Propose segments**. With **Automatic storyboard**, cuts fall on shot boundaries where 4
+   to 15 second segments allow it; a fixed policy cuts at its length, and the last segment must be
+   4 to 15 seconds long. If the proposal cannot be used, the reason is shown, for example a cut
+   inside a line of dialogue.
 5. Choose **Approve and import to Production**. This creates the segments in the project; nothing is
    generated yet.
 
@@ -771,7 +902,8 @@ can be proposed and reviewed, but generation currently accepts text-to-video pla
    remaining segments** before the deadline shown.
 4. Choose **Output format** before assembly: **Original size (24 fps)** is the default, with
    32 kHz stereo sound and the segments' common original size. **512 × 512 (30 fps)** keeps the
-   previous format with 48 kHz stereo sound. Then choose **Assemble sequence**.
+   previous format with 48 kHz stereo sound. Then choose **Assemble sequence**. While an assembly
+   is running, **Cancel assembly** stops it; after a failed assembly, choose **Retry assembly**.
 
 The original-size format requires all segments to share one supported size; incompatible sizes
 are refused rather than resized. It keeps the native rates and encodes the final video once.
@@ -874,8 +1006,11 @@ models** keeps the selected model and refreshes its readiness if it is still pre
 disappears, the selection and readiness are cleared; choose a model from the current list.
 
 **Refine prompt** takes a revision instruction of up to 2,048 characters and 8,192 UTF-8 bytes.
-It directs wording within the current facts; it cannot change protected dialogue, visible text,
-reference roles or timing. Change typed facts through their existing controls. Stage an unstaged
+It can revise wording and style, or add camera moves and cuts between shots. Protected dialogue,
+visible text, reference labels, reference roles and timing stay exact. Optimize and Refine retain
+required content already present and never introduce forbidden content that was absent. An
+explicit static-camera, no-cuts or single-shot restriction still wins, and added cuts must fall
+within the clip's duration. Change typed facts through their existing controls. Stage an unstaged
 prompt edit first, and resolve any active proposal before asking for another suggestion. Your
 instruction stays in browser memory for the current workspace.
 
@@ -908,7 +1043,9 @@ is sent and checked.
 Prompt building, previews and final rendering happen on the ComfyUI host and in your browser. If
 ComfyUI runs on another computer, your prompts and media are processed there too, and the sidebar
 adds no sign-in of its own. No feature sends media to an assisted-authoring provider, and
-credentials are never saved into workflows, reports or diagnostics.
+credentials are never saved into workflows, reports or diagnostics. The optional **H3 Official
+Context-IR** node sends its prompt, and any connected media as public HTTPS URLs, to MiniMax only
+when the host supplies a connection.
 
 | What                                 | Where and for how long                                                                |
 | ------------------------------------ | ------------------------------------------------------------------------------------- |
@@ -919,10 +1056,11 @@ credentials are never saved into workflows, reports or diagnostics.
 | Production and editor workspace contents | Host memory; cleared on restart or after about 15 minutes without workspace activity |
 | Project and provider session pointers | Tab session storage, cleared when the tab closes; these are not saved projects        |
 | Provider credentials and permission  | Host memory only; 30 minutes idle or eight hours, cleared on restart                  |
-| Optional workspace metadata          | Private host storage; enabled separately, no prompts or media                        |
-| Optional retained videos             | Verified copies in private host storage, enabled separately                          |
-| Optional draft recovery              | Private host snapshots of acknowledged editable data and bounded undo/redo           |
+| Optional workspace metadata          | Private host storage; enabled separately with **Keep recovery metadata** in Settings; no prompts or media |
+| Optional retained videos             | Verified copies in private host storage; enabled with **Keep verified media** in Settings, then created with **Retain output** on the Production page for a finished segment; up to 16 videos and 256 MiB, and copies that nothing references expire after seven days |
+| Optional draft recovery              | Private host snapshots of acknowledged editable data and bounded undo/redo; enabled with **Save draft recovery** in the **Project file** controls; closed recoveries are kept for seven days |
 | Exported `.h3proj` files              | The file you save or download; includes editable text, not media bytes                |
+| Image crop                           | The crop dialog reads the chosen image from the ComfyUI host into your browser; App Mode writes no image file, and ComfyUI's Crop Image node may save a preview of the cropped picture in its temporary folder |
 
 Verified generated-video copies use a random process folder under private user data, outside
 ComfyUI's served input, output and temporary directories. The original output stays unchanged.
@@ -930,12 +1068,14 @@ The live store allows at most 64 copies and 1 GiB, with a seven-day expiry. Afte
 next generated-copy operation performs bounded cleanup of recognizable folders whose owner has
 exited; busy or unknown folders are retained. This storage is not durable recovery, and old
 preview handles do not survive a restart. Download originals you need to keep, or explicitly
-retain a verified copy through **Settings** on a qualified recovery host.
+retain a verified copy with **Retain output** after turning on **Keep verified media** under
+**Settings → Retained media** on a qualified recovery host.
 
 Metadata, video retention and draft recovery are three separate, default-off choices. Durable
 storage requires a trusted single-user Windows host on loopback, fixed local NTFS storage, no
 permissive CORS and no configured public-origin override. It is not available through a shared
-or proxied host. Recovery can contain private prompts and titles; restoring it is always explicit.
+or proxied host; Linux support is coming in an upcoming update. Recovery can contain private
+prompts and titles; restoring it is always explicit.
 Only a saved acknowledgement covers the named revision. It is not a zero-loss, power-loss or
 cloud-backup guarantee. See [Project files](docs/PROJECT_FILES.md).
 
@@ -948,20 +1088,28 @@ Review workflows and screenshots before sharing them. More detail is in
 - **Longer videos** generate text-to-video plans only. Readiness is valid for about a minute. After a
   page reload, a running sequence can be viewed but not resumed: cancel it and start again.
 - **Audio as the only reference** is not offered.
+- **Image crop** works on images from 32 to 16,384 pixels per side, and a crop is at least 32
+  pixels wide and high.
 - **Media features** (clip editor, import, assembly, rendering) need Windows x64 and the media tools.
+  Linux support is coming in an upcoming update.
 - **Audio in the editor** comes from the main track's video only, with each clip's volume, mute and
   fades. Overlay videos are silent and there are no separate audio tracks.
 - **Frame rates**: assembly defaults to the original-size 24 fps / 32 kHz stereo format; the
   selectable 512 × 512 format uses 30 fps / 48 kHz stereo. The editor's final render remains
   1920 × 1080 at 24 fps, up to 2.5 minutes.
 - **Project media and recovery**: `.h3proj` files do not embed media. Durable metadata, retained
-  videos and draft recovery are opt-in and require the qualified local Windows setup; unacknowledged
-  edits can be lost. Rendered files remain temporary and are kept for about an hour.
+  videos and draft recovery are opt-in and require the qualified local Windows setup (Linux support
+  is coming in an upcoming update); unacknowledged edits can be lost. Rendered files remain
+  temporary and are kept for about an hour.
 - **Previews** in the monitor are approximate; check the rendered file.
+- **Title characters**: the bundled Noto Sans fonts cover Latin, Greek and Cyrillic characters
+  only. The editor refuses titles with other characters, such as Chinese, Japanese, Korean or
+  emoji, and such a title from an older project cannot be rendered into the final video.
 - **Quality**: validation and guide readiness check the prompt, not the visual result, and do not
   make this equivalent to MiniMax's own implementation.
 - **Local perception** requires the qualified native Windows setup described in the host
-  integration guide. An unavailable status does not install a model or fall back to a provider.
+  integration guide; Linux support is coming in an upcoming update. An unavailable status does not
+  install a model or fall back to a provider.
 - **Visual timeline**: the **H3 Full Reference Timeline Producer** needs a connected, qualified
   result from the **Visual Perception Producer** and an operator-configured local visual profile.
   Its timeline remains partial; without that setup, write prompts with the Plan and Compiler nodes.
@@ -978,7 +1126,9 @@ Review workflows and screenshots before sharing them. More detail is in
 | An old interface remains after updating                          | Make sure only one complete version is installed, restart ComfyUI and hard-refresh the browser.                                                                                       |
 | I want to try App Mode without replacing my workflow             | Save the workflow, then make a new empty workflow tab active. To leave the existing canvas untouched, choose **Keep canvas and exit H3 App Mode**.                                    |
 | I want to use the prompt with my existing H3 workflow             | Keep its tab active and choose **Connect and queue current canvas** when offered. This connects the prompt and queues once; your models, LoRAs and sampler settings remain.             |
-| **Start H3 App Mode** stays disabled                             | The duration has not resolved yet, or a required image or reference is not selected.                                                                                                  |
+| **Start H3 App Mode** stays disabled                             | The duration has not resolved yet, or a reference selection exceeds its limits. Queueing Ref2VA still needs a chosen image or video reference. A notice above the button names any other blocker, such as an unsupported host or template. |
+| **Crop image** is unavailable                                    | Crop works when preparing a new canvas, on a host with ComfyUI's native Crop Image node. On a canvas that is already prepared, edit its Crop Image node. |
+| **Execute / Export** asks you to prepare the canvas              | A crop is applied. In **Intent / Mode**, choose **Start H3 App Mode** or **Replace canvas and start H3 App Mode**, or reset the crop. |
 | A model role is reported missing                                 | Install an official MiniMax H3 weight for that role (any subfolder works) and pick it on the canvas loader.                                                                           |
 | App Mode refuses a run                                           | Follow the reason shown. **Copy diagnostics** gives a report for support with private details left out.                                                                               |
 | A request is rejected                                            | Read the first diagnostic and supply the named input, or fix the mode or duration conflict.                                                                                           |
@@ -992,9 +1142,11 @@ Review workflows and screenshots before sharing them. More detail is in
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A media feature says it is unavailable                    | Open **Settings → Media tools** and follow the card: **Use folder**, **Check again**, or the reason shown.                                                 |
 | **Import** is missing or does nothing                     | Select up to three finished segments in Production first.                                                                                                  |
-| An imported clip is in the bin but not on the timeline    | Import only adds sources; press **+** on its card.                                                                                                         |
+| An imported clip is in the bin but not on the timeline    | Import only adds sources; click its card.                                                                                                         |
 | An imported clip became unavailable                       | Keep its Production project available, or open a saved project and explicitly relink compatible retained media. A released source is never silently replaced. |
 | **Add title** is unavailable                              | Read the reason beside the button. Choose an available font, shorten the text, or free a text track at the playhead when all eight track slots are in use. |
+| The final render says the title font cannot render some characters | Edit the title text to Latin, Greek or Cyrillic characters, or delete the title, then render again. |
+| **Add title** says some characters are not supported      | Use Latin, Greek or Cyrillic characters. The bundled title font does not include others, such as Chinese, Japanese, Korean or emoji.                       |
 | A number changed but the picture did not                  | Number fields apply on **Enter** or the group's apply button.                                                                                              |
 | On-picture handles are missing                            | Select one clip, put the playhead inside it, and make sure the clip and track are enabled and unlocked.                                                    |
 | The Audio tab is missing or has no effect                 | It appears only for a video with sound, and is heard only on the **Main** track.                                                                           |
@@ -1002,11 +1154,11 @@ Review workflows and screenshots before sharing them. More detail is in
 | Thumbnails or waveforms stay on Loading                   | Check the media tools and that the source is still available. Importing the same source again does not help.                                               |
 | The monitor shows **Preview unavailable**                 | Read the reason and choose **Retry**.                                                                                                                      |
 | An edit is refused                                        | Read the reason (source length, locked track or placement) before trying again.                                                                            |
-| The final video is longer than expected                   | Check **Content extent**, including disabled clips at the end.                                                                                             |
+| The final video is longer than expected                   | Check **Content extent**, including disabled clips and clips on hidden tracks at the end.                                                                  |
 | The render is labelled as an earlier revision             | You edited after rendering; render again.                                                                                                                  |
 | A sequence cannot be resumed after a reload               | Cancel it and start again.                                                                                                                                 |
 | Readiness expired before generating                       | Choose **Check readiness** again.                                                                                                                          |
-| Readiness reports `qualification_composition_unqualified` | The loaded native H3 implementation is not supported; use a complete, compatible ComfyUI installation.                                                     |
+| Readiness says the host does not provide every native MiniMax H3 workflow | The loaded native H3 implementation is incomplete or not supported; use a complete, compatible ComfyUI installation.                                                     |
 | A remote assisted-authoring profile does not run          | Check the message, profile, permission, API key and your provider quota.                                                                                   |
 
 When reporting a problem, include the node name, the diagnostic code and the profile or contract
@@ -1023,7 +1175,9 @@ screenshots.
 ## License
 
 Apache-2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). The bundled Noto Sans fonts use the SIL
-Open Font License 1.1. FFmpeg is not included: you provide the supported build yourself, and it is
-licensed separately under GPL-3.0-or-later. The official workflow templates are served by the
-ComfyUI frontend (Comfy-Org `workflow_templates`, MIT) and are not redistributed here. Models and
-provider services have their own terms. This project is not affiliated with or endorsed by MiniMax.
+Open Font License 1.1. The compiled sidebar includes React, ReactDOM and Scheduler, which are
+licensed under the MIT License; their notice is in [NOTICE](NOTICE). FFmpeg is not included: you
+provide the supported build yourself, and it is licensed separately under GPL-3.0-or-later. The
+official workflow templates are served by the ComfyUI frontend (Comfy-Org `workflow_templates`,
+MIT) and are not redistributed here. Models and provider services have their own terms. This
+project is not affiliated with or endorsed by MiniMax.

@@ -27,6 +27,26 @@ import {
 export const PUBLIC_SNAPSHOT_SCHEMA =
   "h3.context.public_composition_snapshot.v1" as const;
 export const RESOLVED_SCENE_SCHEMA = "h3.context.resolved_scene.v1" as const;
+export const WIPE_KINDS = [
+  "wipe_from_left_v1",
+  "wipe_from_right_v1",
+  "wipe_from_top_v1",
+  "wipe_from_bottom_v1",
+] as const;
+export const TRANSITION_KINDS = [
+  "none",
+  "cross_dissolve_v1",
+  ...WIPE_KINDS,
+] as const;
+export type TransitionKind = (typeof TRANSITION_KINDS)[number];
+export type WipeKind = (typeof WIPE_KINDS)[number];
+export type WipeTransition = Readonly<{
+  kind: WipeKind;
+  durationFrames: number;
+}>;
+export function isWipeKind(kind: string): kind is WipeKind {
+  return (WIPE_KINDS as readonly string[]).includes(kind);
+}
 export const ENGINE_PROFILE_ID = "h3.native_media_canvas_backend.v1" as const;
 export const OPERATION_PROFILE_ID = "h3.authoring.nle_operation.v1" as const;
 export const OUTPUT_PROFILE_ID =
@@ -846,7 +866,7 @@ function decodeClip(value: unknown, index: number): CompositionClip {
   );
   const transitionKind = oneOf(
     transitionWire.kind,
-    ["none", "cross_dissolve_v1"] as const,
+    TRANSITION_KINDS,
     `${name}.transition.kind`,
   );
   const transitionDuration = exactInteger(
@@ -857,7 +877,7 @@ function decodeClip(value: unknown, index: number): CompositionClip {
   );
   if (
     (transitionKind === "none" && transitionDuration !== 0) ||
-    (transitionKind === "cross_dissolve_v1" &&
+    (transitionKind !== "none" &&
       (transitionDuration < 1 || transitionDuration > durationFrames))
   )
     fail("invalid_contract", `${name}.transition duration is invalid`);
@@ -1399,7 +1419,7 @@ export function decodePublicCompositionSnapshot(
     // where there is bound audio to scale. Track placement does not decide it.
     if (!isIdentityClipAudio(clip.audio) && !boundAudio)
       fail("invalid_contract", "clip audio adjustments need bound audio");
-    if (clip.transition.kind === "cross_dissolve_v1") {
+    if (clip.transition.kind !== "none") {
       const hasLowerParticipant = clips.some((other) => {
         const otherTrack = trackById.get(other.trackId);
         return (
@@ -1617,6 +1637,7 @@ const resolvedOperations = [
   "OpacityV1",
   "BlendV1",
   "CrossDissolveV1",
+  "WipeV1",
   "DrawTextV1",
   "TextDecorationV1",
 ] as const;
@@ -1632,7 +1653,28 @@ export function decodeResolvedScene(value: unknown): ResolvedCompositionScene {
     resourceArray(wire.layers, 128, "resolved_scene.layers").map(
       (row, index) => {
         const name = `resolved_scene.layers[${index}]`;
-        const layer = object(row, resolvedLayerKeys, name);
+        const hasWipe =
+          row !== null && typeof row === "object" && "wipe" in row;
+        const layer = object(
+          row,
+          hasWipe
+            ? resolvedLayerKeys
+            : resolvedLayerKeys.filter((key) => key !== "wipe"),
+          name,
+        );
+        let wipe: WipeTransition | undefined;
+        if (hasWipe) {
+          const wire = object(layer.wipe, transitionKeys, `${name}.wipe`);
+          wipe = Object.freeze({
+            kind: oneOf(wire.kind, WIPE_KINDS, `${name}.wipe.kind`),
+            durationFrames: exactInteger(
+              wire.duration_frames,
+              1,
+              300,
+              `${name}.wipe.duration_frames`,
+            ),
+          });
+        }
         const sourceFrame =
           layer.source_frame === null
             ? null
@@ -1750,8 +1792,16 @@ export function decodeResolvedScene(value: unknown): ResolvedCompositionScene {
         ];
         if (effect.kind !== "none") expectedOperations.push("ColorAdjustV1");
         expectedOperations.push("OpacityV1", "BlendV1");
-        if (transitionElapsedFrames !== null)
-          expectedOperations.push("CrossDissolveV1");
+        if (transitionElapsedFrames !== null) {
+          if (
+            wipe !== undefined &&
+            transitionElapsedFrames >= wipe.durationFrames
+          )
+            fail("invalid_contract", `${name}.wipe elapsed exceeds its window`);
+          expectedOperations.push(
+            wipe === undefined ? "CrossDissolveV1" : "WipeV1",
+          );
+        }
         if (text !== null) expectedOperations.push("DrawTextV1");
         if (hasTextDecorations(text))
           expectedOperations.push("TextDecorationV1");
@@ -1772,6 +1822,7 @@ export function decodeResolvedScene(value: unknown): ResolvedCompositionScene {
           sourceFrame,
           sourcePts,
           transitionElapsedFrames,
+          ...(wipe === undefined ? {} : { wipe }),
           operationIds,
           transform,
           crop,

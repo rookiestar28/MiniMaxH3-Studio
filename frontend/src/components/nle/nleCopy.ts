@@ -155,6 +155,8 @@ export const copy = {
       titleRefusals: {
         busy: "Wait for the current edit to finish.",
         missing_font: "Choose an available font before adding a title.",
+        font_glyph_unsupported:
+          "The bundled title font cannot render some of these characters. Use supported Latin, Greek or Cyrillic characters.",
         invalid_content:
           "Use 1–2,048 characters and at most 32 lines, without unsupported control characters.",
         unavailable_frame: "Choose a valid playhead position.",
@@ -490,7 +492,14 @@ export const copy = {
       blend: "Blend",
       blendModes: { normal: "Normal", multiply: "Multiply", screen: "Screen" },
       transitionKind: "Transition",
-      transitionKinds: { none: "None", cross_dissolve_v1: "Cross dissolve" },
+      transitionKinds: {
+        none: "None",
+        cross_dissolve_v1: "Cross dissolve",
+        wipe_from_left_v1: "Wipe from left",
+        wipe_from_right_v1: "Wipe from right",
+        wipe_from_top_v1: "Wipe from top",
+        wipe_from_bottom_v1: "Wipe from bottom",
+      },
       transitionFrames: "Transition frames",
       effectKind: "Effect",
       effectKinds: { none: "None", color_adjust_v1: "Color adjustment" },
@@ -861,6 +870,8 @@ export const copy = {
       titleRefusals: {
         busy: "請等目前的編輯完成。",
         missing_font: "請先選擇可用字型，再加入標題。",
+        font_glyph_unsupported:
+          "封裝的標題字型無法顯示其中部分字元。請使用支援的拉丁文、希臘文或西里爾文字元。",
         invalid_content:
           "請使用 1–2,048 個字元、最多 32 行，且不要包含不支援的控制字元。",
         unavailable_frame: "請選擇有效的播放位置。",
@@ -1174,7 +1185,14 @@ export const copy = {
       blend: "混合",
       blendModes: { normal: "正常", multiply: "色彩增值", screen: "濾色" },
       transitionKind: "轉場",
-      transitionKinds: { none: "無", cross_dissolve_v1: "交叉溶解" },
+      transitionKinds: {
+        none: "無",
+        cross_dissolve_v1: "交叉溶解",
+        wipe_from_left_v1: "從左擦入",
+        wipe_from_right_v1: "從右擦入",
+        wipe_from_top_v1: "從上擦入",
+        wipe_from_bottom_v1: "從下擦入",
+      },
       transitionFrames: "轉場影格",
       effectKind: "效果",
       effectKinds: { none: "無", color_adjust_v1: "色彩調整" },
@@ -1529,6 +1547,8 @@ export const copy = {
       titleRefusals: {
         busy: "请等待当前编辑完成。",
         missing_font: "请先选择可用字体，再添加标题。",
+        font_glyph_unsupported:
+          "随附的标题字体无法显示其中部分字符。请使用支持的拉丁文、希腊文或西里尔文字符。",
         invalid_content:
           "请使用 1–2,048 个字符、最多 32 行，且不要包含不支持的控制字符。",
         unavailable_frame: "请选择有效的播放位置。",
@@ -1841,7 +1861,14 @@ export const copy = {
       blend: "混合",
       blendModes: { normal: "正常", multiply: "正片叠底", screen: "滤色" },
       transitionKind: "转场",
-      transitionKinds: { none: "无", cross_dissolve_v1: "交叉溶解" },
+      transitionKinds: {
+        none: "无",
+        cross_dissolve_v1: "交叉溶解",
+        wipe_from_left_v1: "从左擦入",
+        wipe_from_right_v1: "从右擦入",
+        wipe_from_top_v1: "从上擦入",
+        wipe_from_bottom_v1: "从下擦入",
+      },
       transitionFrames: "转场帧",
       effectKind: "效果",
       effectKinds: { none: "无", color_adjust_v1: "色彩调整" },

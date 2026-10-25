@@ -383,6 +383,19 @@ export function createQualifiedBasePrompt(
     },
     ...sourceNodes,
     ...frameRegistry,
+    ...(inputs.task_mode === "i2va"
+      ? {
+          "47": {
+            class_type: "ImageScaleToTotalPixels",
+            inputs: {
+              image: sourceLinks.first_frame,
+              upscale_method: "nearest-exact",
+              megapixels: 0.8,
+              resolution_steps: 32,
+            },
+          },
+        }
+      : {}),
     ...durationNodes,
     ...sink("6"),
   };

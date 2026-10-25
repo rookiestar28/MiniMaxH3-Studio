@@ -8,6 +8,7 @@ import { defineConfig } from "vite";
 import { resolveH3ContextBuildIdentity } from "./buildProvenance.js";
 import { authoringOutputFixture } from "./e2e/authoringOutputServer.js";
 import { serviceLoopbackFixture } from "./e2e/serviceLoopback.js";
+import { presentationStagePlugin } from "./e2e/presentationStagePlugin.js";
 
 const tokensCssPath = fileURLToPath(
   new URL("./src/styles/tokens.css", import.meta.url),
@@ -27,6 +28,7 @@ const h3BuildProvenance = resolveH3ContextBuildIdentity(
 export default defineConfig({
   root: fileURLToPath(new URL("./e2e", import.meta.url)),
   plugins: [
+    presentationStagePlugin(),
     {
       name: "h3-context-e2e-production-inline-css",
       enforce: "pre",

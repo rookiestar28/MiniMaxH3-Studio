@@ -31,7 +31,7 @@ jobs:
     name: Guard exact Registry candidate and version
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    if: github.repository == 'rookiestar28/ComfyUI-MiniMaxH3-Studio'
+    if: github.repository == 'rookiestar28/MiniMaxH3-Studio'
     permissions:
       contents: read
       actions: read
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     if: >-
-      github.repository == 'rookiestar28/ComfyUI-MiniMaxH3-Studio' &&
+      github.repository == 'rookiestar28/MiniMaxH3-Studio' &&
       needs.preflight.outputs.should_publish == 'true'
     permissions:
       contents: read

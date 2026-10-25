@@ -976,6 +976,54 @@ def test_current_sbom_queries_exact_comfyui_and_noto_commits_and_retains_ollama_
     ]
 
 
+@pytest.mark.parametrize(
+    "name,version", [("react", "19.2.8"), ("react-dom", "19.2.8"), ("scheduler", "0.27.0")]
+)
+def test_bundled_sidebar_libraries_require_exact_advisory_identity(name: str, version: str) -> None:
+    package: dict[str, object] = {
+        "name": name,
+        "versionInfo": version,
+        "comment": "bundled_in_sidebar_runtime",
+        "primaryPackagePurpose": "LIBRARY",
+        "externalRefs": [
+            {"referenceType": "purl", "referenceLocator": f"pkg:npm/{name}@{version}"}
+        ],
+    }
+    query, nonclaim = audit_module._osv_projection(package, "bundled")
+    assert query == {"package": {"ecosystem": "npm", "name": name}, "version": version}
+    assert nonclaim is None
+    for changes in (
+        {"primaryPackagePurpose": "SOURCE"},
+        {"comment": "development_build_only_not_bundled"},
+        {
+            "versionInfo": ">=19.0.0",
+            "externalRefs": [{"referenceType": "purl", "referenceLocator": f"pkg:npm/{name}"}],
+        },
+    ):
+        with pytest.raises(AuditError, match="bundled|exact"):
+            audit_module._osv_projection({**package, **changes}, "bundled")
+
+
+def test_development_source_range_exclusion_does_not_authorize_a_bundled_range() -> None:
+    package: dict[str, object] = {
+        "name": "pytest",
+        "versionInfo": ">=8.0.0,<9",
+        "primaryPackagePurpose": "SOURCE",
+        "comment": "development_build_only_not_bundled",
+        "externalRefs": [{"referenceType": "purl", "referenceLocator": "pkg:pypi/pytest"}],
+    }
+    assert audit_module._osv_projection(package, "development") == (None, None)
+    with pytest.raises(AuditError, match="exact"):
+        audit_module._osv_projection(
+            {
+                **package,
+                "comment": "bundled_in_sidebar_runtime",
+                "primaryPackagePurpose": "LIBRARY",
+            },
+            "bundled",
+        )
+
+
 def test_osv_rejects_arbitrary_github_or_generic_unversioned_exclusions(
     tmp_path: Path,
 ) -> None:

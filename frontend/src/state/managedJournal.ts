@@ -133,6 +133,9 @@ const refusalReasons = [
   "queue_rejected",
   "queue_response_invalid",
   "source_image_changed",
+  "image_crop_invalid",
+  "image_crop_unavailable",
+  "image_crop_stale",
   "template_unavailable",
 ] as const;
 const coordinatorCategories = [

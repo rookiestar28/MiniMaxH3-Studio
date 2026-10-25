@@ -1,4 +1,5 @@
 import type { SpliceMediaIds } from "./templateGraphTopology";
+import { cropEndpoint, matchesImageCropNodes } from "./imageCropBindings";
 
 type Inputs = Record<string, unknown>;
 type Node = Readonly<{ class_type?: unknown; inputs?: unknown }>;
@@ -58,6 +59,7 @@ export function matchesReferenceBindingIdentity(
 ): boolean {
   if (
     registry === undefined ||
+    !matchesImageCropNodes(ids, byId) ||
     ids === undefined ||
     ids.referenceImages.length !== counts.images ||
     ids.referenceVideos.length !== counts.videos ||
@@ -83,9 +85,12 @@ export function matchesReferenceBindingIdentity(
       typed !== undefined &&
       raw !== undefined &&
       new Set(sources).size === sources.length &&
-      sources.every(
-        (id, i) => exactLink(typed[i], id, 0) && exactLink(raw[i], id, 0),
-      )
+      sources.every((id, i) => {
+        const endpoint = kind === "Images" ? cropEndpoint(ids, id)! : id;
+        return (
+          exactLink(typed[i], endpoint, 0) && exactLink(raw[i], endpoint, 0)
+        );
+      })
     );
   };
   if (

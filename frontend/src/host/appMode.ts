@@ -1,4 +1,13 @@
 import { qualifyAppMode } from "./appModeQualification";
+import { readImageCropCapability } from "./imageCropCapability";
+import {
+  createImageCropSources,
+  type MeasureSourceImage,
+} from "./imageCropSource";
+import {
+  hasChosenCanvasMedia,
+  validateCanvasPreparationInputs,
+} from "./appModeCanvasPreparation";
 export { qualifyAppMode } from "./appModeQualification";
 
 import type { GenerationProfile } from "../contracts/generationProfileCodec";
@@ -102,7 +111,6 @@ import {
 import {
   type AppModeTemplateLoader,
   createDefaultTemplateLoader,
-  resolveSpliceMedia,
 } from "./appModeTemplateSources";
 import {
   assertGraphWriteAuthority,
@@ -213,10 +221,10 @@ export function createAppModeController(
     readNodeDefinitions?: () => unknown;
     nodeDefinitionReadinessReached?: () => boolean;
     createDetachedGraph?: AppModeDetachedGraphFactory;
+    measureSourceImage?: MeasureSourceImage;
   } = {},
 ) {
-  // The callable captured at construction is the wrapper-detection baseline for
-  // `observeQueueSeam`; a non-callable value is recorded as "no baseline".
+  // Capture the wrapper-detection baseline for observeQueueSeam.
   const constructionProbe = probeQueueCallable(api);
   const controllerQueueCallable: unknown =
     constructionProbe.status === "ready"
@@ -233,13 +241,10 @@ export function createAppModeController(
   // finishes registering every LiteGraph node class on the supported host.
   const readNodeDefinitions =
     options.readNodeDefinitions ?? readNodeDefinitionRegistry;
-  // The controller is constructed during module evaluation but a user action
-  // can only enter start() after extension setup. Tests may inject the earlier
-  // phase so present-but-unready never collapses into an absent seam.
+  // Keep present-but-unready distinct from absent during extension setup.
   const nodeDefinitionReadinessReached =
     options.nodeDefinitionReadinessReached ?? (() => true);
-  // The probe binds `fetchApi` to the host api object: the route resolves
-  // through `this`, so a detached reference reaches the wrong origin or throws.
+  // Bind fetchApi: its route resolver requires the host's this value.
   const fetchApiSeam = probeFetchApi(api);
   const profileClient = createGenerationProfileClient({
     fetchApi: fetchApiSeam.status === "ready" ? fetchApiSeam.value : undefined,
@@ -247,9 +252,7 @@ export function createAppModeController(
   const loadProfile =
     options.loadProfile ??
     ((signal?: AbortSignal) => profileClient.load(signal));
-  // The projection is a host observation, not a per-run one, so it is read once
-  // and reused. A rejected read is not cached: a host that was briefly
-  // unreachable must not stay refused for the life of the sidebar.
+  // Reuse successful host observations; do not cache a transient refusal.
   let pendingProfile: Promise<GenerationProfile> | undefined;
   // The exact workflow object is the only durable in-session owner. Retaining
   // the write-time IDs here avoids rediscovering ownership from user topology.
@@ -284,7 +287,18 @@ export function createAppModeController(
     }
   };
   const preparedCanvases = new WeakSet<object>();
+  const cropSources = createImageCropSources({
+    api,
+    readGraph: () => readVisibleGraph(app),
+    measureSourceImage: options.measureSourceImage,
+  });
   return {
+    cropSources,
+    cropAvailable: () =>
+      readImageCropCapability(
+        readNodeDefinitions(),
+        nodeDefinitionReadinessReached(),
+      ),
     capability,
     admission,
     hasPreparedCanvas: () => {
@@ -305,15 +319,7 @@ export function createAppModeController(
         return [];
       }
     },
-    /**
-     * Which native H3 anchors the visible canvas offers to connect to.
-     *
-     *  D13. This is a census, not a decision: it reports what is there so
-     * the surface can offer the route and, when there is more than one anchor,
-     * require the user to designate. A canvas that cannot be read at all reports
-     * tier C, which is the same answer as a canvas with no anchor -- replace or
-     * keep, and nothing invented.
-     */
+    //  D13: report anchors for designation; an unreadable canvas is tier C.
     connectCandidates: (): CanvasAdmission => {
       const empty = { tier: "unavailable" as const, anchors: [] };
       const visible = serializeGraph(app);
@@ -474,14 +480,9 @@ export function createAppModeController(
         "incompatible_seam",
         "the public graph restore seam is unavailable",
       );
-    //  D1/D2: materialization sits behind profile admission. The gate is
-    // here -- after the cheap structural refusals, before the first compile,
-    // fetch or canvas write -- so a host that cannot run the graph costs the
-    // user nothing and, above all, reaches zero queue submissions.
-    //
-    // The requested mode is checked first so a malformed request stays a
-    // malformed request: without this, asking for a mode that does not exist
-    // would be reported as a host that does not support it.
+    //  D1/D2: check the mode before profile admission, then admit before
+    // any compile, fetch or write. Otherwise malformed input looks unsupported
+    // and an unsupported host can reach expensive work or queue submission.
     if (!APP_MODE_TASK_MODES.includes(inputs.task_mode))
       throw new AppModeError(
         "invalid_request",
@@ -489,6 +490,7 @@ export function createAppModeController(
       );
     if (connecting) validateConnectInputs(inputs);
     else if (options.useExisting === true) validateExistingInputs(inputs);
+    else if (canvasOnly) validateCanvasPreparationInputs(inputs);
     else validateInputs(inputs);
     validatePreparedCanonicalStart(inputs, options);
     if (connecting && prepareManaged !== undefined)
@@ -552,11 +554,16 @@ export function createAppModeController(
       );
     };
     throwIfCancelled(signal);
-    // The selected media is qualified against the compiled prompt before the
-    // canvas is replaced. Its widget values are read from the visible graph
-    // (`resolveSpliceMedia`); this pass is what proves the visible node and the
-    // compiled node are the same node and that its envelope is safe.
-    if (!adopting && inputs.task_mode !== "t2va") {
+    // Qualify chosen media before replacement: resolveSpliceMedia reads visible
+    // widgets, while this pass proves the compiled node has the same identity
+    // and a safe envelope.
+    // IMPORTANT: preparation with no selection reads no current media. Key this
+    // on canvasOnly, never materialize: managed starts on that route still queue.
+    if (
+      !adopting &&
+      inputs.task_mode !== "t2va" &&
+      (!canvasOnly || hasChosenCanvasMedia(inputs))
+    ) {
       let sourceCompiled: AppModeCompiledPrompt;
       try {
         throwIfCancelled(signal);
@@ -574,7 +581,12 @@ export function createAppModeController(
           "the selected host-owned image source could not be qualified",
         );
       }
-      const resolved = resolveOpaqueSources(serialized, sourceCompiled, inputs);
+      const resolved = resolveOpaqueSources(
+        serialized,
+        sourceCompiled,
+        inputs,
+        canvasOnly,
+      );
       if (resolved === undefined)
         throw new AppModeError(
           "incompatible_graph",
@@ -606,6 +618,7 @@ export function createAppModeController(
         nodeDefinitionReadinessReached,
         admitted,
         preparedCanonicalPrompt: options.preparedCanonicalPrompt,
+        canvasOnly,
       });
       ownedReference = resolved.ownedReference;
       materializedMedia = resolved.materializedMedia;
@@ -635,6 +648,8 @@ export function createAppModeController(
         "the repository-owned graph identity is unavailable",
       );
     }
+    await cropSources.validate(inputs);
+    throwIfCancelled(signal);
     // CRITICAL (, B-M1605-EXIST-01): constructing or configuring an
     // LGraph from a candidate that carries subgraph definitions or the
     // visible workflow's root id publishes candidate widgets through the
@@ -744,6 +759,7 @@ export function createAppModeController(
         materializedMedia,
         existingSubject,
         options.preparedCanonicalPrompt,
+        canvasOnly,
       )
     ) {
       await restoreOwnedGraph();

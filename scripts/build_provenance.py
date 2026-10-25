@@ -51,6 +51,9 @@ SOURCE_INPUT_FIXED_PATHS = (
     Path("frontend/pnpm-lock.yaml"),
     Path("frontend/tsconfig.json"),
     Path("frontend/vite.config.ts"),
+    # IMPORTANT: title admission compiles these ranges into the bundle; a face/coverage change
+    # must change the embedded source identity even when frontend source text is unchanged.
+    Path("comfyui_h3_context/fonts/font_manifest_v1.json"),
     Path("scripts/build_provenance.py"),
     Path("scripts/frontend_build_report.py"),
     Path("comfyui_h3_context/core/build_provenance.py"),

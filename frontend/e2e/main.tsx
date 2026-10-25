@@ -2789,8 +2789,8 @@ if (mode === "managed-sequence") {
     });
 } else {
   createRoot(root).render(
-    mode === "reference-picker" ? (
-      <ReferencePickerHarness />
+    mode === "reference-picker" || mode === "image-crop" ? (
+      <ReferencePickerHarness crop={mode === "image-crop"} />
     ) : mode === "production" ? (
       <ProductionHarness />
     ) : mode === "refusal-reasons" ? (

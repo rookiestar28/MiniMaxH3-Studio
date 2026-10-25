@@ -445,7 +445,7 @@ def _base_wire(name: str) -> dict[str, Any]:
 
 def test_the_corpus_states_both_command_rows_on_the_tone_base() -> None:
     corpus = build_corpus()
-    assert len(corpus.cases) == 334
+    assert len(corpus.cases) == 374
     assert corpus.commands().count("set_clip_audio") == 1
     book = build_recipes(corpus)
     accepted = book.by_id["command.set_clip_audio.accepted"]

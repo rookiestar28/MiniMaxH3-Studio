@@ -29,6 +29,7 @@ export default defineConfig({
     "journeys/editorKeyContainment.spec.ts",
     "journeys/titleInsertion.spec.ts",
     "journeys/titleDecorations.spec.ts",
+    "journeys/wipeTransitions.spec.ts",
     "journeys/liveBinDrag.spec.ts",
     //  D45-01: the generic media table serves every asset kind the workspace fixture emits,
     // and the monitor actually becomes playable on it.
@@ -120,6 +121,7 @@ export default defineConfig({
     "journeys/assisted.spec.ts",
     "journeys/connect.spec.ts",
     "journeys/referencePicker.spec.ts",
+    "journeys/imageCrop.spec.ts",
     "journeys/duration.spec.ts",
     "journeys/managedLifecycle.spec.ts",
     "journeys/managedSequence.spec.ts",

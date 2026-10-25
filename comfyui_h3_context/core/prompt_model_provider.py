@@ -177,6 +177,10 @@ class PromptModelOutcomeId(str, Enum):
     """
 
     OK = "prompt_model.ok"
+    PROPOSAL_USER_TEXT_ALTERED = "prompt_model.proposal_user_text_altered"
+    PROPOSAL_REFERENCE_DRIFT = "prompt_model.proposal_reference_drift"
+    PROPOSAL_AUDIT_FAILED = "prompt_model.proposal_audit_failed"
+    PROPOSAL_FORBIDDEN_CONTENT_ADDED = "prompt_model.proposal_forbidden_content_added"
     CANCELLED = "prompt_model.cancelled"
     TIMEOUT = "prompt_model.timeout"
     AUTHENTICATION = "prompt_model.authentication"
@@ -205,6 +209,7 @@ class PromptModelOutcomeId(str, Enum):
     REPAIR_REAUDIT_FAILED = "prompt_model.repair_reaudit_failed"
     REPAIR_REFERENCE_DRIFT = "prompt_model.repair_reference_drift"
     REPAIR_USER_TEXT_ALTERED = "prompt_model.repair_user_text_altered"
+    REPAIR_FORBIDDEN_CONTENT_ADDED = "prompt_model.repair_forbidden_content_added"
     REPAIR_OUTPUT_TRUNCATED = "prompt_model.repair_output_truncated"
     CONSENT_REVOKED = "prompt_model.consent_revoked"
     NETWORK_NOT_PERMITTED = "prompt_model.network_not_permitted"

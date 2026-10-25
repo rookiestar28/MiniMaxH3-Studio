@@ -6,8 +6,15 @@ import { SidebarStages } from "../src/components/SidebarStages";
 import {
   decodeAssistedPromptProposal,
   decodeAssistedSidebarResult,
+  ASSISTED_OUTCOME_IDS,
   type AssistedPromptProposalProjection,
 } from "../src/contracts/assistedPromptProposalCodec";
+import { promptModelOutcomeIds } from "../src/i18n/generatedBackendIdentities";
+import {
+  providerCopy,
+  stageChromeCatalog,
+  stageLabelsCatalog,
+} from "../src/i18n/catalog";
 import type { ProviderSettingsProjection } from "../src/contracts/providerSettingsCodec";
 import type { SidebarWorkspaceState } from "../src/state/sidebarWorkspace";
 import {
@@ -380,6 +387,83 @@ describe("assisted editor ownership", () => {
 });
 
 describe("assisted prompt proposal contract", () => {
+  it("keeps the closed assisted outcome inventory equal to the backend authority", () => {
+    expect(ASSISTED_OUTCOME_IDS).toEqual(promptModelOutcomeIds);
+  });
+
+  for (const locale of ["en", "zh-TW", "zh-CN"] as const) {
+    it(`shows distinct typed proposal refusals and preserves local inputs in ${locale}`, () => {
+      const text = stageChromeCatalog[locale];
+      const props = {
+        projection: validSidebarWorkspace,
+        locale,
+        busy: false,
+        assistedAuthorized: true,
+        onAction: vi.fn(),
+        onClientFailure: vi.fn(),
+      };
+      const { rerender } = render(<SidebarStages {...props} />);
+      fireEvent.click(
+        screen.getByRole("tab", { name: stageLabelsCatalog[locale].audit }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: text.revisionInstruction }),
+      );
+      const instruction = screen.getByRole("textbox", {
+        name: text.revisionInstruction,
+      });
+      fireEvent.change(instruction, {
+        target: { value: "Keep my revision instruction." },
+      });
+      const editor = screen.getByRole("textbox", { name: text.promptRevision });
+      fireEvent.change(editor, {
+        target: { value: "Keep my local prompt edit." },
+      });
+      const messages = new Set<string>();
+      for (const key of [
+        "proposal_user_text_altered",
+        "repair_user_text_altered",
+        "proposal_reference_drift",
+        "proposal_audit_failed",
+        "proposal_forbidden_content_added",
+        "repair_forbidden_content_added",
+      ] as const) {
+        const id = `prompt_model.${key}` as const;
+        const decoded = decodeAssistedSidebarResult({
+          schema: "h3.context.assisted_sidebar_result.v1",
+          state: "failed",
+          proposal: null,
+          execution: {
+            schema: "h3.context.assisted_draft.execution.v1",
+            draft: null,
+            outcome: {
+              schema: "h3.prompt_model.provider.v1",
+              outcome_id: id,
+              severity: "warning",
+              remediation: "none",
+              retryable: false,
+              parameters: {},
+              untrusted_provider_detail: null,
+            },
+            receipt: { ...proposal.receipt, outcome_id: id },
+          },
+        });
+        expect(decoded.outcomeId).toBe(id);
+        rerender(<SidebarStages {...props} assistedFailure={id} />);
+        const alert = screen.getByRole("alert");
+        expect(alert.textContent).toBe(providerCopy(locale).outcome[key]);
+        messages.add(alert.textContent!);
+        expect((instruction as HTMLTextAreaElement).value).toBe(
+          "Keep my revision instruction.",
+        );
+        expect((editor as HTMLTextAreaElement).value).toBe(
+          "Keep my local prompt edit.",
+        );
+      }
+      expect(messages.size).toBe(6);
+      expect(props.onAction).not.toHaveBeenCalled();
+    });
+  }
   it("decodes the new receipt facts and normalizes a strictly shaped legacy receipt", () => {
     expect(decodeAssistedPromptProposal(proposal).receipt).toMatchObject({
       schema: "h3.context.assisted_draft.receipt.v2",
@@ -416,6 +500,60 @@ describe("assisted prompt proposal contract", () => {
         }),
       ).toThrow(/incompatible/i);
     }
+  });
+  it.each([
+    "prompt_model.repair_user_text_altered",
+    "prompt_model.repair_forbidden_content_added",
+  ] as const)("decodes a hard-content adoption refusal: %s", (outcomeId) => {
+    const outcome = {
+      schema: "h3.prompt_model.provider.v1",
+      outcome_id: outcomeId,
+      severity: "error",
+      remediation: "none",
+      retryable: false,
+      parameters: { constraint_index: 0 },
+      untrusted_provider_detail: null,
+    };
+    const wire = {
+      schema: "h3.context.assisted_sidebar_result.v1",
+      state: "failed",
+      execution: {
+        schema: "h3.context.assisted_draft.execution.v1",
+        outcome,
+        draft: {
+          schema: "h3.context.assisted_draft.v1",
+          characters: 20,
+          attempts: 2,
+          repair_shape: "narrow_text_correction",
+          adoption: {
+            schema: "h3.context.assisted_draft.v1",
+            adopted: false,
+            failed_condition: "hard_content_preserved",
+            outcome,
+          },
+          audit: proposal.audit,
+          outcome,
+        },
+        receipt: { ...proposal.receipt, outcome_id: outcomeId, attempts: 2 },
+      },
+      proposal: null,
+    };
+    expect(decodeAssistedSidebarResult(wire).outcomeId).toBe(outcomeId);
+    expect(() =>
+      decodeAssistedSidebarResult({
+        ...wire,
+        execution: {
+          ...wire.execution,
+          draft: {
+            ...wire.execution.draft,
+            adoption: {
+              ...wire.execution.draft.adoption,
+              failed_condition: "unknown_content_condition",
+            },
+          },
+        },
+      }),
+    ).toThrow(/incompatible/i);
   });
   it("strictly decodes a proposal and rejects unknown response members", () => {
     const result = decodeAssistedSidebarResult({

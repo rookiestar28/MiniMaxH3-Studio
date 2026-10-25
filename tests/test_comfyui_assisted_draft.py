@@ -6,6 +6,7 @@ import asyncio
 import json
 import unittest
 from collections.abc import Mapping
+from typing import Any, cast
 
 from historical_prompt_model_fixtures import load_historical_catalog as load_prompt_model_catalog
 
@@ -28,9 +29,13 @@ from comfyui_h3_context.adapters.prompt_model_transport import (
     RemoteExchangeMetrics,
 )
 from comfyui_h3_context.core import (
+    ContextPlan,
     ContextReport,
     ExecutionCorrelation,
+    PromptDocument,
+    PromptFidelityAuditResult,
     SidebarWorkspaceError,
+    SidebarWorkspaceProjection,
     TaskMode,
     build_native_h3_wiring,
     canonical_fingerprint,
@@ -40,6 +45,7 @@ from comfyui_h3_context.core.assisted_draft_orchestration import (
     AssistedDraftExecutionResult,
     run_assisted_draft_orchestration,
 )
+from comfyui_h3_context.core.assisted_refinement import RequestedAllowance
 from comfyui_h3_context.core.prompt_model_provider import (
     PromptModelOutcomeId,
     PromptModelQualificationEvidence,
@@ -447,6 +453,146 @@ class RealSessionBindingTests(unittest.TestCase):
             workspaces.get(workspace.workspace_id).report_fingerprint, workspace.report_fingerprint
         )
 
+    def test_refine_requested_camera_and_cut_survive_real_dispatch(self) -> None:
+        from unittest.mock import patch
+
+        from comfyui_h3_context.core.prompt_fidelity import audit_prompt_fidelity
+
+        self.assertTrue(self.registry.finish_assisted_execution(self.lease))
+        workspaces = SidebarWorkspaceRegistry(max_entries=2, ttl_seconds=60)
+        workspace = workspaces.publish(
+            self.report, build_native_h3_wiring(self.report), ExecutionCorrelation("refine", "54")
+        )
+        candidate = self.report.prompt_document.text.replace(
+            "A paper kite crosses a quiet sky.",
+            "A paper kite crosses a quiet sky. The camera pushes in. The camera cuts to the kite.",
+        )
+        self.assertNotEqual(candidate, self.report.prompt_document.text)
+        exchange = Exchange(candidate + " contact sheet", candidate)
+        root = {
+            "schema": SIDEBAR_ACTION_SCHEMA,
+            "workspace_id": workspace.workspace_id,
+            "expected_revision": workspace.report_revision,
+            "expected_report_fingerprint": workspace.report_fingerprint,
+        }
+        allowances: list[RequestedAllowance | None] = []
+
+        def observe(
+            plan: ContextPlan,
+            document: PromptDocument,
+            *,
+            allowance: RequestedAllowance | None = None,
+        ) -> PromptFidelityAuditResult:
+            allowances.append(allowance)
+            return audit_prompt_fidelity(plan, document, allowance=allowance)
+
+        def dispatch(action: str, payload: dict[str, object]) -> Any:
+            return cast(
+                Any,
+                asyncio.run(
+                    dispatch_assisted_sidebar_action(
+                        {**root, "action": action, "payload": payload},
+                        SESSION_ID,
+                        workspace_registry=workspaces,
+                        provider_registry=self.registry,
+                        exchange_factory=lambda _snapshot: exchange,
+                    )
+                ),
+            )
+
+        with (
+            patch(
+                "comfyui_h3_context.core.assisted_draft.audit_prompt_fidelity", side_effect=observe
+            ),
+            patch(
+                "comfyui_h3_context.adapters.comfyui_sidebar_workspace.audit_prompt_fidelity",
+                side_effect=observe,
+            ),
+        ):
+            result = dispatch("refine_prompt", {"instruction": "加入推鏡和轉場"})
+            self.assertEqual(result["state"], "proposal")
+            self.assertEqual(result["proposal"]["candidate_text"], candidate)
+            self.assertEqual(result["execution"]["receipt"]["attempts"], 2)
+            proposal = result["proposal"]
+            payload = {
+                "proposal_id": proposal["proposal_id"],
+                "expected_proposal_revision": proposal["proposal_revision"],
+            }
+            edited = dispatch(
+                "edit_assisted_proposal", {**payload, "prompt_text": candidate + " Soft light."}
+            )
+            self.assertEqual(edited["candidate_text"], candidate + " Soft light.")
+            accepted = dispatch(
+                "accept_assisted_proposal",
+                {**payload, "expected_proposal_revision": edited["proposal_revision"]},
+            )
+        # Baseline, candidate and repair, then publish/edit/accept: all use one content-free grant.
+        self.assertEqual(len(allowances), 6)
+        assert allowances[0] is not None
+        self.assertTrue(all(value is allowances[0] for value in allowances))
+        self.assertTrue(allowances[0].camera_motion and allowances[0].cut)
+        validated = workspaces.dispatch(
+            {
+                **root,
+                "expected_revision": accepted.report_revision,
+                "expected_report_fingerprint": accepted.report_fingerprint,
+                "action": "validate",
+                "payload": {},
+            }
+        )
+        assert isinstance(validated, SidebarWorkspaceProjection)
+        self.assertEqual(validated.to_wire()["validation_status"], "passed")
+        self.assertEqual(
+            [call[1] for call in exchange.calls], ["/api/tags", "/api/chat", "/api/chat"]
+        )
+
+    def test_refine_conflict_repairs_once_then_returns_a_content_free_audit_failure(self) -> None:
+        self.assertTrue(self.registry.finish_assisted_execution(self.lease))
+        request = H3ContextRequestNode().build_request(
+            TaskMode.T2VA, "A kite. Static camera. No cuts.", duration_seconds=6.0
+        )[0]
+        plan = H3ContextPlanNode().build_plan(request)[0]
+        _, _, document = H3ContextCompilerNode().compile(plan)
+        report = H3ContextValidatorNode().validate(plan, document)[1]
+        workspaces = SidebarWorkspaceRegistry(max_entries=2, ttl_seconds=60)
+        workspace = workspaces.publish(
+            report, build_native_h3_wiring(report), ExecutionCorrelation("refine", "55")
+        )
+        candidate = report.prompt_document.text.replace(
+            "A kite. Static camera. No cuts.",
+            "A kite. The camera pushes in. The camera cuts to the field.",
+        )
+        exchange = Exchange(candidate, candidate)
+        result = asyncio.run(
+            dispatch_assisted_sidebar_action(
+                {
+                    "schema": SIDEBAR_ACTION_SCHEMA,
+                    "workspace_id": workspace.workspace_id,
+                    "expected_revision": workspace.report_revision,
+                    "expected_report_fingerprint": workspace.report_fingerprint,
+                    "action": "refine_prompt",
+                    "payload": {"instruction": "加入推鏡和轉場"},
+                },
+                SESSION_ID,
+                workspace_registry=workspaces,
+                provider_registry=self.registry,
+                exchange_factory=lambda _snapshot: exchange,
+            )
+        )
+        assert isinstance(result, dict)
+        self.assertEqual(result["state"], "failed")
+        self.assertIsNone(result["proposal"])
+        wire = cast(dict[str, Any], result["execution"])
+        self.assertEqual(set(wire), {"schema", "outcome", "draft", "receipt"})
+        self.assertIsNone(wire["draft"])
+        self.assertEqual(wire["outcome"]["outcome_id"], "prompt_model.proposal_audit_failed")
+        self.assertEqual(wire["receipt"]["outcome_id"], wire["outcome"]["outcome_id"])
+        self.assertEqual(wire["receipt"]["attempts"], 2)
+        self.assertNotIn(candidate, json.dumps(result))
+        self.assertEqual(
+            workspaces.get(workspace.workspace_id).report_fingerprint, workspace.report_fingerprint
+        )
+
     def test_refine_is_closed_measured_data_and_invalid_input_never_acquires_a_lease(self) -> None:
         from unittest.mock import patch
 
@@ -463,7 +609,12 @@ class RealSessionBindingTests(unittest.TestCase):
             "action": "refine_prompt",
             "payload": {"instruction": "  Emphasize the lighting. 中文 😀  "},
         }
-        exchange = Exchange(self.report.prompt_document.text)
+        candidate = self.report.prompt_document.text.replace(
+            "A paper kite crosses a quiet sky.",
+            "A paper kite crosses a quiet sky in warm amber light.",
+        )
+        self.assertNotEqual(candidate, self.report.prompt_document.text)
+        exchange = Exchange(candidate)
         result = asyncio.run(
             dispatch_assisted_sidebar_action(
                 action,
@@ -475,6 +626,8 @@ class RealSessionBindingTests(unittest.TestCase):
         )
         assert isinstance(result, dict)
         self.assertEqual(result["state"], "proposal")
+        projected = cast(dict[str, Any], result["proposal"])
+        self.assertEqual(projected["candidate_text"], candidate)
         chat = exchange.calls[-1][2]
         assert isinstance(chat, Mapping)
         messages = chat["messages"]

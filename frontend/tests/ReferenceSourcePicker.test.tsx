@@ -61,6 +61,73 @@ function Harness({
 }
 describe("ordered reference picker", () => {
   it.each(SUPPORTED_LOCALES)(
+    "explains missing node kinds and keeps capacity reasons first in %s",
+    (locale) => {
+      const text = sidebarCopy(locale);
+      const props = {
+        images: [],
+        videos: [],
+        audios: [],
+        soundtrack: "included" as const,
+        disabled: false,
+        text,
+        onSources: () => undefined,
+        onSoundtrack: () => undefined,
+      };
+      const view = render(
+        <ReferenceSourcePicker
+          {...props}
+          sources={sources.filter((source) => source.kind === "video")}
+        />,
+      );
+      for (const kind of ["image", "audio"] as const) {
+        const reason = text.sourceGuidance.noKind
+          .replace("{kind}", text.sourceGuidance.kinds[kind])
+          .replace("{node}", text.sourceGuidance.loaders[kind]);
+        const picker = screen.getByRole("combobox", {
+          name: kind === "image" ? text.referenceImages : text.referenceAudios,
+        }) as HTMLSelectElement;
+        expect(picker.disabled).toBe(true);
+        expect(picker.title).toBe(reason);
+        expect(
+          document.getElementById(picker.getAttribute("aria-describedby")!)
+            ?.textContent,
+        ).toBe(reason);
+      }
+      view.rerender(<ReferenceSourcePicker {...props} sources={[]} />);
+      const shared = screen.getByText(text.sourceGuidance.noReferenceMedia);
+      expect(
+        document.querySelectorAll(".h3-reference-kind .h3-reference-guidance"),
+      ).toHaveLength(0);
+      for (const name of [
+        text.referenceImages,
+        text.referenceVideos,
+        text.referenceAudios,
+      ])
+        expect(
+          screen
+            .getByRole("combobox", { name })
+            .getAttribute("aria-describedby"),
+        ).toBe(shared.id);
+      view.rerender(
+        <ReferenceSourcePicker
+          {...props}
+          images={Array.from({ length: 9 }, (_, i) => String(i))}
+          sources={[]}
+        />,
+      );
+      const full = screen.getByRole("combobox", {
+        name: text.referenceImages,
+      }) as HTMLSelectElement;
+      expect(full.title).toBe(text.referenceActions.reasons.per_kind);
+      expect(
+        document.getElementById(full.getAttribute("aria-describedby")!)
+          ?.textContent,
+      ).toBe(text.referenceActions.reasons.per_kind);
+    },
+  );
+
+  it.each(SUPPORTED_LOCALES)(
     "adds, reorders and removes with focus and relabeling in %s",
     async (locale) => {
       const user = userEvent.setup();

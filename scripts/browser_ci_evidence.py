@@ -304,6 +304,109 @@ def relative_label(value: Any) -> str:
     return path
 
 
+def stage_diagnostic(value: Any, *, continuous: bool = False) -> dict[str, Any]:
+    """Admit only the bounded synthetic stage clocks, never complete observer rows."""
+    keys = (
+        {"version", "windows", "samplerIntervalsMs", "samplerIntervalsDropped"}
+        if continuous
+        else {"version", "eventsDropped", "callbackCount", "events", "snapshots"}
+    )
+    if (
+        not isinstance(value, dict)
+        or set(value) != keys
+        or type(value["version"]) is not int
+        or value["version"] != 1
+    ):
+        raise ValueError("malformed stage diagnostics")
+
+    def scalar(item: Any) -> int | float:
+        if type(item) not in (int, float) or not 0 <= item <= 3_600_000 or not math.isfinite(item):
+            raise ValueError("stage facts must be bounded finite nonnegative numbers")
+        return float(item)
+
+    def rows(items: Any, members: set[str], maximum: int) -> list[dict[str, Any]]:
+        if not isinstance(items, list) or not 0 <= len(items) <= maximum:
+            raise ValueError("stage arrays must be bounded")
+        previous = 0.0
+        for row in items:
+            if not isinstance(row, dict) or set(row) != members:
+                raise ValueError("stage rows must contain closed facts only")
+            at = scalar(row["atMs"])
+            if at < previous:
+                raise ValueError("stage clocks must be ordered")
+            previous = at
+        return items
+
+    if continuous:
+        if (
+            type(value["samplerIntervalsDropped"]) is not int
+            or value["samplerIntervalsDropped"] != 0
+        ):
+            raise ValueError("incomplete continuous sampler diagnostics")
+        windows = value["windows"]
+        if not isinstance(windows, list) or len(windows) != 3:
+            raise ValueError("all three continuous windows are required")
+        for index, (window, bounds) in enumerate(
+            zip(windows, ((4, 43), (52, 91), (100, 139)), strict=True)
+        ):
+            if (
+                not isinstance(window, dict)
+                or set(window) != {"index", "frames"}
+                or type(window["index"]) is not int
+                or window["index"] != index
+            ):
+                raise ValueError("continuous window labels must be closed")
+            frames = rows(window["frames"], {"frame", "atMs"}, 40)
+            seen: set[int] = set()
+            for row in frames:
+                frame = row["frame"]
+                if type(frame) is not int or not bounds[0] <= frame <= bounds[1] or frame in seen:
+                    raise ValueError(
+                        "continuous first-seen frames must be unique and in their window"
+                    )
+                seen.add(frame)
+        intervals = value["samplerIntervalsMs"]
+        if not isinstance(intervals, list) or not 1 <= len(intervals) <= 20_000:
+            raise ValueError("sampler intervals must be nonempty and bounded")
+        for interval in intervals:
+            scalar(interval)
+    else:
+        if type(value["eventsDropped"]) is not int or value["eventsDropped"] != 0:
+            raise ValueError("incomplete navigation stage diagnostics")
+        events = rows(value["events"], {"navigation", "stage", "atMs"}, 20_000)
+        if not events:
+            raise ValueError("navigation stage diagnostics must be nonempty")
+        if (
+            type(value["callbackCount"]) is not int
+            or not len(events) <= value["callbackCount"] <= 10_000_000
+        ):
+            raise ValueError(
+                "stage callback count must be a bounded integer covering retained events"
+            )
+        stages = {
+            "keydown",
+            "seek-request",
+            "runtime-seek",
+            "video-seeking",
+            "video-seeked",
+            "native-frame",
+            "paint-start",
+            "paint-end",
+            "delivered",
+        }
+        for row in events:
+            if (
+                type(row["navigation"]) is not int
+                or not 1 <= row["navigation"] <= 20_000
+                or not isinstance(row["stage"], str)
+                or row["stage"] not in stages
+            ):
+                raise ValueError("navigation stage labels must be closed")
+        for row in rows(value["snapshots"], {"atMs", "durationMs"}, 4096):
+            scalar(row["durationMs"])
+    return value
+
+
 def sanitized_error(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("malformed browser error")
@@ -393,6 +496,28 @@ def sanitize_report(report: Any) -> dict[str, Any]:
         for attachment in attachments:
             if not isinstance(attachment, dict):
                 raise ValueError("malformed attachment")
+            if (
+                attachment.get("name")
+                in {"integrated-navigation-stages", "continuous-preview-stages"}
+                and attachment.get("contentType") == "application/json"
+                and "body" in attachment
+                and "path" not in attachment
+            ):
+                # CRITICAL: stage probes expose only clocks and fixed labels. Do not admit the
+                # harness snapshot or arbitrary native callback metadata through this branch.
+                facts = stage_diagnostic(
+                    json.loads(base64.b64decode(attachment["body"], validate=True)),
+                    continuous=attachment["name"] == "continuous-preview-stages",
+                )
+                result["attachments"].append(
+                    {
+                        "name": attachment["name"],
+                        "contentType": "application/json",
+                        "body": base64.b64encode(
+                            json.dumps(facts, allow_nan=False).encode()
+                        ).decode("ascii"),
+                    }
+                )
             if (
                 attachment.get("name") == "integrated-presentation-timeline"
                 and attachment.get("contentType") == "application/json"

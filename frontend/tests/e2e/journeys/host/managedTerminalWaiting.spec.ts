@@ -1,6 +1,16 @@
 import { expect, test } from "../../host/fixture";
 
 import { diffGraphSurroundings } from "../../../support/surroundingsDiff";
+import { sidebarCopy } from "../../../../src/i18n/catalog";
+import {
+  PRODUCTION_ACCUMULATION_ACTION_VERSION,
+  decodeProductionAccumulatedProject,
+} from "../../../../src/contracts/productionAccumulationCodec";
+import { PRODUCTION_ACTION_SCHEMA } from "../../../../src/contracts/productionWorkbenchCodec";
+import {
+  decodeSequenceCoordinatorResult,
+  type CoordinatorProductionMemberAuthority,
+} from "../../../../src/host/sequenceCoordinator";
 import {
   assertCandidateBundleInjection,
   awaitHostExecution,
@@ -31,15 +41,8 @@ type CloseReceipt = Readonly<{
   status: number;
   disposition: string;
   jobState: string;
-  completed: number;
-  runState: string;
+  sequenceComplete: boolean;
   artifactAuthority: boolean;
-  geometry: Readonly<{
-    format: string;
-    frameCount: number;
-    width: number;
-    height: number;
-  }> | null;
 }>;
 
 function installM2332ManagedExecutionProjection(): void {
@@ -296,6 +299,7 @@ test("M23-32 real host success waits for a later verified artifact", async ({
   );
   const routeReceipts = monitorManagedRouteResponses(page);
   const closeResponses: CloseReceipt[] = [];
+  const closeMembers: CoordinatorProductionMemberAuthority[] = [];
   const closeRequests: Array<{
     artifact: CloseReceipt["artifact"];
     queuePromptId: string;
@@ -395,30 +399,19 @@ test("M23-32 real host success waits for a later verified artifact", async ({
     void response
       .json()
       .then((value: unknown) => {
-        const wire = value as Record<string, any>;
-        const segment = Array.isArray(wire.production?.segments)
-          ? wire.production.segments[0]
-          : undefined;
-        const geometry = segment?.delivered_geometry;
+        // CRITICAL: member closes carry a compact authority, not production.run.
+        // Read the exact project after success; missing legacy fields are not run state.
+        const result = decodeSequenceCoordinatorResult(value);
+        if (!("productionMemberAuthority" in result))
+          throw new Error("the managed close has no project member authority");
+        closeMembers.push(result.productionMemberAuthority);
         closeResponses.push({
           artifact: artifactKind(requestArtifact),
           status: response.status(),
-          disposition: String(wire.disposition ?? ""),
-          jobState: String(wire.sequence?.progress?.[0]?.state ?? ""),
-          completed: Number(wire.production?.run?.completed ?? -1),
-          runState: String(wire.production?.run?.state ?? ""),
-          artifactAuthority:
-            wire.artifact_authority !== null &&
-            typeof wire.artifact_authority === "object",
-          geometry:
-            geometry !== null && typeof geometry === "object"
-              ? {
-                  format: String(geometry.format ?? ""),
-                  frameCount: Number(geometry.frame_count ?? -1),
-                  width: Number(geometry.width ?? -1),
-                  height: Number(geometry.height ?? -1),
-                }
-              : null,
+          disposition: result.disposition,
+          jobState: result.sequence.progress[0]?.state ?? "",
+          sequenceComplete: result.sequence.complete,
+          artifactAuthority: result.artifactAuthority !== null,
         });
       })
       .catch(() => undefined);
@@ -485,6 +478,15 @@ test("M23-32 real host success waits for a later verified artifact", async ({
   ).toBeVisible();
   const submit = container.locator('[data-h3-focus-key="app-submit"]');
   await expect(submit).toBeEnabled({ timeout: 30_000 });
+  const fromSubmission = (await sampleProgress(page)).submitted;
+  // CRITICAL: cold Start only prepares the canvas. Waiting for execution after that
+  // press times out without queueing; require readiness and the explicit queue press.
+  await submit.click();
+  await expect(submit).toHaveText(sidebarCopy("en").queueCurrentGraph, {
+    timeout: 30_000,
+  });
+  await expect(submit).toBeEnabled();
+  expect((await sampleProgress(page)).submitted).toBe(fromSubmission);
   // a recorded success without an artifact now reads `/history` and fails typed when the
   // completed record holds no SaveVideo output, which this model-free graph never has. Hold the
   // browser's history read until the test-controlled late event below is delivered, so this row
@@ -500,7 +502,6 @@ test("M23-32 real host success waits for a later verified artifact", async ({
     await lateEventDelivered;
     await route.continue();
   });
-  const fromSubmission = (await sampleProgress(page)).submitted;
   await submit.click();
   await expect
     .poll(async () => (await sampleProgress(page, fromSubmission)).started, {
@@ -541,10 +542,8 @@ test("M23-32 real host success waits for a later verified artifact", async ({
     status: 200,
     disposition: "verification_pending",
     jobState: "running",
-    completed: 0,
-    runState: "running",
+    sequenceComplete: false,
     artifactAuthority: false,
-    geometry: null,
   });
   expect(closeRequests).toHaveLength(1);
   expect(closeRequests[0]?.artifact).toBe("null");
@@ -715,14 +714,61 @@ test("M23-32 real host success waits for a later verified artifact", async ({
     status: 200,
     disposition: "succeeded",
     jobState: "succeeded",
-    completed: 1,
-    runState: "succeeded",
+    sequenceComplete: true,
     artifactAuthority: true,
-    geometry: { format: "mp4", frameCount: 192, width: 512, height: 512 },
   });
+  expect(closeMembers).toHaveLength(2);
+  expect(closeMembers[1]).toEqual(closeMembers[0]);
   await expect(
     container.locator('[data-shell-status="projected"]'),
   ).toHaveCount(1, { timeout: 60_000 });
+  const member = closeMembers[1]!;
+  // IMPORTANT: owned actions require browser-origin metadata; APIRequestContext is refused.
+  const projectRead = await page.evaluate(
+    async ({ memberValue, version, schema, requestId }) => {
+      const response = await fetch("/h3-context/v1/production/action", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          schema,
+          request_id: requestId,
+          action: "read_accumulated_project",
+          payload: {
+            version,
+            workspace_handle: memberValue.workspaceHandle,
+            workspace_id: memberValue.workspaceId,
+          },
+        }),
+      });
+      return {
+        status: response.status,
+        body: (await response.json()) as unknown,
+      };
+    },
+    {
+      memberValue: member,
+      version: PRODUCTION_ACCUMULATION_ACTION_VERSION,
+      schema: PRODUCTION_ACTION_SCHEMA,
+      requestId: `terminal-project-read-${promptId.replace(/[^A-Za-z0-9]/g, "-")}`,
+    },
+  );
+  expect(projectRead.status).toBe(200);
+  const project = decodeProductionAccumulatedProject(projectRead.body);
+  expect(project.workspaceHandle).toBe(member.workspaceHandle);
+  expect(project.workspaceId).toBe(member.workspaceId);
+  expect(project.workspace).not.toBeNull();
+  const production = project.workspace!;
+  expect(production.runState).toBe("succeeded");
+  expect(production.runProgress).toEqual({ completed: 1, total: 1 });
+  expect(production.segments).toHaveLength(1);
+  expect(production.segments[0]?.segmentId).toBe(member.memberSegmentId);
+  expect(production.segments[0]?.deliveredGeometry).toEqual({
+    format: "mp4",
+    frameCount: 192,
+    width: 512,
+    height: 512,
+  });
   await container.getByRole("button", { name: "Production" }).click();
   await expect(
     container.getByText("1 of 1 segments", { exact: true }),

@@ -62,9 +62,9 @@ def test_runner_covers_exactly_every_corpus_row(report: dict[str, object]) -> No
     assert isinstance(rows, list)
     #  took the corpus from the accepted 306 to 310 by adding one row for each visual layer
     # class at the shipped 1280 x 720 cap, and to 334 with the 22 `clip_audio` rows and the
-    # two rows of its `set_clip_audio` command. The pin moves with the corpus and the accepted rows
-    # are asserted to still be there, so a growth that quietly replaced a row would fail here.
-    assert len(rows) == len(corpus.cases) == 334
+    # two rows of its `set_clip_audio` command. Forty directional-wipe properties now make 374.
+    # Preserve each older population while accounting for the new family independently.
+    assert len(rows) == len(corpus.cases) == 374
     assert {row["case_id"] for row in rows} == set(corpus.case_ids)
     high_resolution = {
         row["case_id"] for row in rows if str(row["case_id"]).startswith("high_resolution.")
@@ -74,7 +74,16 @@ def test_runner_covers_exactly_every_corpus_row(report: dict[str, object]) -> No
     assert len(high_resolution) == 4
     assert len(clip_audio) == 22
     assert clip_audio_command <= {row["case_id"] for row in rows}
-    assert len(set(corpus.case_ids) - high_resolution - clip_audio - clip_audio_command) == 306
+    wipes = {
+        row["case_id"] for row in rows if str(row["case_id"]).startswith("transition.wipe_from_")
+    }
+    assert len(wipes) == 40
+    assert (
+        len(set(corpus.case_ids) - high_resolution - clip_audio - clip_audio_command - wipes) == 306
+    )
+    wipe_rows = [row for row in rows if row["case_id"] in wipes]
+    assert sum(row["status"] == "PASS" for row in wipe_rows) == 12
+    assert sum(row["status"] == "BLOCKED" for row in wipe_rows) == 28
     admission = report["admission"]
     assert isinstance(admission, dict)
     assert admission == {
@@ -91,7 +100,7 @@ def test_report_totals_reconcile_with_admitted_rows(report: dict[str, object]) -
     rows = report["rows"]
     assert isinstance(totals, dict)
     assert isinstance(rows, list)
-    assert sum(totals.values()) == len(rows) == 334
+    assert sum(totals.values()) == len(rows) == 374
     # No mismatch and nothing left unresolved by an execution defect: every row this runner can
     # reach is `PASS` or, for the ten deferred audio-seam negatives it executes,
     # `DECLARED_UNSUPPORTED`; the rest are honestly `BLOCKED` (awaiting render/browser evidence) or
@@ -105,12 +114,14 @@ def test_report_totals_reconcile_with_admitted_rows(report: dict[str, object]) -
     assert all(row["measurements"] for row in unsupported)
     assert (
         totals["PASS"] + totals["DECLARED_UNSUPPORTED"] + totals["BLOCKED"] + totals["NOT_RUN"]
-        == 334
+        == 374
     )
     # The four high-resolution rows and the fourteen rendering `clip_audio` rows are
-    # `render_and_browser`, so a backend runner reaches none of them: they are among the 168
-    # `BLOCKED`, awaiting the render and browser stages, never counted as passing here.
-    assert totals["BLOCKED"] == 168
+    # `render_and_browser`, so a backend runner reaches none of them. The 28 visual wipe rows
+    # join them among 196 `BLOCKED`, awaiting render/browser evidence rather than passing here.
+    assert totals["BLOCKED"] == 196
+    assert totals["PASS"] == 152
+    assert totals["NOT_RUN"] == 16
 
 
 def test_admission_refuses_a_duplicated_row() -> None:

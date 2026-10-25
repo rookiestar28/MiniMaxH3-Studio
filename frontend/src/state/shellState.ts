@@ -2,6 +2,8 @@ import type { ProductShellProjection } from "../contracts/projectionCodecs";
 import type { AppModeRefusalReason } from "../host/appMode";
 import type { GraphInspection } from "../host/graphAdapter";
 import type { AppModeSnapshot } from "../lifecycle/appModeMachine";
+import type { UnchosenPreparationRole } from "../host/appModeCanvasPreparation";
+import { retainPreparedCanvasGuidance } from "./preparedCanvasGuidance";
 
 /** The sidebar owns a small, reversible state machine rather than a terminal fallback. */
 export type ShellInteractiveReason =
@@ -48,6 +50,8 @@ export type ShellState =
   | {
       status: "interactive";
       reason: ShellInteractiveReason;
+      unchosenSourceRoles?: readonly UnchosenPreparationRole[];
+      preparedGraphFingerprint?: string;
       existingGraph?: boolean;
       inspection?: GraphInspection;
       message?: string;
@@ -157,6 +161,7 @@ export type ShellAction =
       type: "graph";
       inspection: GraphInspection;
       appModeAvailable?: boolean;
+      graphFingerprint?: string;
     }
   | {
       type: "projection";
@@ -515,5 +520,10 @@ export function reduceShellState(
     reason: "native_preference",
     existingGraph: true,
     inspection: action.inspection,
+    ...retainPreparedCanvasGuidance(
+      state,
+      action.inspection,
+      action.graphFingerprint,
+    ),
   };
 }

@@ -12,6 +12,53 @@ from test_m25_authoring_render_executor import process_control, stores
 from test_m25_authoring_render_jobs import _plan, long_plan
 from test_m25_render_job_leases import image_bound as image_bound
 
+from comfyui_h3_context.core.canonical import canonical_fingerprint
+from comfyui_h3_context.core.composition_contract import Transition
+
+
+@pytest.mark.parametrize(
+    "kind,duration",
+    [
+        ("wipe_unknown_v1", 4),
+        ("wipe_from_left_v1", 0),
+        ("wipe_from_left_v1", 5),
+        ("wipe_from_left_v1", True),
+    ],
+)
+def test_schedule_refuses_wipe_metadata_that_disagrees_with_the_resolved_window(
+    kind: str, duration: int
+) -> None:
+    plan = _plan()
+    chunks = []
+    for chunk in plan.resolved_operations:
+        frames = tuple(
+            replace(
+                frame,
+                layers=tuple(
+                    replace(
+                        layer,
+                        wipe=Transition(kind, duration),
+                        operation_ids=tuple(
+                            "WipeV1" if value == "CrossDissolveV1" else value
+                            for value in layer.operation_ids
+                        ),
+                    )
+                    if layer.clip_id == "clip-video-overlay"
+                    else layer
+                    for layer in frame.layers
+                ),
+            )
+            for frame in chunk.frames
+        )
+        changed = replace(chunk, frames=frames)
+        chunks.append(
+            replace(
+                changed, chunk_fingerprint=canonical_fingerprint(changed.fingerprint_material())
+            )
+        )
+    with pytest.raises(graphs().RenderGraphError, match="plan_mismatch"):
+        graphs().compile_render_schedule(replace(plan, resolved_operations=tuple(chunks)))
+
 
 def graphs() -> Any:
     return importlib.import_module("comfyui_h3_context.adapters.authoring_render_graph")

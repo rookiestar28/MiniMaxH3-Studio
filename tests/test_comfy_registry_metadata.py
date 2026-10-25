@@ -162,7 +162,7 @@ class ComfyRegistryMetadataTests(unittest.TestCase):
 
     def test_publication_workflow_is_owner_guarded_and_secret_scoped(self) -> None:
         text = (ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8")
-        self.assertIn("github.repository == 'rookiestar28/ComfyUI-MiniMaxH3-Studio'", text)
+        self.assertIn("github.repository == 'rookiestar28/MiniMaxH3-Studio'", text)
         self.assertIn("REGISTRY_ACCESS_TOKEN", text)
         self.assertIn("scripts/validate_comfy_registry_metadata.py", text)
         self.assertIn("--require-finalized --source-root . --public-projection", text)

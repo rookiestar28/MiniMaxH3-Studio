@@ -375,7 +375,7 @@ describe("M17-29 serialized template resolution", () => {
     },
   );
 
-  it("preserves the official INT8 video VAE in a nested template", () => {
+  it("resolves the official INT8 video VAE to an installed nested variant", () => {
     const { workflow, promotedIndex } = nestedTemplate();
     const definition = ((workflow.definitions as Json).subgraphs as Json[])[0]!;
     const video = familySpecs("image_to_video").find(
@@ -397,12 +397,12 @@ describe("M17-29 serialized template resolution", () => {
     ] = value;
     const { inventory } = installedInventory("image_to_video");
     const result = resolveOfficialAssets(workflow, "image_to_video", inventory);
-    expect(result.unresolvedSlots).toEqual(["video_vae"]);
+    expect(result.unresolvedSlots).toEqual([]);
     expect(
       ((result.workflow.nodes as Json[])[0]!.widgets_values as unknown[])[
         index
       ],
-    ).toBe(value);
+    ).toBe(inventory.vae!.find((entry) => entry.includes("video_vae")));
   });
 
   it("writes nested loader choices to the promoted top-level instance", () => {

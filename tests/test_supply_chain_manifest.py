@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -18,9 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # IMPORTANT: move this pin only with the rebuilt bundle and supply-chain manifest; otherwise HEAD
 # fails its own deterministic runtime-parity contract.
 RUNTIME_BUNDLE_SHA256 = (
-    "90615618067ab6143c0f8d422cf5182a913cd1d48e2932b5efc48a26a968c68b"  # pragma: allowlist secret
+    "a67420d0c60f13801603f4898610d789270e296c3d713f63e2ec02244bea8fe7"  # pragma: allowlist secret
 )
-RUNTIME_BUNDLE_SIZE = 1926109
+RUNTIME_BUNDLE_SIZE = 1970766
 
 
 def supply_chain() -> ModuleType:
@@ -137,6 +138,46 @@ class SupplyChainManifestTests(unittest.TestCase):
         )
         self.assertNotIn("reference/", json.dumps(document, ensure_ascii=False))
         self.assertNotIn("NOASSERTION license", json.dumps(document, ensure_ascii=False))
+
+    def test_frontend_runtime_dependency_tree_is_classified_as_bundled(self) -> None:
+        pnpm = shutil.which("pnpm")
+        self.assertIsNotNone(pnpm, "install the pinned frontend tooling before this check")
+        result = subprocess.run(
+            [str(pnpm), "list", "--prod", "--depth", "Infinity", "--json"],
+            cwd=ROOT / "frontend",
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        tree = json.loads(result.stdout)[0]
+        manifest = json.loads((ROOT / "frontend/package.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(tree["dependencies"]), set(manifest["dependencies"]))
+        runtime: set[tuple[str, str]] = set()
+
+        def visit(dependencies: dict[str, dict[str, object]]) -> None:
+            for name, package in dependencies.items():
+                runtime.add((name, str(package["version"])))
+                visit(package.get("dependencies", {}))  # type: ignore[arg-type]
+
+        visit(tree["dependencies"])
+        self.assertIn(("scheduler", "0.27.0"), runtime)
+        packages = supply_chain().build_spdx_sbom()["packages"]
+        for name, version in sorted(runtime):
+            with self.subTest(package=name, version=version):
+                package = next(
+                    item
+                    for item in packages
+                    if item["name"] == name and item["versionInfo"] == version
+                )
+                self.assertEqual(package["comment"], "bundled_in_sidebar_runtime")
+                self.assertEqual(package["primaryPackagePurpose"], "LIBRARY")
+                self.assertEqual(package["licenseConcluded"], "MIT")
+        for name in ("vite", "typescript", "@types/react", "pytest"):
+            with self.subTest(development_package=name):
+                package = next(item for item in packages if item["name"] == name)
+                self.assertEqual(package["comment"], "development_build_only_not_bundled")
+                self.assertEqual(package["primaryPackagePurpose"], "SOURCE")
 
     def test_fresh_spdx_contains_the_verified_bundled_font_release(self) -> None:
         module = supply_chain()

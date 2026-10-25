@@ -473,9 +473,9 @@ class ToolingContractTests(unittest.TestCase):
         # literal has left the tree is inert -- it can never match again -- and both sides of the
         # census above would go on agreeing with each other about it forever. This is the assertion
         # that makes the next one fail loudly rather than wait for someone to go looking. When it
-        # fires, the fix is to delete the row from `.secrets.baseline` and its entry here **in the
-        # same commit**, never to regenerate the baseline: this is an approved register, and a
-        # regenerated one is a different document nobody approved.
+        # fires, remove the row from `requirements/secret-scan-baseline.json` and its matching
+        # entry here in the same commit; never regenerate this approved register. A regenerated
+        # baseline is a different document nobody approved.
         for identity, paths in sorted(approved_paths.items()):
             literal = approved_literals[identity]
             for path in paths:
@@ -494,19 +494,6 @@ class ToolingContractTests(unittest.TestCase):
             for path in paths
         )
         self.assertEqual(sum(expected.values()), 62)
-        # SECURITY: these four matches are the exact public repository owner/name, not
-        # credentials. Bind literal, detector and paths; never allow arbitrary Base64 rows.
-        repository_name = "rookiestar28/" + "ComfyUI-" + "MiniMaxH3-Studio"
-        repository_hash = hashlib.sha1(repository_name.encode(), usedforsecurity=False).hexdigest()
-        for path in (
-            ".github/workflows/publish.yml",
-            "scripts/security_audit.py",
-            "tests/test_comfy_registry_metadata.py",
-            "tests/test_security_audit.py",
-        ):
-            with self.subTest(public_repository_path=path):
-                self.assertIn(repository_name, (ROOT / path).read_text(encoding="utf-8"))
-            expected[(path, "Base64 High Entropy String", repository_hash)] = 1
         # IMPORTANT: this one key-shaped match is encoded MP4 structure, not a credential.
         # Pin the whole normalized fixture, detector and match; never exempt its path broadly.
         fixture_path = "scripts/fixtures/m25_48_192_frame_mp4.b64"
@@ -528,7 +515,68 @@ class ToolingContractTests(unittest.TestCase):
             self.assertIn(refused_assignment, (ROOT / refused_path).read_text(encoding="utf-8"))
         refused_hash = hashlib.sha1(refused_assignment.encode(), usedforsecurity=False).hexdigest()
         expected[(refused_path, "Base64 High Entropy String", refused_hash)] = 1
-        self.assertEqual(sum(expected.values()), 68)
+        self.assertEqual(sum(expected.values()), 64)
+        # IMPORTANT: the crop test recomputes these public workflow digests from pinned templates.
+        # Bind every new register row here in the same commit; never admit arbitrary file hashes.
+        crop_path = "frontend/tests/referenceCropBaseline.test.ts"
+        crop_text = (ROOT / crop_path).read_text(encoding="utf-8")
+        crop_workflow_digests = {
+            ("t2va", "chosen"): (
+                "de59fba914-e703ea8eba-b52f4f6ab4-3dedbfacba-0b025544d4-590bfd7296-45b1"
+            ).replace("-", ""),
+            ("i2va", "chosen"): (
+                "4d855886ff-12c30ebbc2-573de22f2b-1b63b1d48c-5c8f9c5cbd-b1c5a34c92-26d8"
+            ).replace("-", ""),
+            ("i2va", "template_defaults"): (
+                "5f9382c55c-ec98f76ca2-896ebf291d-1f708f00a3-e1561fb222-39ea23089f-3d3d"
+            ).replace("-", ""),
+            ("fl2va", "chosen"): (
+                "1363374d13-40b5a48104-d2d7fcce7c-d92396a7fc-8bacc48024-95dc28fe86-c85b"
+            ).replace("-", ""),
+            ("fl2va", "template_defaults"): (
+                "5d33a2363b-343b02d46b-c4f941b657-5f79c5c8b8-998424913a-a70468385f-5196"
+            ).replace("-", ""),
+            ("l2va", "chosen"): (
+                "5371ffa07e-5f77e6d93b-50d41cfc2d-b2a446491b-2a5e1eb991-8b4d7bdd05-c8f7"
+            ).replace("-", ""),
+            ("l2va", "template_defaults"): (
+                "f5910b16ae-9c12ee17ff-90daa40cde-733dab9034-34ac706f4c-a665038918-fdcb"
+            ).replace("-", ""),
+            ("ref2va", "chosen"): (
+                "b6b380ff06-fcf40b0bbb-a82c049334-19491c3997-888f8d1ffa-e254f574cd-8e14"
+            ).replace("-", ""),
+            ("ref2va", "template_defaults"): (
+                "b1813e3b87-ec53adcedb-a504374a26-7796104740-a4f87ba652-8f0a3aeb10-b5ae"
+            ).replace("-", ""),
+        }
+        crop_workflow_digests[("t2va", "template_defaults")] = crop_workflow_digests[
+            ("t2va", "chosen")
+        ]
+        crop_rows = re.findall(
+            r'"sourcePolicy": "([a-z_]+)",\s*"taskMode": "([a-z0-9]+)",\s*'
+            r'"workflowSha256": "([a-f0-9]{64})"',
+            crop_text,
+        )
+        self.assertEqual(len(crop_rows), 10)
+        self.assertEqual(
+            {(mode, policy): digest for policy, mode, digest in crop_rows},
+            crop_workflow_digests,
+        )
+        crop_literals = set(crop_workflow_digests.values())
+        self.assertEqual(len(crop_literals), 9)
+        self.assertEqual(
+            set(re.findall(r"[\"']([a-f0-9]{40}|[a-f0-9]{64})[\"']", crop_text)),
+            crop_literals,
+        )
+        for literal in crop_literals:
+            with self.subTest(crop_workflow_digest=literal):
+                self.assertEqual(
+                    crop_text.count(literal),
+                    crop_text.count(f'"workflowSha256": "{literal}"'),
+                )
+            match_hash = hashlib.sha1(literal.encode(), usedforsecurity=False).hexdigest()
+            expected[(crop_path, "Hex High Entropy String", match_hash)] = 1
+        self.assertEqual(sum(expected.values()), 73)
         # CRITICAL: approve public hex values only inside independently pinned complete inputs.
         # Learning this census from scanner output or unpinned files would admit new credentials.
         public_hash_inputs = {
@@ -553,7 +601,7 @@ class ToolingContractTests(unittest.TestCase):
             for literal in literals:
                 match_hash = hashlib.sha1(literal, usedforsecurity=False).hexdigest()
                 expected[(path, "Hex High Entropy String", match_hash)] = 1
-        self.assertEqual(sum(expected.values()), 1992)
+        self.assertEqual(sum(expected.values()), 1997)
         observed: Counter[tuple[str, str, str]] = Counter()
         for path, findings in baseline.get("results", {}).items():
             normalized_path = path.replace("\\", "/")
@@ -564,7 +612,7 @@ class ToolingContractTests(unittest.TestCase):
                 observed[
                     (normalized_path, finding.get("type", ""), finding.get("hashed_secret", ""))
                 ] += 1
-        self.assertEqual(sum(observed.values()), 1992)
+        self.assertEqual(sum(observed.values()), 1997)
         self.assertEqual(observed, expected)
 
     def test_hosted_ci_uses_separate_public_lanes(self) -> None:

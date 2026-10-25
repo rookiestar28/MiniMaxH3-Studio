@@ -85,7 +85,8 @@ export type NleIconName =
   | "pending"
   // Storyboard script: a page receiving an arrow, and written lines parted by a cut.
   | "scriptFromContext"
-  | "scriptSplit";
+  | "scriptSplit"
+  | "crop";
 
 const HOVER_DELAY_MS = 250;
 
@@ -558,6 +559,7 @@ const PATHS: Record<NleIconName, readonly string[]> = {
   ],
   // Written lines parted by a dashed cut: split the script into shot rows.
   scriptSplit: ["M5 4h14M5 8h9", "M3 12h3M9 12h3M15 12h3", "M5 16h14M5 20h9"],
+  crop: ["M7 3v14h14", "M3 7h14v14"],
 };
 
 /** Every glyph name, for tests and pickers; the `Record` type keeps it complete. */

@@ -338,3 +338,162 @@ describe("canonical canvas capture lifetime", () => {
     },
   );
 });
+
+// Native ComfyApp shape: ComfyUI_frontend v1.55.11 src/scripts/app.ts:349-358.
+function nativeFixture(ghost = false) {
+  const subject = fixture(ghost);
+  const getter = vi.fn();
+  class NativeApp {
+    canvasInternal = subject.canvas;
+    get canvas() {
+      getter();
+      return this.canvasInternal;
+    }
+    set canvas(value: typeof subject.canvas) {
+      this.canvasInternal = value;
+    }
+  }
+  return { ...subject, host: new NativeApp(), getter };
+}
+
+describe("native accessor canvas owner", () => {
+  it("probes the native class shape without calling its getter", () => {
+    const subject = nativeFixture();
+    expect(probeCanvasKeyboardGuard(subject.host).status).toBe("ready");
+    expect(subject.getter).not.toHaveBeenCalled();
+  });
+
+  it("acquires the native class shape without calling its getter", () => {
+    const subject = nativeFixture();
+    const lease = acquire(subject.host);
+    key("keyup");
+    expect(subject.key).not.toHaveBeenCalled();
+    lease.release();
+    key("keyup");
+    expect(subject.key).toHaveBeenCalledOnce();
+    expect(subject.getter).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "own-canvas",
+    "missing-backing",
+    "inherited-backing",
+    "accessor-backing",
+    "missing-getter",
+    "missing-setter",
+  ])("refuses %s without invoking a host getter", (shape) => {
+    const subject = nativeFixture();
+    const foreign = vi.fn(() => {
+      throw new Error("foreign getter must not run");
+    });
+    const prototype = Object.getPrototypeOf(subject.host) as object;
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, "canvas")!;
+    if (shape === "own-canvas")
+      Object.defineProperty(subject.host, "canvas", { get: foreign });
+    if (shape === "missing-backing" || shape === "inherited-backing") {
+      Reflect.deleteProperty(subject.host, "canvasInternal");
+      if (shape === "inherited-backing")
+        Object.defineProperty(prototype, "canvasInternal", {
+          value: subject.canvas,
+        });
+    }
+    if (shape === "accessor-backing")
+      Object.defineProperty(subject.host, "canvasInternal", { get: foreign });
+    if (shape === "missing-getter" || shape === "missing-setter")
+      Object.defineProperty(prototype, "canvas", {
+        ...descriptor,
+        get: shape === "missing-getter" ? undefined : foreign,
+        set: shape === "missing-setter" ? undefined : descriptor.set,
+      });
+    expect(probeCanvasKeyboardGuard(subject.host).status).toBe("unavailable");
+    expect(acquireCanvasKeyboardGuard(subject.host, vi.fn()).status).toBe(
+      "unavailable",
+    );
+    expect(subject.getter).not.toHaveBeenCalled();
+    expect(foreign).not.toHaveBeenCalled();
+  });
+});
+
+describe.each(["legacy", "native"])("%s owner lifecycle", (shape) => {
+  const create = (ghost = false) =>
+    shape === "native" ? nativeFixture(ghost) : fixture(ghost);
+
+  it.each([false, true])(
+    "shares leases and restores ghost=%s callbacks",
+    (ghost) => {
+      const subject = create(ghost);
+      const first = acquire(subject.host);
+      const second = acquire(subject.host);
+      key("keydown");
+      key("keyup");
+      first.release();
+      key("keydown");
+      key("keyup");
+      expect(subject.key).not.toHaveBeenCalled();
+      expect(subject.ghostKey).not.toHaveBeenCalled();
+      second.release();
+      second.release();
+      key("keydown");
+      key("keyup");
+      expect(subject.key).toHaveBeenCalledOnce();
+      expect(subject.ghostKey).toHaveBeenCalledTimes(ghost ? 1 : 0);
+    },
+  );
+
+  it("restores only the current suspended callbacks after same-owner rebind", () => {
+    const subject = create(true);
+    const lease = acquire(subject.host);
+    subject.canvas._events_binded = false;
+    const replacement = vi.fn();
+    subject.canvas._key_callback = replacement;
+    subject.canvas._ghostKeyHandler = null;
+    subject.canvas.state.ghostNodeId = null;
+    document.addEventListener("keyup", replacement, true);
+    subject.canvas._events_binded = true;
+    key("keyup");
+    expect(replacement).not.toHaveBeenCalled();
+    lease.release();
+    key("keydown");
+    key("keyup");
+    expect(replacement).toHaveBeenCalledOnce();
+    expect(subject.key).not.toHaveBeenCalled();
+    expect(subject.ghostKey).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a replaced owner on the next key without resurrecting retired callbacks", () => {
+    const subject = create();
+    const firstInvalidated = vi.fn();
+    const secondInvalidated = vi.fn();
+    const first = acquire(subject.host, firstInvalidated);
+    const second = acquire(subject.host, secondInvalidated);
+    const replacement = fixture();
+    subject.host.canvas = replacement.canvas;
+    expect(firstInvalidated).not.toHaveBeenCalled();
+    expect(secondInvalidated).not.toHaveBeenCalled();
+    key("keyup");
+    expect(firstInvalidated).toHaveBeenCalledOnce();
+    expect(secondInvalidated).toHaveBeenCalledOnce();
+    expect(replacement.key).not.toHaveBeenCalled();
+    first.release();
+    second.release();
+    key("keyup");
+    expect(replacement.key).toHaveBeenCalledOnce();
+    expect(subject.key).not.toHaveBeenCalled();
+  });
+
+  it.each(["unbound", "inconsistent-ghost"])(
+    "refuses a changed %s lifetime before host capture",
+    (change) => {
+      const subject = create();
+      const invalidated = vi.fn();
+      const lease = acquire(subject.host, invalidated);
+      if (change === "unbound") subject.canvas._events_binded = false;
+      else subject.canvas.state.ghostNodeId = "inconsistent";
+      key("keyup");
+      expect(invalidated).toHaveBeenCalledOnce();
+      lease.release();
+      key("keyup");
+      expect(subject.key).not.toHaveBeenCalled();
+    },
+  );
+});

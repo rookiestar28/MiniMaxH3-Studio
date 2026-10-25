@@ -1,3 +1,116 @@
+# Release 1.4.0
+
+## Clip editor transitions
+
+- The Transition tab offers four directional wipes beside **Cross dissolve**: wipe from the left,
+  right, top or bottom. A wipe uses the same transition length in frames, and the final video
+  closely matches the browser preview.
+- The final render now encodes H.264 at a fixed constant quality (CRF 18) instead of the encoder
+  default, so flat colours match the preview more closely. Exported files can be larger.
+- When a dissolve or wipe is refused, the Inspector now says it needs an enabled clip on a lower
+  track that plays for the whole transition, and a length this clip allows.
+
+## Clip editor titles
+
+- **Add title** and the Inspector's title text and style changes refuse characters that the
+  bundled Noto Sans fonts cannot draw, such as Chinese, Japanese, Korean or emoji. The reason is
+  shown in English, Traditional Chinese and Simplified Chinese, and the text you typed stays in
+  place. Before, such a title was accepted and only the final render failed.
+- A title like this from an older project still opens and can be moved, trimmed or deleted, but
+  it still cannot be rendered. If a final render fails for this reason, the message now says so.
+
+## Compatibility
+
+- The clip editor opens with ComfyUI frontend 1.55.11 and later, which current ComfyUI versions
+  require. These frontends changed how the graph canvas is exposed, and 1.3.2 and earlier could
+  not open the editor there. Older frontends work as before.
+- The clip editor and image crop were tested on ComfyUI 0.41.0 with frontend 1.55.18.
+
+## App Mode sources
+
+- **Start H3 App Mode** and **Replace canvas and start H3 App Mode** prepare I2VA, FL2VA, L2VA and
+  Ref2VA canvases before a source is chosen. The official template's **Load Image** nodes are kept
+  and hold the template's sample images until you set your own. Queueing works as before; for
+  Ref2VA, choose the references in the pickers before queueing.
+- When a source list is empty, the sidebar names the node to add to the main canvas (outside
+  subgraphs). After preparation it lists which **Load Image** nodes still hold the template's
+  samples. This guidance stays in place when ComfyUI rescans the graph, in English, Traditional
+  Chinese and Simplified Chinese.
+
+## Image crop
+
+- **Crop image** beside a first frame, last frame or reference image opens a crop dialog. Drag the
+  rectangle or its eight handles. The arrow keys move a focused rectangle by one source pixel, or
+  ten with Shift; on a focused handle they resize by the same amount in Free mode, and in whole
+  ratio steps with Original or a fixed aspect ratio. Choose Free, Original or a fixed aspect ratio,
+  then **Apply**. The source row shows the cropped size. To remove a crop, choose **Reset**, which
+  returns the rectangle to the full image, then **Apply**.
+- Starting or replacing a canvas inserts one native **Crop Image** node per cropped source, before
+  all of its consumers. On an existing canvas, edit that visible node directly. Videos and audio
+  have no crop action, and changing modes or removing the image clears its crop.
+- In I2VA the output follows the crop's aspect ratio. In FL2VA and L2VA the output size comes from
+  the canvas resolution setting, so choose a crop ratio that matches it.
+- A crop is applied only when the canvas is prepared. While a crop is applied, **Execute** asks you
+  to use **Start H3 App Mode** or **Replace canvas and start H3 App Mode**, or to reset the crop.
+- Opening the dialog reads the image from your ComfyUI host into the browser. App Mode writes no
+  image file; ComfyUI's crop node may save a preview of the cropped picture in its temporary
+  folder. A host without the native Crop Image node cannot prepare a cropped canvas.
+
+## Model loaders
+
+- App Mode identifies each official H3 loader by the complete set of official file names for its
+  role, including loaders inside nested or promoted widgets.
+- It keeps the template's own choice when that file is installed in any subfolder; otherwise it
+  uses another installed official variant for the role, such as the int8 convrot video VAE or the
+  pruned w6a8 FL2VA and Ref2VA models. If none is installed, the loader is named as a warning as
+  before.
+
+## Assisted authoring
+
+- **Refine prompt** follows instructions that ask for camera moves or cuts between shots. The
+  request counts at every check of the suggestion, including after you edit or accept it. An
+  explicit static-camera, no-cuts or single-shot restriction still wins, and dialogue, on-screen
+  text, reference labels, roles and timing stay exact.
+- A suggestion that drops, adds or reorders a reference label gets the single repair attempt, which
+  asks for the original labels; if they are still wrong, the suggestion is refused.
+- A suggestion that would change protected text, change the references or fail the audit is
+  refused with a specific message, and your prompt is left unchanged. **Optimize prompt** behaves
+  as before.
+- **Optimize prompt** and **Refine prompt** keep required content that is already in the prompt and
+  never add forbidden content. The check runs on the first suggestion, its single repair, your
+  edits and acceptance; a suggestion that would break it is refused with its own message. Problems
+  already present in your prompt are not blamed on the suggestion and stay fixable.
+
+## Platform
+
+- The prompt pipeline supports Windows, Linux and WSL. The editor, Production import, assembly and
+  final rendering still need Windows x64 with 64-bit Python and the supported FFmpeg build, and
+  durable recovery still needs its qualified Windows host. Linux support for these features is
+  coming in an upcoming update.
+
+## Developer notes
+
+- Browser test failure evidence now includes bounded, sanitized presentation stage clocks for the
+  integrated navigation and continuous preview journeys, and the test job log keeps numeric
+  summaries of the same stages. Reports omit prompt, media, path, URL and credential content. This
+  improves diagnosis; no performance budget changes.
+
+## Repository name
+
+- The GitHub repository is renamed from `ComfyUI-MiniMaxH3-Studio` to `MiniMaxH3-Studio`. GitHub
+  redirects the old address, so existing clones, remotes and links keep working, and an existing
+  installation folder can keep its name. The Comfy Registry name **ComfyUI-MiniMaxH3-Studio** and
+  the `minimax-h3-studio` install name are unchanged.
+
+## Upgrade and limits
+
+Replace the complete package, restart ComfyUI and refresh the browser. Project format version 1 is
+unchanged, but a project or saved draft that uses a directional wipe needs 1.4.0 or later; 1.3.2
+and earlier refuse it rather than dropping the wipe. The supported FFmpeg build, platform
+requirements and storage requirements are unchanged from 1.3.2.
+
+---
+
 # Release 1.3.2
 
 ## App Mode output verification

@@ -977,6 +977,32 @@ const PERCEPTION_HOST_SOURCE_PATH_ADDITIONS = Object.freeze([
   },
 ]);
 
+// IMPORTANT: these crop reader pins are frozen independently of mutable census bytes.
+const REFERENCE_CROP_BASE_SOURCE = Object.freeze({
+  commit: ["bc5c16c4", "bc9383a5", "7dd01a3f", "52888878", "cc9687d7"].join(""),
+  tree: ["1f193f01", "2d1657a7", "03fa137e", "1932c67d", "1b7f8618"].join(""),
+});
+const REFERENCE_CROP_CENSUS_SHA256 = [
+  "22771d7d",
+  "55ccc7e5",
+  "9a243363",
+  "0865d4b0",
+  "2152735f",
+  "cf639d43",
+  "0a5cc28f",
+  "da61c1c6",
+].join("");
+const REFERENCE_CROP_SOURCE_PATH_ADDITIONS = Object.freeze([
+  {
+    seam_id: "frontend.api.file_url",
+    added_source_paths: ["frontend/src/host/imageCropSource.ts"],
+  },
+  {
+    seam_id: "frontend.litegraph.registered_node_types",
+    added_source_paths: ["frontend/src/host/imageCropCapability.ts"],
+  },
+]);
+
 type HostSeamCensusTransitionWire = Readonly<{
   schema:
     | "h3.context.host_seam_census_transition.v1"
@@ -1000,7 +1026,8 @@ type HostSeamCensusTransitionWire = Readonly<{
     | "h3.context.host_seam_census_transition_workspace_state.v1"
     | "h3.context.host_seam_census_transition_retained_media.v1"
     | "h3.context.host_seam_census_transition_project_persistence.v1"
-    | "h3.context.host_seam_census_transition_perception_host.v1";
+    | "h3.context.host_seam_census_transition_perception_host.v1"
+    | "h3.context.host_seam_census_transition_reference_crop.v1";
   item:
     | "M23-15"
     | "M23-18"
@@ -1022,7 +1049,8 @@ type HostSeamCensusTransitionWire = Readonly<{
     | "WORKSPACE-STATE"
     | "RETAINED-MEDIA"
     | "PROJECT-PERSISTENCE"
-    | "PERCEPTION-HOST";
+    | "PERCEPTION-HOST"
+    | "REFERENCE-CROP";
   source: Readonly<{ commit: string; tree: string }>;
   artifacts: Readonly<{
     from_census_sha256: string;
@@ -1270,7 +1298,10 @@ function parseHostSeamCensusTransition(
       root.item === "PROJECT-PERSISTENCE") ||
     (root.schema ===
       "h3.context.host_seam_census_transition_perception_host.v1" &&
-      root.item === "PERCEPTION-HOST")
+      root.item === "PERCEPTION-HOST") ||
+    (root.schema ===
+      "h3.context.host_seam_census_transition_reference_crop.v1" &&
+      root.item === "REFERENCE-CROP")
   ))
     throw new Error("census transition has an unsupported identity");
   const source = closed(
@@ -1679,6 +1710,15 @@ export function verifyHostSeamBaseline(
       fixture_sha256: ACCEPTED_MODAL_KEYBOARD_FIXTURE_SHA256,
       seam_contract_sha256: PERCEPTION_HOST_SEAM_CONTRACT_SHA256,
       changes: PERCEPTION_HOST_SOURCE_PATH_ADDITIONS,
+    },
+    {
+      item: "REFERENCE-CROP",
+      source: REFERENCE_CROP_BASE_SOURCE,
+      from_census_sha256: PERCEPTION_HOST_CENSUS_SHA256,
+      to_census_sha256: REFERENCE_CROP_CENSUS_SHA256,
+      fixture_sha256: ACCEPTED_MODAL_KEYBOARD_FIXTURE_SHA256,
+      seam_contract_sha256: PERCEPTION_HOST_SEAM_CONTRACT_SHA256,
+      changes: REFERENCE_CROP_SOURCE_PATH_ADDITIONS,
     },
   ] as const;
   const targetIndex = expectedTransitions.findIndex(

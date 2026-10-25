@@ -1322,6 +1322,18 @@ def _osv_projection(
         decoded_name = unquote(encoded_name)
         if decoded_name != name and decoded_name.lstrip("@") != name.lstrip("@"):
             raise AuditError(f"{field} purl name does not match the SBOM package")
+        # IMPORTANT: these npm libraries ship inside the sidebar. They must never inherit the
+        # development SOURCE/range exclusion below, which would omit shipped advisory queries.
+        if purl_type == "npm" and name in {"react", "react-dom", "scheduler"}:
+            if (
+                package.get("comment") != "bundled_in_sidebar_runtime"
+                or package.get("primaryPackagePurpose") != "LIBRARY"
+                or encoded_version is None
+                or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+!-]{0,127}", version) is None
+            ):
+                raise AuditError(
+                    f"{field} bundled sidebar library must declare exact runtime identity"
+                )
         if (
             encoded_version is None
             and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+!-]{0,127}", version) is None

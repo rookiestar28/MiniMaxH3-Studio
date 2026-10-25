@@ -6,6 +6,7 @@
 // translator that reuses the accepted scripts/_timeline_fixture.py oracle.
 import { test, expect, type Page, type Request } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
+import { buildPresentationStageReport } from "../../../e2e/presentationStageReport";
 
 import { openExportPanel } from "../helpers/nleExport";
 import {
@@ -339,6 +340,13 @@ for (const shape of ["continuous-preview"] as const) {
       ),
       contentType: "application/json",
     });
+    const navigationStages = await page.evaluate(() =>
+      window.__nleStageTrace!.read(),
+    );
+    await testInfo.attach("integrated-navigation-stages", {
+      body: Buffer.from(JSON.stringify(navigationStages)),
+      contentType: "application/json",
+    });
     const presentationOutliers = measurements.presentationSamples.filter(
       (sample) => sample.deliveredMs > 50,
     );
@@ -431,6 +439,7 @@ for (const shape of ["continuous-preview"] as const) {
         closedListeners: report.resources.closedListeners,
       }),
     );
+    console.log(buildPresentationStageReport("navigation", navigationStages));
     const reportPath = testInfo.outputPath(
       "integrated-five-minute-budgets.json",
     );

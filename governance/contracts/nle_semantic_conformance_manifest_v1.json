@@ -35,7 +35,7 @@
   },
   "counts_by_class": {
     "command": 68,
-    "property": 240,
+    "property": 280,
     "ui_invariant": 11,
     "import_integration": 2,
     "deferred_negative": 13
@@ -1485,6 +1485,286 @@
       "case_id": "transition.participant_invalid",
       "family": "transition",
       "leaf": "participant_invalid",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.legal",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.legal",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.first_included_frame",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.first_included_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.interior_frame",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.interior_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.last_included_frame",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.last_included_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.rotation_follow",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.rotation_follow",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.duration_lower",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.duration_lower",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.duration_upper",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.duration_upper",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.duration_underflow",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.duration_underflow",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.duration_overflow",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.duration_overflow",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_left_v1.participant_invalid",
+      "family": "transition",
+      "leaf": "wipe_from_left_v1.participant_invalid",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.legal",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.legal",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.first_included_frame",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.first_included_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.interior_frame",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.interior_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.last_included_frame",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.last_included_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.rotation_follow",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.rotation_follow",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.duration_lower",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.duration_lower",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.duration_upper",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.duration_upper",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.duration_underflow",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.duration_underflow",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.duration_overflow",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.duration_overflow",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_right_v1.participant_invalid",
+      "family": "transition",
+      "leaf": "wipe_from_right_v1.participant_invalid",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.legal",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.legal",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.first_included_frame",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.first_included_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.interior_frame",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.interior_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.last_included_frame",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.last_included_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.rotation_follow",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.rotation_follow",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.duration_lower",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.duration_lower",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.duration_upper",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.duration_upper",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.duration_underflow",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.duration_underflow",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.duration_overflow",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.duration_overflow",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_top_v1.participant_invalid",
+      "family": "transition",
+      "leaf": "wipe_from_top_v1.participant_invalid",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.legal",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.legal",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.first_included_frame",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.first_included_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.interior_frame",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.interior_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.last_included_frame",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.last_included_frame",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.rotation_follow",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.rotation_follow",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.duration_lower",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.duration_lower",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.duration_upper",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.duration_upper",
+      "supported": true,
+      "refusal_expected": false
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.duration_underflow",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.duration_underflow",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.duration_overflow",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.duration_overflow",
+      "supported": true,
+      "refusal_expected": true
+    },
+    {
+      "case_id": "transition.wipe_from_bottom_v1.participant_invalid",
+      "family": "transition",
+      "leaf": "wipe_from_bottom_v1.participant_invalid",
       "supported": true,
       "refusal_expected": true
     },

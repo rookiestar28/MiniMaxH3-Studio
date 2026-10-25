@@ -38,7 +38,8 @@
         "minimax_h3_fl2va_int8_convrot.safetensors",
         "minimax_h3_fl2va_pruned_bf16.safetensors",
         "minimax_h3_fl2va_pruned_fp8_scaled.safetensors",
-        "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+        "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+        "minimax_h3_fl2va_pruned_w6a8.safetensors"
       ]
     },
     {
@@ -52,7 +53,8 @@
         "minimax_h3_ref2va_int8_convrot.safetensors",
         "minimax_h3_ref2va_pruned_bf16.safetensors",
         "minimax_h3_ref2va_pruned_fp8_scaled.safetensors",
-        "minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+        "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "minimax_h3_ref2va_pruned_w6a8.safetensors"
       ]
     },
     {
@@ -73,7 +75,10 @@
       "loader_type": "VAELoader",
       "widget_name": "vae_name",
       "template_default": "minimax_h3_video_vae_fp16.safetensors",
-      "accepted_basenames": ["minimax_h3_video_vae_fp16.safetensors"]
+      "accepted_basenames": [
+        "minimax_h3_video_vae_fp16.safetensors",
+        "minimax_h3_video_vae_int8_convrot.safetensors"
+      ]
     },
     {
       "slot": "audio_vae",

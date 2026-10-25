@@ -307,6 +307,25 @@ IMPORT_INTEGRATION_CASE: Final = "generated_source.explicit_import_then_insert"
 #: the real decoder for every domain. The two `opacity_blend.opacity` boundaries are listed here
 #: instead, because that subfamily spells its field literally rather than taking it from
 #: `OPACITY_DOMAIN.field`.
+WIPE_KINDS: Final = (
+    "wipe_from_left_v1",
+    "wipe_from_right_v1",
+    "wipe_from_top_v1",
+    "wipe_from_bottom_v1",
+)
+WIPE_CASES: Final = (
+    "legal",
+    "first_included_frame",
+    "interior_frame",
+    "last_included_frame",
+    "rotation_follow",
+    "duration_lower",
+    "duration_upper",
+    "duration_underflow",
+    "duration_overflow",
+    "participant_invalid",
+)
+
 NAMED_REFUSAL_CASES: Final = frozenset(
     {
         #: Refused by the packaged font resolver when the plan's font facts are bound,
@@ -333,6 +352,11 @@ NAMED_REFUSAL_CASES: Final = frozenset(
         "transition.duration_underflow",
         "transition.duration_overflow",
         "transition.participant_invalid",
+        *(
+            f"transition.{kind}.{case}"
+            for kind in WIPE_KINDS
+            for case in ("duration_underflow", "duration_overflow", "participant_invalid")
+        ),
         "effect.kind.none_identity_refused",
         # `nonnegative_monotonic_v1`: a negative timestamp is `negative_timestamp`, and a landmark
         # table that repeats, goes backwards or leaves the admitted range is `invalid_timing`.
@@ -480,7 +504,7 @@ TEXT_FONT_CASES: Final = ("qualified", "fallback", "unsupported_glyph")
 TEXT_FILL_CASES: Final = ("identity", "interior", "channel_overflow_refused")
 TEXT_BACKGROUND_CASES: Final = ("absent", "present", "channel_overflow_refused")
 
-TRANSITION_KINDS: Final = ("none", "cross_dissolve_v1")
+TRANSITION_KINDS: Final = ("none", "cross_dissolve_v1", *WIPE_KINDS)
 TRANSITION_CASES: Final = (
     "none_identity",
     "cross_dissolve_legal",
@@ -494,6 +518,7 @@ TRANSITION_CASES: Final = (
     "duration_underflow",
     "duration_overflow",
     "participant_invalid",
+    *(f"{kind}.{case}" for kind in WIPE_KINDS for case in WIPE_CASES),
 )
 
 EFFECT_KINDS: Final = ("none", "color_adjust_v1")

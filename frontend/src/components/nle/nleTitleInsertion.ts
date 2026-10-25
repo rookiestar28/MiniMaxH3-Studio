@@ -4,6 +4,7 @@ import type {
 } from "../../contracts/authoringWorkbenchCodec";
 import type { PublicCompositionSnapshot } from "../../contracts/compositionCodec";
 import type { AuthoringIntent } from "../../state/authoringViewState";
+import { titleTextCovered } from "./nleTitleCoverage";
 import {
   build,
   DEFAULT_TEXT_STYLE,
@@ -16,6 +17,7 @@ export type TitleInsertionRefusal =
   | "busy"
   | "missing_font"
   | "invalid_content"
+  | "font_glyph_unsupported"
   | "unavailable_frame"
   | "insufficient_capacity"
   | "clip_limit"
@@ -63,6 +65,13 @@ export function planTitleInsertion(
     /[\u0000-\u0008\u000b-\u001f\ud800-\udfff]/u.test(content)
   )
     return refuse("invalid_content");
+  if (
+    !titleTextCovered(content, {
+      ...DEFAULT_TEXT_STYLE,
+      font_asset_id: input.fontId,
+    })
+  )
+    return refuse("font_glyph_unsupported");
   if (!Number.isSafeInteger(input.frame)) return refuse("unavailable_frame");
   const capacity =
     "editCapacityFrames" in authority

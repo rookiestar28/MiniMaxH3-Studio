@@ -2,6 +2,7 @@
 // The lifecycle interpreter owns the run token; only the controller writes the host graph or queues.
 
 import type { AppModeDraft } from "../components/H3Sidebar";
+import { preparedCanvasState } from "../state/preparedCanvasGuidance";
 import type { ProductionAccumulatedProject } from "../contracts/productionAccumulationCodec";
 import {
   type AppModeAdmission,
@@ -833,11 +834,10 @@ export function createAppModeSession(ctx: ShellRuntime) {
         });
         deps.appModeLifecycle.complete(run);
         session.pendingAppMode = undefined;
-        session.state = {
-          status: "interactive",
-          reason: "canvas_ready",
-          existingGraph: true,
-        };
+        session.state = preparedCanvasState(
+          inputs,
+          actions.currentGraphProjectionIdentity,
+        );
         actions.renderCurrent();
         return result;
       }

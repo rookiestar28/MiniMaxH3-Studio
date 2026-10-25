@@ -16,6 +16,7 @@
 
 import type { ProfilerOnRenderCallback } from "react";
 import { createRoot } from "react-dom/client";
+import { installPresentationStageProbe } from "./presentationStageProbe";
 
 import tokenStyles from "../src/styles/tokens.css?inline";
 import {
@@ -233,6 +234,7 @@ const fetchPaths: string[] = [];
 // -------------------------------------------------------------------------- instrumentation state
 
 const sidebarCommitDurationsMs: number[] = [];
+const stageProbe = installPresentationStageProbe();
 const nleCommitDurationsMs: number[] = [];
 const commitStates: string[] = [];
 type HandlerSample = Readonly<{
@@ -1200,85 +1202,90 @@ window.nleShellHarness = {
     measuredIntervalMs: performance.now() - measurementStartedAt,
     mediaOwnership: mediaOwnership(),
   }),
-  snapshot: () => ({
-    shape: shape.name,
-    surfaceStatus: session.nleWorkspace.surface.status,
-    generation: session.nleWorkspace.surface.generation,
-    closeReasons: [...closeReasons],
-    lastCloseReason: session.nleWorkspace.surface.lastCloseReason,
-    capabilityDisposition:
-      session.nleWorkspace.surface.capability?.capability ?? null,
-    capabilityFailureDisposition:
-      session.nleWorkspace.surface.capability?.failureDisposition ?? null,
-    mounted: mountedCount,
-    mountFailed: mountFailedCount,
-    released: releasedCount,
-    receipts: receiptCount,
-    authoringStatus: session.authoringState.status,
-    authoringReason:
-      "reason" in session.authoringState ? session.authoringState.reason : null,
-    renderStatus: session.nleWorkspace.render.status,
-    renderSupported: session.nleWorkspace.render.capability?.supported ?? null,
-    capabilityReads,
-    renderJobRequests,
-    importStatus: session.nleWorkspace.import.status,
-    importRefusal: session.nleWorkspace.import.refusal,
-    importDispositions:
-      session.nleWorkspace.import.receipt?.rows.map((row) => row.disposition) ??
-      [],
-    highlightedAssetIds: [...session.nleWorkspace.import.highlightedAssetIds],
-    authoringWorkspaceHandle:
-      "projection" in session.authoringState
-        ? (session.authoringState.projection?.workspaceHandle ?? null)
-        : null,
-    fetchPaths: [...fetchPaths],
-    queuedPrompts: queuedPrompts().length,
-    bounds: session.nleWorkspace.surface.bounds,
-    layout: session.nleWorkspace.surface.layout,
-    authoringStateV2:
-      "timelineHistoryV2" in session.authoringState
-        ? (session.authoringState.timelineHistoryV2?.authoring ?? null)
-        : null,
-    timelineHistoryRedoAvailable:
-      "timelineHistoryV2" in session.authoringState
-        ? session.authoringState.timelineHistoryV2?.redoCursor !== null &&
-          session.authoringState.timelineHistoryV2?.redoCursor !== undefined
-        : "timelineHistory" in session.authoringState
-          ? session.authoringState.timelineHistory?.redoCursor !== null &&
-            session.authoringState.timelineHistory?.redoCursor !== undefined
-          : false,
-    timelineHistoryRejectionCode:
-      "timelineHistoryV2" in session.authoringState
-        ? (session.authoringState.timelineHistoryV2?.rejection?.code ?? null)
-        : "timelineHistory" in session.authoringState
-          ? (session.authoringState.timelineHistory?.rejection?.code ?? null)
+  snapshot: () =>
+    stageProbe.snapshot(() => ({
+      shape: shape.name,
+      surfaceStatus: session.nleWorkspace.surface.status,
+      generation: session.nleWorkspace.surface.generation,
+      closeReasons: [...closeReasons],
+      lastCloseReason: session.nleWorkspace.surface.lastCloseReason,
+      capabilityDisposition:
+        session.nleWorkspace.surface.capability?.capability ?? null,
+      capabilityFailureDisposition:
+        session.nleWorkspace.surface.capability?.failureDisposition ?? null,
+      mounted: mountedCount,
+      mountFailed: mountFailedCount,
+      released: releasedCount,
+      receipts: receiptCount,
+      authoringStatus: session.authoringState.status,
+      authoringReason:
+        "reason" in session.authoringState
+          ? session.authoringState.reason
           : null,
-    timelineSnapshot:
-      "timelineHistoryV2" in session.authoringState
-        ? (session.authoringState.timelineHistoryV2?.renderSnapshot ?? null)
-        : "timelineHistory" in session.authoringState
-          ? (session.authoringState.timelineHistory?.snapshot ?? null)
+      renderStatus: session.nleWorkspace.render.status,
+      renderSupported:
+        session.nleWorkspace.render.capability?.supported ?? null,
+      capabilityReads,
+      renderJobRequests,
+      importStatus: session.nleWorkspace.import.status,
+      importRefusal: session.nleWorkspace.import.refusal,
+      importDispositions:
+        session.nleWorkspace.import.receipt?.rows.map(
+          (row) => row.disposition,
+        ) ?? [],
+      highlightedAssetIds: [...session.nleWorkspace.import.highlightedAssetIds],
+      authoringWorkspaceHandle:
+        "projection" in session.authoringState
+          ? (session.authoringState.projection?.workspaceHandle ?? null)
           : null,
-    mediaOwnership: mediaOwnership(),
-    mediaPreparation: mediaPreparation(),
-    mediaRuntime: {
-      status: session.mediaRuntime.status,
-      notice: session.mediaRuntime.notice,
-      refusal: session.mediaRuntime.refusal,
-    },
-    previewRequests,
-    commitDurationsMs: [...nleCommitDurationsMs],
-    commitStates: [...commitStates],
-    handlerDurationsMs: handlerSamples.map((sample) => sample.durationMs),
-    handlerSamples: [...handlerSamples],
-    parentCommits: sidebarCommitDurationsMs.length,
-    sidebarCommits: sidebarCommitDurationsMs.length,
-    sidebarCommitDurationsMs: [...sidebarCommitDurationsMs],
-    nleCommits: nleCommitDurationsMs.length,
-    eventTimingEntries: [...eventTimingEntriesMs],
-    presentationSamples: [...presentationSamples],
-    presentationSamplesDropped,
-  }),
+      fetchPaths: [...fetchPaths],
+      queuedPrompts: queuedPrompts().length,
+      bounds: session.nleWorkspace.surface.bounds,
+      layout: session.nleWorkspace.surface.layout,
+      authoringStateV2:
+        "timelineHistoryV2" in session.authoringState
+          ? (session.authoringState.timelineHistoryV2?.authoring ?? null)
+          : null,
+      timelineHistoryRedoAvailable:
+        "timelineHistoryV2" in session.authoringState
+          ? session.authoringState.timelineHistoryV2?.redoCursor !== null &&
+            session.authoringState.timelineHistoryV2?.redoCursor !== undefined
+          : "timelineHistory" in session.authoringState
+            ? session.authoringState.timelineHistory?.redoCursor !== null &&
+              session.authoringState.timelineHistory?.redoCursor !== undefined
+            : false,
+      timelineHistoryRejectionCode:
+        "timelineHistoryV2" in session.authoringState
+          ? (session.authoringState.timelineHistoryV2?.rejection?.code ?? null)
+          : "timelineHistory" in session.authoringState
+            ? (session.authoringState.timelineHistory?.rejection?.code ?? null)
+            : null,
+      timelineSnapshot:
+        "timelineHistoryV2" in session.authoringState
+          ? (session.authoringState.timelineHistoryV2?.renderSnapshot ?? null)
+          : "timelineHistory" in session.authoringState
+            ? (session.authoringState.timelineHistory?.snapshot ?? null)
+            : null,
+      mediaOwnership: mediaOwnership(),
+      mediaPreparation: mediaPreparation(),
+      mediaRuntime: {
+        status: session.mediaRuntime.status,
+        notice: session.mediaRuntime.notice,
+        refusal: session.mediaRuntime.refusal,
+      },
+      previewRequests,
+      commitDurationsMs: [...nleCommitDurationsMs],
+      commitStates: [...commitStates],
+      handlerDurationsMs: handlerSamples.map((sample) => sample.durationMs),
+      handlerSamples: [...handlerSamples],
+      parentCommits: sidebarCommitDurationsMs.length,
+      sidebarCommits: sidebarCommitDurationsMs.length,
+      sidebarCommitDurationsMs: [...sidebarCommitDurationsMs],
+      nleCommits: nleCommitDurationsMs.length,
+      eventTimingEntries: [...eventTimingEntriesMs],
+      presentationSamples: [...presentationSamples],
+      presentationSamplesDropped,
+    })),
   lastPresentation: () => lastPresentation,
   metadata: () => ({
     sampleCounts: {
@@ -1312,6 +1319,7 @@ window.nleShellHarness = {
     }),
   referenceAssemblyCommands: () => referenceAssemblyCommands(),
   resetMeasurements: () => {
+    stageProbe.reset();
     sidebarCommitDurationsMs.length = 0;
     nleCommitDurationsMs.length = 0;
     commitStates.length = 0;
@@ -1327,6 +1335,7 @@ window.nleShellHarness = {
     measurementStartedAt = performance.now();
   },
   markPresentationPhase: (phase) => {
+    stageProbe.phase(phase);
     if (presentationPhases.length >= 512)
       throw new Error(
         "presentation phase history exceeded its bounded capacity",

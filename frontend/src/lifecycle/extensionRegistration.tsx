@@ -720,6 +720,11 @@ export function createExtensionRegistration(ctx: ShellRuntime) {
               session.state = reduceShellState(session.state, {
                 type: "graph",
                 inspection,
+                graphFingerprint:
+                  session.state.status === "interactive" &&
+                  session.state.preparedGraphFingerprint !== undefined
+                    ? actions.currentGraphProjectionIdentity()?.graphFingerprint
+                    : undefined,
               });
               if (
                 session.state.status !== "projected" &&

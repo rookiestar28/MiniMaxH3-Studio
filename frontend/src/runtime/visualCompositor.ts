@@ -2,6 +2,9 @@ import {
   ENGINE_PROFILE_ID,
   admittedTextLineCount,
   hasTextDecorations,
+  isWipeKind,
+  type WipeKind,
+  type WipeTransition,
   type TextStroke,
   type TextShadow,
   type PublicCompositionSnapshot,
@@ -91,6 +94,7 @@ type DecodedLayer = Readonly<{
   sourceFrame: number | null;
   sourcePts: number | null;
   transitionElapsedFrames: number | null;
+  wipe?: WipeTransition;
   operationIds: readonly string[];
   transform: NumericRecord;
   crop: NumericRecord;
@@ -843,6 +847,58 @@ function textField<T>(text: Readonly<Record<string, unknown>>, key: string): T {
   return text[key] as T;
 }
 
+/** Integer layer-local reveal after crop/scale, before rotation or preview downscaling. */
+export function wipeRevealRect(
+  kind: WipeKind,
+  width: number,
+  height: number,
+  elapsed: number,
+  duration: number,
+): Readonly<{ x: number; y: number; width: number; height: number }> {
+  finiteInteger(width, 1, 1_000_000, "wipe width");
+  finiteInteger(height, 1, 1_000_000, "wipe height");
+  finiteInteger(elapsed, 0, 300, "wipe elapsed");
+  finiteInteger(duration, 1, 300, "wipe duration");
+  const horizontal =
+    kind === "wipe_from_left_v1" || kind === "wipe_from_right_v1";
+  const extent = Math.floor(
+    ((horizontal ? width : height) * Math.min(elapsed, duration)) / duration,
+  );
+  return Object.freeze({
+    x: kind === "wipe_from_right_v1" ? width - extent : 0,
+    y: kind === "wipe_from_bottom_v1" ? height - extent : 0,
+    width: horizontal ? extent : width,
+    height: horizontal ? height : extent,
+  });
+}
+
+function clipWipe(
+  context: CanvasRenderingContext2D,
+  layer: DecodedLayer,
+  geometry: VisualLayerGeometry,
+  previewScale: number,
+): void {
+  if (layer.wipe === undefined || layer.transitionElapsedFrames === null)
+    return;
+  const rect = wipeRevealRect(
+    layer.wipe.kind,
+    geometry.scaledWidth,
+    geometry.scaledHeight,
+    layer.transitionElapsedFrames,
+    layer.wipe.durationFrames,
+  );
+  // CRITICAL: quantize in output pixels before preview scaling. A screen-space clip or
+  // a fractional extent moves a rotated edge and exposes the first stripe too early.
+  context.beginPath();
+  context.rect(
+    (rect.x - geometry.scaledWidth / 2) * previewScale,
+    (rect.y - geometry.scaledHeight / 2) * previewScale,
+    rect.width * previewScale,
+    rect.height * previewScale,
+  );
+  context.clip();
+}
+
 function measureTabbedLine(
   context: CanvasRenderingContext2D,
   line: string,
@@ -937,6 +993,7 @@ function drawText(
     geometry.centerY * previewScale,
   );
   context.rotate(geometry.angleRadians);
+  clipWipe(context, layer, geometry, previewScale);
   context.scale(
     (geometry.scaledWidth / geometry.nativeCrop.width) * previewScale,
     (geometry.scaledHeight / geometry.nativeCrop.height) * previewScale,
@@ -1022,6 +1079,7 @@ function drawMedia(
   resource: Extract<VisualLayerResource, { kind: "video" | "image" }>,
   geometry: VisualLayerGeometry,
   previewScale: number,
+  layer: DecodedLayer,
 ): void {
   context.save();
   context.translate(
@@ -1029,6 +1087,7 @@ function drawMedia(
     geometry.centerY * previewScale,
   );
   context.rotate(geometry.angleRadians);
+  clipWipe(context, layer, geometry, previewScale);
   context.drawImage(
     resource.source,
     geometry.sourceCrop.left,
@@ -1085,7 +1144,7 @@ function expectedDissolve(
     300,
     "transition duration",
   );
-  if (clip.transition.kind === "cross_dissolve_v1" && local < duration)
+  if (clip.transition.kind !== "none" && local < duration)
     return Object.freeze({ elapsed: local, duration });
   return Object.freeze({ elapsed: null, duration });
 }
@@ -1175,7 +1234,16 @@ function validateScene(
         "resolved layer drifted from the bound snapshot",
       );
     const transition = expectedDissolve(clip, scene.frame);
-    if (layer.transitionElapsedFrames !== transition.elapsed)
+    const expectedWipe = isWipeKind(clip.transition.kind)
+      ? {
+          kind: clip.transition.kind,
+          durationFrames: clip.transition.durationFrames,
+        }
+      : null;
+    if (
+      layer.transitionElapsedFrames !== transition.elapsed ||
+      !sameValue(layer.wipe ?? null, expectedWipe)
+    )
       fail(
         "invalid_contract",
         "resolved transition drifted from the bound snapshot",
@@ -1187,7 +1255,10 @@ function validateScene(
     ];
     if (clip.effect.kind !== "none") expectedOperations.push("ColorAdjustV1");
     expectedOperations.push("OpacityV1", "BlendV1");
-    if (transition.elapsed !== null) expectedOperations.push("CrossDissolveV1");
+    if (transition.elapsed !== null)
+      expectedOperations.push(
+        expectedWipe === null ? "CrossDissolveV1" : "WipeV1",
+      );
     if (clip.text !== null) expectedOperations.push("DrawTextV1");
     if (hasTextDecorations(clip.text))
       expectedOperations.push("TextDecorationV1");
@@ -1661,7 +1732,7 @@ export function createVisualCompositor(
           dimensions.height,
         );
         frameGeometries.set(layer.clipId, geometry);
-        drawMedia(activeContext, resource, geometry, preview.scale);
+        drawMedia(activeContext, resource, geometry, preview.scale, layer);
       };
       const transitionOf = (clipId: string): number => {
         const clip = snapshot.clips.find(
@@ -1695,10 +1766,12 @@ export function createVisualCompositor(
           activeContext.setTransform(1, 0, 0, 1, 0, 0);
           activeContext.globalAlpha =
             (layer.opacityBp / 10_000) *
-            dissolveFactor(
-              layer.transitionElapsedFrames,
-              transitionOf(layer.clipId),
-            );
+            (layer.wipe === undefined
+              ? dissolveFactor(
+                  layer.transitionElapsedFrames,
+                  transitionOf(layer.clipId),
+                )
+              : 1);
           activeContext.globalCompositeOperation =
             BLEND_OPERATIONS[layer.blend];
           activeContext.filter =
@@ -1747,7 +1820,9 @@ export function createVisualCompositor(
           accumulator,
           adjusted,
           layer.opacityBp,
-          dissolveFactor(layer.transitionElapsedFrames, transitionDuration),
+          layer.wipe === undefined
+            ? dissolveFactor(layer.transitionElapsedFrames, transitionDuration)
+            : 1,
           layer.blend,
         );
       }

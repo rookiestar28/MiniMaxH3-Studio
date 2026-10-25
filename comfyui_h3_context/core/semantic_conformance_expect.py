@@ -725,7 +725,7 @@ ALPHA_MEASURABLE_ONLY_WITH_A_TRANSITION: Final = (
 
 def _declares_a_ramp(clip: Mapping[str, Any]) -> bool:
     transition = clip.get("transition")
-    if not isinstance(transition, Mapping) or transition.get("kind") == "none":
+    if not isinstance(transition, Mapping) or transition.get("kind") != "cross_dissolve_v1":
         return False
     return _int(transition, "duration_frames") > 0
 
@@ -1537,8 +1537,14 @@ def _covers(clip: Mapping[str, Any], output_frame: int) -> bool:
     return start <= output_frame < start + _int(clip, "duration_frames")
 
 
-def _layer_alpha(clip: Mapping[str, Any], output_frame: int) -> float:
-    """The layer's opacity at one frame, including a cross-dissolve's own ramp."""
+def _layer_alpha(
+    clip: Mapping[str, Any],
+    output_frame: int,
+    placement: LayerPlacement | None = None,
+    canvas_x: float = 0,
+    canvas_y: float = 0,
+) -> float:
+    """Opacity at a canvas point, with a dissolve ramp or a rotated layer-local wipe."""
 
     alpha = _int(clip, "opacity_bp") / BASIS_POINTS
     transition = clip.get("transition")
@@ -1546,7 +1552,30 @@ def _layer_alpha(clip: Mapping[str, Any], output_frame: int) -> float:
         frames = _int(transition, "duration_frames")
         offset = output_frame - _int(clip, "start_frame")
         if frames > 0 and 0 <= offset < frames:
-            alpha *= offset / frames
+            kind = transition.get("kind")
+            if kind == "cross_dissolve_v1":
+                alpha *= offset / frames
+            else:
+                if placement is None:
+                    raise ExpectationError("a wipe needs spatial placement, not a uniform alpha")
+                x, y = placement._rotate(
+                    canvas_x - placement.center_x, canvas_y - placement.center_y, -1
+                )
+                x += placement.scaled_width / 2
+                y += placement.scaled_height / 2
+                horizontal = kind in {"wipe_from_left_v1", "wipe_from_right_v1"}
+                dimension = placement.scaled_width if horizontal else placement.scaled_height
+                extent = dimension * offset // frames
+                visible = {
+                    "wipe_from_left_v1": x < extent,
+                    "wipe_from_right_v1": x >= placement.scaled_width - extent,
+                    "wipe_from_top_v1": y < extent,
+                    "wipe_from_bottom_v1": y >= placement.scaled_height - extent,
+                }.get(str(kind))
+                if visible is None:
+                    raise ExpectationError("unknown spatial transition kind")
+                if not visible:
+                    alpha = 0
     return alpha
 
 
@@ -1772,7 +1801,7 @@ def _composite_at(
             colour = browser_decoded_colour(layer.profile, colour)
         top = _adjusted(colour, layer.clip.get("effect"))
         mixed = _blended(accumulated, top, layer.clip.get("blend"))
-        alpha = _layer_alpha(layer.clip, output_frame)
+        alpha = _layer_alpha(layer.clip, output_frame, layer.placement, canvas_x, canvas_y)
         accumulated = tuple(  # type: ignore[assignment]
             base * (1 - alpha) + value * alpha
             for base, value in zip(accumulated, mixed, strict=True)
@@ -2136,6 +2165,84 @@ def _points_at_frame(
     return tuple(points)
 
 
+def _wipe_sample_points(wire: Mapping[str, Any]) -> tuple[SamplePoint, ...]:
+    """Both sides of each local edge, plus empty/full endpoints, without codec-edge patches."""
+    output = _output(wire)
+    width, height = _int(output, "width"), _int(output, "height")
+    layers = _visual_layers(wire)
+    result: list[SamplePoint] = []
+    margin = TOLERANCE_PROFILE.patch_min_edge_distance_px + TOLERANCE_PROFILE.patch_size_px // 2 + 1
+    for layer in layers:
+        clip = layer.clip
+        transition = clip.get("transition")
+        if not isinstance(transition, Mapping) or not str(transition.get("kind")).startswith(
+            "wipe_from_"
+        ):
+            continue
+        kind = transition["kind"]
+        duration, start = _int(transition, "duration_frames"), _int(clip, "start_frame")
+        p = layer.placement
+        # GUARD: rotate the flat patch box and allow canvas rounding before placing both sides.
+        # A fixed seven-pixel offset can reject every hidden-side point at a 30-degree edge.
+        local_margin = max(
+            margin,
+            math.ceil(
+                (FLAT_SAMPLE_HALF_SPAN_PX + 0.5) * (abs(math.cos(p.angle)) + abs(math.sin(p.angle)))
+            ),
+        )
+        horizontal = kind in {"wipe_from_left_v1", "wipe_from_right_v1"}
+        dimension = p.scaled_width if horizontal else p.scaled_height
+        for elapsed in sorted({0, duration // 2, duration - 1, duration}):
+            frame = start + elapsed
+            if not 0 <= frame < _int(output, "duration_frames") or not _covers(clip, frame):
+                continue
+            extent = dimension * elapsed // duration
+            edge = (
+                dimension - extent
+                if kind in {"wipe_from_right_v1", "wipe_from_bottom_v1"}
+                else extent
+            )
+            endpoint = elapsed in {0, duration}
+            positions = (
+                (p.scaled_width / 4, p.scaled_width / 2, p.scaled_width * 3 / 4)
+                if endpoint
+                else (edge - local_margin, edge + local_margin)
+            )
+            for side, axis in enumerate(positions):
+                if not 0 < axis < (p.scaled_width if endpoint else dimension):
+                    continue
+                # GUARD: a fixed pair of cross-axis points can both land on synthetic marks
+                # or title bands, silently dropping an entire vertical-wipe frame. Enumerate
+                # declared positions only; never search a rendered observation for a match.
+                for cross in (0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875):
+                    # Empty/full endpoints have no directional edge. Their sample set must be
+                    # identical across kinds, so labels cannot invent a directional difference.
+                    local_x = axis if horizontal or endpoint else p.scaled_width * cross
+                    local_y = p.scaled_height * cross if horizontal or endpoint else axis
+                    rx, ry = p._rotate(
+                        local_x - p.scaled_width / 2, local_y - p.scaled_height / 2, 1
+                    )
+                    x, y = round(p.center_x + rx), round(p.center_y + ry)
+                    if not (margin <= x < width - margin and margin <= y < height - margin):
+                        continue
+                    if _text_occluded(wire, frame, y) or not _flat_composite(
+                        wire, layers, frame, x, y
+                    ):
+                        continue
+                    if not _well_separated_edges(wire, layers, frame, x, y):
+                        continue
+                    result.append(
+                        SamplePoint(
+                            label=f"{clip['clip_id']}.wipe@{frame}.{side}.{cross}",
+                            output_frame=frame,
+                            canvas_x=x,
+                            canvas_y=y,
+                        )
+                    )
+                    break
+    return tuple(result)
+
+
 @_sampling_scope(0)
 def patch_sample_points(wire: Mapping[str, Any]) -> tuple[SamplePoint, ...]:
     """Where a colour comparison samples, for both the expectation and the observers.
@@ -2160,6 +2267,7 @@ def patch_sample_points(wire: Mapping[str, Any]) -> tuple[SamplePoint, ...]:
         if frame == steady:
             continue
         points.extend(_points_at_frame(wire, frame, f"@{frame}", absent=frames[frame]))
+    points.extend(_wipe_sample_points(wire))
     return tuple(points)
 
 

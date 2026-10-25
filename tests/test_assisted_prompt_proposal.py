@@ -218,6 +218,7 @@ class AssistedPromptProposalTests(unittest.TestCase):
                 authority=authority,
             )
         )
+        assert isinstance(edited, AssistedPromptProposalProjection)
         self.assertEqual(edited.proposal_revision, proposal.proposal_revision + 1)
         self.assertEqual(
             self.workspaces.get(self.workspace.workspace_id).report_fingerprint,

@@ -17,9 +17,7 @@ from collections import Counter
 from typing import Any
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-REPOSITORY = (
-    "rookiestar28/ComfyUI-MiniMaxH3-Studio"  # pragma: allowlist secret - public repository ID
-)
+REPOSITORY = "rookiestar28/MiniMaxH3-Studio"  # pragma: allowlist secret - public repository ID
 WORKFLOW_PATH = ".github/workflows/ci.yml"
 EXPECTED_JOBS = Counter(
     {

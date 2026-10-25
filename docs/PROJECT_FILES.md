@@ -2,15 +2,20 @@
 
 Use **Project file** in Production, the Editor summary, or the editor's Project menu. A `.h3proj`
 file preserves accepted editable project data: segment order and relationships, draft prompts,
-planning script and storyboard, source roles, tracks, cuts, text, fonts, transforms, effects and
-the audio settings supported by the current editor. Unapplied Inspector drafts and temporary
-selection, playhead, zoom and layout are not included.
+planning script and storyboard, source roles, tracks, cuts, text, fonts, transforms, effects,
+transitions and the audio settings supported by the current editor. Unapplied Inspector drafts and
+temporary selection, playhead, zoom and layout are not included.
 
 Accepted title strokes, shadows and background padding are preserved by Save/Open and draft
 recovery, including undo/redo. Older projects without those settings keep their existing style.
 Project format version 1 remains in use, but a project using these optional decorations requires
 a reader that supports them. Version 1.1.0 readers refuse such a project rather than silently
 discarding the decorations; use version 1.2.0 or later to reopen it.
+
+Directional wipe transitions (from the left, right, top or bottom) are preserved by Save/Open and
+draft recovery. Project format version 1 remains in use, but a project or saved draft that uses a
+directional wipe requires version 1.4.0 or later. Version 1.3.2 and earlier refuse such a project
+rather than silently dropping the wipe.
 
 ## Save And Open
 
@@ -53,8 +58,9 @@ editing. There is no cloud synchronization or automatic project-file backup in t
 
 Durable recovery and retained videos require a trusted single-user Windows host reachable only
 through loopback, fixed local NTFS storage, no permissive CORS and no public-origin override.
-Linux host-path support does not enable this durable-storage qualification. A refused setup
-leaves manual Save/Open available; it does not silently fall back to another storage location.
+Linux host-path support does not enable this durable-storage qualification; Linux support for
+durable recovery is coming in an upcoming update. A refused setup leaves manual Save/Open
+available; it does not silently fall back to another storage location.
 
 **Save draft recovery** is off by default. Enabling it stores draft prompts, titles, accepted
 editable content and a bounded data-only undo/redo history on this trusted, single-user local
