@@ -26,13 +26,15 @@ EXPECTED_NAME = "minimax-h3-studio"
 EXPECTED_AUTHOR = "rookiestar28"
 EXPECTED_PUBLISHER = "rookiestar"
 EXPECTED_DISPLAY_NAME = "ComfyUI-MiniMaxH3-Studio"
-EXPECTED_REPOSITORY = "https://github.com/rookiestar28/ComfyUI-MiniMaxH3-Studio"
+EXPECTED_REPOSITORY = "https://github.com/rookiestar28/MiniMaxH3-Studio"
 EXPECTED_CLASSIFIERS = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
 ]
-EXPECTED_ICON_URL = "https://raw.githubusercontent.com/rookiestar28/ComfyUI-MiniMaxH3-Studio/main/assets/h3_context.svg"
+EXPECTED_ICON_URL = (
+    "https://raw.githubusercontent.com/rookiestar28/MiniMaxH3-Studio/main/assets/h3_context.svg"
+)
 EXPECTED_INCLUDES = frozenset(
     {
         "__init__.py",

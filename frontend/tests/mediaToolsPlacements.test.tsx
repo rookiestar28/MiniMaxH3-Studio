@@ -473,8 +473,9 @@ describe("final output placement and empty timeline", () => {
     const empty = view.container.querySelector("[data-h3-nle-empty=timeline]");
     //  (row #27): the empty-timeline overlay's title and hint.
     expect(empty?.textContent).toContain("Nothing on the timeline yet");
-    // B-M2563-11: it names the card's visible "+" and drag, not the context menu's command.
-    expect(empty?.textContent).toContain("+");
+    // The thumbnail card is the common add control in both media bins.
+    expect(empty?.textContent).toMatch(/Click.*thumbnail/);
+    expect(empty?.textContent).not.toContain("+");
     expect(empty?.textContent).toContain("Media");
     expect(empty?.textContent).not.toContain("Add to timeline");
     expect(view.container.textContent).not.toContain(

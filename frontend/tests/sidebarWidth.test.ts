@@ -54,6 +54,71 @@ function setStyleAwareWidth(element: HTMLElement, naturalWidth: number): void {
 }
 
 describe("H3 sidebar width ownership", () => {
+  for (const shape of ["prime", "reka"] as const) {
+    for (const canvasState of ["zero", "one", "hidden", "absent"] as const) {
+      if (shape === "reka" && canvasState === "absent") continue;
+      for (const side of ["left", "left-compact", "right"] as const) {
+        it(`${shape} ${side} owner uses splitter bounds with ${canvasState} canvas and an opposite panel`, () => {
+          const onLeft = side !== "right";
+          const splitter = document.createElement("div");
+          if (shape === "prime") splitter.className = "p-splitter";
+          setHorizontalBounds(splitter, 56, onLeft ? 650 : 620);
+          const host = document.createElement("div");
+          host.className = "side-bar-panel";
+          setHorizontalBounds(
+            host,
+            onLeft ? 56 : 500,
+            side === "left" ? 760 : side === "left-compact" ? 289 : 620,
+          );
+          const content = document.createElement("div");
+          content.className = "sidebar-content-container";
+          const mount = document.createElement("div");
+          content.append(mount);
+          host.append(content);
+          const canvas = document.createElement("div");
+          canvas.className = "graph-canvas-panel";
+          setHorizontalBounds(canvas, 715, canvasState === "one" ? 716 : 715);
+          if (canvasState === "hidden") {
+            setHorizontalBounds(canvas, 300, 500);
+            canvas.style.display = "none";
+          }
+          const opposite = document.createElement("div");
+          opposite.className = "side-bar-panel";
+          setHorizontalBounds(opposite, onLeft ? 600 : 56, onLeft ? 650 : 156);
+          splitter.append(host, opposite);
+          if (canvasState !== "absent") splitter.append(canvas);
+          document.body.append(splitter);
+          const previousInnerWidth = window.innerWidth;
+          Object.defineProperty(window, "innerWidth", {
+            configurable: true,
+            value: 650,
+          });
+          let dispose: (() => void) | undefined;
+          try {
+            dispose = createSidebarWidthController(mount, {
+              schedule: () => 0,
+              cancel: () => undefined,
+            });
+            const expected = onLeft ? "544px" : "464px";
+            for (const owner of [host, content, mount])
+              expect(owner.style.minWidth).toBe(expected);
+            expect(host.style.width).toBe(expected);
+            expect(host.style.flexBasis).toBe(expected);
+            expect(content.style.width).toBe("");
+            expect(mount.style.width).toBe("");
+          } finally {
+            dispose?.();
+            splitter.remove();
+            Object.defineProperty(window, "innerWidth", {
+              configurable: true,
+              value: previousInnerWidth,
+            });
+          }
+        });
+      }
+    }
+  }
+
   it("observes viewport-only resize and removes the owned listener on disposal", () => {
     const host = document.createElement("div");
     host.className = "side-bar-panel";

@@ -25,7 +25,9 @@ ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_PATH = Path("governance/contracts/architecture_fitness_v1.json")
 SCHEMA_ID = "h3-context-architecture-fitness/1"
 MAX_SOURCE_BYTES = 4 * 1024 * 1024
-MAX_MODULES = 640
+# IMPORTANT: runaway-scan protection grows in 64-module blocks; schema maxItems must match.
+# Overflow still refuses; exact membership is pinned by the generated contract and owner-count test.
+MAX_MODULES = 704
 
 ROUTE_RESPONSIBILITIES = ("application", "decode", "domain", "response", "store")
 

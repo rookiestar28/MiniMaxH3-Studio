@@ -124,6 +124,194 @@ def boot_diagnostic(value: Any) -> dict[str, Any]:
     return result
 
 
+OPEN_DIAGNOSTICS_NAME = "integrated-shell-open-diagnostics"
+OPEN_MONITOR_STATES = {
+    "closed",
+    "opening",
+    "paused",
+    "playing",
+    "closing",
+    "blocked",
+    "cleanup_pending",
+    "fallback",
+    "absent",
+    "unknown",
+}
+OPEN_BLOCKERS = {
+    "source_unavailable",
+    "canvas_unavailable",
+    "invalid_contract",
+    "resource_limit",
+    "unknown",
+}
+OPEN_REQUEST_LABELS = {
+    "media:video",
+    "media:image",
+    "media:font",
+    "media:audio",
+    "media:other",
+    "fixture:bootstrap",
+    "fixture:transaction",
+}
+OPEN_TOKEN = re.compile(r"[a-z][a-z0-9_-]{0,47}")
+OPEN_LIMIT = 1_000_000
+
+
+def open_diagnostic(value: Any) -> dict[str, Any]:
+    """Re-derive the integrated-shell open facts from closed shapes only.
+
+    The frontend writer is `frontend/tests/e2e/helpers/integratedShellDiagnostics.ts`; change both
+    together. Every value is an enum, a code token, a boolean or a bounded number, so no URL,
+    path, host, query or copy text can pass.
+    """
+    keys = {
+        "elapsedMs",
+        "monitor",
+        "blocker",
+        "fallback",
+        "overlays",
+        "playDisabled",
+        "presentedFrame",
+        "timelineReady",
+        "audioState",
+        "audioReason",
+        "surface",
+        "ownership",
+        "preparation",
+        "videos",
+        "requests",
+        "requestsOmitted",
+        "pageErrors",
+        "consoleErrors",
+        "consoleWarnings",
+    }
+    if not isinstance(value, dict) or set(value) != keys:
+        raise ValueError("malformed open diagnostics")
+
+    def flag(item: Any, nullable: bool = False) -> bool | None:
+        if item is None and nullable:
+            return None
+        if type(item) is not bool:
+            raise ValueError("open diagnostic flags must be booleans")
+        return item
+
+    def count(item: Any) -> int:
+        if type(item) is not int or not 0 <= item <= OPEN_LIMIT:
+            raise ValueError("open diagnostic counts must be bounded nonnegative integers")
+        return item
+
+    def clock(item: Any, nullable: bool = False) -> float | int | None:
+        if item is None and nullable:
+            return None
+        if (
+            type(item) not in (int, float)
+            or not math.isfinite(item)
+            or not -600_000 <= item <= 600_000
+        ):
+            raise ValueError("open diagnostic clocks must be bounded finite numbers")
+        number: float | int = item
+        return number
+
+    def code(item: Any) -> str | None:
+        if item is None:
+            return None
+        if not isinstance(item, str) or not OPEN_TOKEN.fullmatch(item):
+            raise ValueError("open diagnostic codes must be closed tokens")
+        return item
+
+    def record(item: Any, fields: tuple[str, ...]) -> dict[str, int] | None:
+        if item is None:
+            return None
+        if not isinstance(item, dict) or set(item) != set(fields):
+            raise ValueError("malformed open diagnostic counters")
+        return {field: count(item[field]) for field in fields}
+
+    if value["monitor"] not in OPEN_MONITOR_STATES:
+        raise ValueError("open diagnostic monitor state is not closed")
+    if value["blocker"] is not None and value["blocker"] not in OPEN_BLOCKERS:
+        raise ValueError("open diagnostic blocker is not closed")
+    overlays = value["overlays"]
+    if not isinstance(overlays, list) or len(overlays) > 4:
+        raise ValueError("open diagnostic overlays must be bounded")
+    videos = value["videos"]
+    if not isinstance(videos, list) or len(videos) > 8:
+        raise ValueError("open diagnostic videos must be bounded")
+    requests = value["requests"]
+    if not isinstance(requests, list) or len(requests) > 64:
+        raise ValueError("open diagnostic requests must be bounded")
+    result: dict[str, Any] = {
+        "elapsedMs": clock(value["elapsedMs"]),
+        "monitor": value["monitor"],
+        "blocker": value["blocker"],
+        "fallback": code(value["fallback"]),
+        "overlays": [code(item) for item in overlays],
+        "playDisabled": flag(value["playDisabled"], nullable=True),
+        "presentedFrame": flag(value["presentedFrame"]),
+        "timelineReady": flag(value["timelineReady"]),
+        "audioState": code(value["audioState"]),
+        "audioReason": code(value["audioReason"]),
+        "surface": code(value["surface"]),
+        "ownership": record(
+            value["ownership"],
+            (
+                "leaseOpens",
+                "sourceAcquired",
+                "sourceLive",
+                "acquisitionAttempts",
+                "acquisitionsInFlight",
+                "videoElements",
+            ),
+        ),
+        "preparation": record(
+            value["preparation"], ("attempts", "inFlight", "aborted", "released")
+        ),
+        "videos": [],
+        "requests": [],
+        "requestsOmitted": count(value["requestsOmitted"]),
+        "pageErrors": count(value["pageErrors"]),
+        "consoleErrors": count(value["consoleErrors"]),
+        "consoleWarnings": count(value["consoleWarnings"]),
+    }
+    if None in result["overlays"]:
+        raise ValueError("open diagnostic overlays must be closed tokens")
+    video_keys = {"readyState", "networkState", "seeking", "paused", "currentTimeMs", "errorCode"}
+    for video in videos:
+        if not isinstance(video, dict) or set(video) != video_keys:
+            raise ValueError("malformed open diagnostic video")
+        result["videos"].append(
+            {
+                "readyState": count(video["readyState"]),
+                "networkState": count(video["networkState"]),
+                "seeking": flag(video["seeking"]),
+                "paused": flag(video["paused"]),
+                "currentTimeMs": count(video["currentTimeMs"]),
+                "errorCode": count(video["errorCode"]),
+            }
+        )
+    request_keys = {"label", "startMs", "endMs", "status", "outcome"}
+    for row in requests:
+        if (
+            not isinstance(row, dict)
+            or set(row) != request_keys
+            or row["label"] not in OPEN_REQUEST_LABELS
+            or row["outcome"] not in ("ok", "failed", "aborted", "pending")
+        ):
+            raise ValueError("malformed open diagnostic request")
+        status = row["status"]
+        if status is not None and (type(status) is not int or not 100 <= status <= 599):
+            raise ValueError("open diagnostic request status must be an HTTP status")
+        result["requests"].append(
+            {
+                "label": row["label"],
+                "startMs": clock(row["startMs"]),
+                "endMs": clock(row["endMs"], nullable=True),
+                "status": status,
+                "outcome": row["outcome"],
+            }
+        )
+    return result
+
+
 def server_event(line: str) -> dict[str, str] | None:
     text = ANSI.sub("", line)
     if "[WebServer]" not in text or "[vite]" not in text:
@@ -534,6 +722,26 @@ def sanitize_report(report: Any) -> dict[str, Any]:
                         "body": base64.b64encode(
                             json.dumps(facts, allow_nan=False).encode()
                         ).decode(),
+                    }
+                )
+            if (
+                attachment.get("name") == OPEN_DIAGNOSTICS_NAME
+                and attachment.get("contentType") == "application/json"
+                and "body" in attachment
+                and "path" not in attachment
+            ):
+                # CRITICAL: only the closed open facts pass; the validator re-derives every value
+                # and refuses free text, so no URL, path or copy text reaches the public artifact.
+                facts = open_diagnostic(
+                    json.loads(base64.b64decode(attachment["body"], validate=True))
+                )
+                result["attachments"].append(
+                    {
+                        "name": attachment["name"],
+                        "contentType": "application/json",
+                        "body": base64.b64encode(
+                            json.dumps(facts, allow_nan=False).encode()
+                        ).decode("ascii"),
                     }
                 )
             if (

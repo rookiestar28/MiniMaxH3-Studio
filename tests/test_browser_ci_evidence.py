@@ -141,6 +141,189 @@ def test_boot_diagnostics_refuse_nonclosed_payloads(bad: dict[str, Any]) -> None
         boot_diagnostic(facts)
 
 
+def open_facts() -> dict[str, Any]:
+    """The shape `helpers/integratedShellDiagnostics.ts` writes when the Play wait fails."""
+    return {
+        "elapsedMs": 15023.4,
+        "monitor": "opening",
+        "blocker": None,
+        "fallback": None,
+        "overlays": [],
+        "playDisabled": True,
+        "presentedFrame": False,
+        "timelineReady": True,
+        "audioState": "seeking",
+        "audioReason": "opening",
+        "surface": "expanded",
+        "ownership": {
+            "leaseOpens": 2,
+            "sourceAcquired": 2,
+            "sourceLive": 2,
+            "acquisitionAttempts": 2,
+            "acquisitionsInFlight": 0,
+            "videoElements": 2,
+        },
+        "preparation": {"attempts": 1, "inFlight": 0, "aborted": 0, "released": 0},
+        "videos": [
+            {
+                "readyState": 4,
+                "networkState": 1,
+                "seeking": False,
+                "paused": True,
+                "currentTimeMs": 0,
+                "errorCode": 0,
+            }
+        ],
+        "requests": [
+            {
+                "label": "fixture:bootstrap",
+                "startMs": -812.5,
+                "endMs": -640.1,
+                "status": 200,
+                "outcome": "ok",
+            },
+            {
+                "label": "media:image",
+                "startMs": 120.2,
+                "endMs": 131.0,
+                "status": 200,
+                "outcome": "ok",
+            },
+            {
+                "label": "media:image",
+                "startMs": 121.0,
+                "endMs": 125.5,
+                "status": None,
+                "outcome": "aborted",
+            },
+            {
+                "label": "media:video",
+                "startMs": 140.7,
+                "endMs": None,
+                "status": None,
+                "outcome": "pending",
+            },
+        ],
+        "requestsOmitted": 0,
+        "pageErrors": 0,
+        "consoleErrors": 0,
+        "consoleWarnings": 1,
+    }
+
+
+def test_open_attachment_survives_the_actual_report_sanitizer_unchanged() -> None:
+    report = raw_report()
+    facts = open_facts()
+    attachment = {
+        "name": "integrated-shell-open-diagnostics",
+        "contentType": "application/json",
+        "body": base64.b64encode(json.dumps(facts).encode()).decode(),
+    }
+    report["suites"][0]["specs"][0]["tests"][0]["results"][0]["attachments"] = [attachment]
+    safe = browser_ci.sanitize_report(report)
+    retained = safe["suites"][0]["specs"][0]["tests"][0]["results"][0]["attachments"]
+    assert [item["name"] for item in retained] == ["integrated-shell-open-diagnostics"]
+    assert json.loads(base64.b64decode(retained[0]["body"])) == facts
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "extra-key",
+        "missing-key",
+        "free-text-monitor",
+        "free-text-blocker",
+        "path-token",
+        "url-token",
+        "dotted-token",
+        "uppercase-token",
+        "negative-count",
+        "boolean-count",
+        "huge-count",
+        "nan-clock",
+        "far-clock",
+        "too-many-requests",
+        "too-many-videos",
+        "too-many-overlays",
+        "unknown-label",
+        "request-url",
+        "bad-status",
+        "unknown-outcome",
+        "counter-extra",
+    ],
+)
+def test_open_diagnostics_refuse_nonclosed_payloads(damage: str) -> None:
+    from scripts.browser_ci_evidence import open_diagnostic
+
+    facts = open_facts()
+    if damage == "extra-key":
+        facts["message"] = "private"
+    elif damage == "missing-key":
+        del facts["surface"]
+    elif damage == "free-text-monitor":
+        facts["monitor"] = "Monitor unavailable: source unavailable."
+    elif damage == "free-text-blocker":
+        facts["blocker"] = "a clip's source could not be read"
+    elif damage == "path-token":
+        facts["fallback"] = "src/private"
+    elif damage == "url-token":
+        facts["surface"] = "http://private"
+    elif damage == "dotted-token":
+        facts["overlays"] = ["private.host"]
+    elif damage == "uppercase-token":
+        facts["audioState"] = "Seeking"
+    elif damage == "negative-count":
+        facts["pageErrors"] = -1
+    elif damage == "boolean-count":
+        facts["ownership"]["sourceLive"] = True
+    elif damage == "huge-count":
+        facts["consoleErrors"] = 1_000_001
+    elif damage == "nan-clock":
+        facts["elapsedMs"] = float("nan")
+    elif damage == "far-clock":
+        facts["requests"][0]["startMs"] = -600_001
+    elif damage == "too-many-requests":
+        facts["requests"] = facts["requests"][1:2] * 65
+    elif damage == "too-many-videos":
+        facts["videos"] = facts["videos"] * 9
+    elif damage == "too-many-overlays":
+        facts["overlays"] = ["unavailable"] * 5
+    elif damage == "unknown-label":
+        facts["requests"][1]["label"] = "media:secret"
+    elif damage == "request-url":
+        facts["requests"][1]["url"] = "/nle-media/image?asset=private"
+    elif damage == "bad-status":
+        facts["requests"][1]["status"] = 99
+    elif damage == "unknown-outcome":
+        facts["requests"][2]["outcome"] = "net::ERR_ABORTED"
+    else:
+        facts["preparation"]["path"] = 1
+    with pytest.raises(ValueError):
+        open_diagnostic(facts)
+
+
+def test_open_diagnostics_admit_every_closed_state_and_null_member() -> None:
+    from scripts.browser_ci_evidence import OPEN_BLOCKERS, OPEN_MONITOR_STATES, open_diagnostic
+
+    for state in sorted(OPEN_MONITOR_STATES):
+        for blocker in [None, *sorted(OPEN_BLOCKERS)]:
+            facts = open_facts()
+            facts.update(
+                monitor=state,
+                blocker=blocker,
+                fallback="selected_source_only" if state == "fallback" else None,
+                playDisabled=None,
+                audioState=None,
+                audioReason=None,
+                surface=None,
+                ownership=None,
+                preparation=None,
+                videos=[],
+                requests=[],
+            )
+            assert open_diagnostic(facts) == facts
+
+
 def test_vite_events_keep_kind_and_time_without_payload() -> None:
     from scripts.browser_ci_evidence import server_event
 

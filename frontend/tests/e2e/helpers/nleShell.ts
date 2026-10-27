@@ -16,7 +16,15 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { fixturePython } from "../../../e2e/fixturePython";
-import { observeHarnessBoot, requireHarnessBoot } from "./harnessBoot";
+import {
+  attachHarnessBootDiagnostics,
+  observeHarnessBoot,
+  requireHarnessBoot,
+} from "./harnessBoot";
+import {
+  attachOpenDiagnostics,
+  observeShellOpen,
+} from "./integratedShellDiagnostics";
 
 import {
   routeGenericFixtureMedia,
@@ -243,6 +251,11 @@ export type IntegratedShellOptions = Readonly<{
    * and runs `beforeOpen` without opening the editor or waiting for its transport.
    */
   expandOverlay?: boolean;
+  /**
+   * Bounds the wait for an enabled Play after the open gesture. It defaults to the configured
+   * expect timeout; a journey proving the open-failure diagnostic sets a short one.
+   */
+  openTimeoutMs?: number;
 }>;
 
 type Oracle = Readonly<{
@@ -418,6 +431,7 @@ export async function openIntegratedShell(
   options: IntegratedShellOptions = {},
 ): Promise<ShellOracle> {
   observeHarnessBoot(page);
+  const opening = observeShellOpen(page);
   const root = fileURLToPath(new URL("../../../../", import.meta.url));
   if (
     shape === "reference" ||
@@ -491,18 +505,36 @@ export async function openIntegratedShell(
   for (const [key, value] of Object.entries(options.extraParams ?? {}))
     params.set(key, value);
   await page.goto(`/nleShell.html?${params.toString()}`);
-  await requireHarnessBoot(page);
+  // IMPORTANT: the diagnostics are attached here, where each failure is caught, and never by a
+  // module-level hook in a shared helper (see `attachOpenDiagnostics`). The hermetic CI profile
+  // keeps no trace, so without them a failed open says only "Play was disabled".
+  try {
+    await requireHarnessBoot(page);
+  } catch (error) {
+    await attachHarnessBootDiagnostics(page);
+    throw error;
+  }
   await options.beforeOpen?.(page);
   if (options.expandOverlay !== false) {
+    opening.markOpen();
     if (options.open) await options.open(page);
     else
       await page
         .locator("#root")
         .getByRole("button", { name: "Open full editor" })
         .click();
-    await expect(
-      page.getByRole("button", { name: "Play", exact: true }),
-    ).toBeEnabled();
+    try {
+      await expect(
+        page.getByRole("button", { name: "Play", exact: true }),
+      ).toBeEnabled(
+        options.openTimeoutMs === undefined
+          ? undefined
+          : { timeout: options.openTimeoutMs },
+      );
+    } catch (error) {
+      await attachOpenDiagnostics(page, opening);
+      throw error;
+    }
   }
   return {
     transactions,

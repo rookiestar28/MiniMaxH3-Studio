@@ -35,10 +35,22 @@ for (const failure of ["module404", "evaluation"] as const) {
         ).__h3HarnessBoot,
     );
     expect(JSON.stringify(boot)).not.toContain("private-message");
-    await info.attach("harness-boot-diagnostics", {
-      contentType: "application/json",
-      body: Buffer.from(JSON.stringify(await harnessBootDiagnostics(page))),
-    });
+    // The helper attaches the boot facts itself, where it catches the boot failure.
+    const attached = info.attachments.filter(
+      (item) => item.name === "harness-boot-diagnostics",
+    );
+    expect(attached).toHaveLength(1);
+    const facts = JSON.parse(attached[0].body!.toString()) as {
+      phase: string;
+      events: { kind: string }[];
+    };
+    expect(facts.phase).toBe(
+      (await harnessBootDiagnostics(page))?.phase ?? "missing",
+    );
+    expect(facts.events[0]?.kind).toBe(
+      failure === "module404" ? "module-error" : "window-error",
+    );
+    expect(JSON.stringify(facts)).not.toContain("private-message");
   });
 }
 

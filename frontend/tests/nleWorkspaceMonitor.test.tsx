@@ -1318,7 +1318,7 @@ describe("M25-64 monitor header and overlays", () => {
     ).toBeNull();
   });
 
-  it("shows the empty-timeline overlay with a title, the + and drag hint, and no action", () => {
+  it("shows the empty-timeline overlay with a title, the thumbnail-click hint, and no action", () => {
     monitorHarness();
     const view = render(
       <NleMonitor
@@ -1344,9 +1344,9 @@ describe("M25-64 monitor header and overlays", () => {
     const hint = empty.querySelector(
       "[data-h3-nle-overlay-detail]",
     )!.textContent!;
-    expect(hint).toContain("+");
+    expect(hint).not.toContain("+");
     expect(hint).toContain("Media");
-    expect(hint).toContain("drag");
+    expect(hint).toMatch(/Click.*thumbnail/);
     expect(empty.querySelectorAll("button")).toHaveLength(0);
     expect(empty.querySelector("svg[aria-hidden='true']")).not.toBeNull();
   });

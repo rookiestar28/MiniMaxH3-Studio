@@ -440,16 +440,9 @@
      light mode. Structure comes from elevation and type, not from texture. */
   font: var(--h3-t-body);
 }
-/* the light palette activates on the HOST's own signal, not on an
-   attribute nothing sets. ComfyUI 1.48.7 marks dark with `.dark-theme` on the
-   root element and treats bare `:root` as light, so the trigger is "host is
-   present and is not signalling dark".
-
-   `body.litegraph` (declared in the pinned host's index.html) is what makes the
-   absence of `.dark-theme` unambiguous: without it, "no dark signal" would also
-   match the offline and hermetic case, where AC--02 requires the accepted
-   dark appearance. The `:not([data-theme])` guards let a harness or test force
-   either palette deterministically and win over the host rule.
+/* The mounted root's host probe resolves old dark-theme and newer color-scheme
+   signals. Without an unambiguous host signal the accepted hermetic dark default
+   stays. The :not([data-theme]) guards preserve explicit harness overrides.
 
    No host colour variable feeds a rendered colour in this file. On this pinned
    revision `--comfy-menu-bg`, `--input-text`, `--fg-color`, `--bg-color`,
@@ -463,7 +456,7 @@
     contract in tests/m17_00Static.test.ts. It has no consumer anywhere in
    this stylesheet, so it cannot affect a rendered colour; folding it away belongs
    to whichever item owns that contract, not here. */
-:root:not([data-theme]):not(.dark-theme) body.litegraph .h3c:not([data-theme]),
+:root:not([data-theme]) .h3c[data-h3-host-theme="light"]:not([data-theme]),
 .h3c[data-theme="light"],
 :root[data-theme="light"] .h3c,
 .light-theme .h3c {
@@ -3031,7 +3024,9 @@
    (WCAG 1.4.13) without leaving the group. */
 .h3c .h3-icon-tip {
   position: absolute;
-  inset-inline: 0;
+  left: 0;
+  inline-size: max-content;
+  max-inline-size: 20rem;
   bottom: calc(100% + 6px);
   z-index: 10;
   padding: 6px 8px;

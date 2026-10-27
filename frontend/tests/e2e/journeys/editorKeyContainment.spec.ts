@@ -101,26 +101,76 @@ test("unhandled editor keys stay inside the portal and host keys resume after cl
   expect(oracle.transactions).toHaveLength(1);
 });
 
-test("older callable undo capture is masked before editor undo and resumes after close", async ({
-  page,
-}) => {
-  await openIntegratedShell(page, "smoke", {
-    beforeOpen: (target) => installHostCapture(target, false),
-  });
-  const clip = page.locator(
-    '[data-h3-nle-clip="clip-0"] [data-h3-nle-control="selection.set"]',
+for (const shape of ["data", "accessor", "absent"] as const)
+  test(
+    shape === "data"
+      ? "older callable undo capture is masked before editor undo and resumes after close"
+      : `${shape} predicate contains editor undo and resumes after close`,
+    async ({ page }) => {
+      await openIntegratedShell(page, "smoke", {
+        beforeOpen: async (target) => {
+          await target.route("**/scripts/app.js", (route) =>
+            route.fulfill({
+              contentType: "text/javascript",
+              body: 'export { app } from "/hostKeyboard.ts";',
+            }),
+          );
+          await target.route("**/scripts/api.js", (route) =>
+            route.fulfill({
+              contentType: "text/javascript",
+              body: 'export { api } from "/hostKeyboard.ts";',
+            }),
+          );
+          await target.evaluate(async (shape) => {
+            const modulePath = "/hostKeyboard.ts";
+            const fixture = (await import(
+              /* @vite-ignore */ modulePath
+            )) as typeof import("../../../e2e/hostKeyboard");
+            fixture.configureHostModalPredicate(shape);
+          }, shape);
+          const probe = await target.evaluate(observeFrontendHostSeamsInPage);
+          expect(probe.modalKeyboardTier).toBe(shape);
+          expect(
+            probe.observations.find(
+              (row) => row.seam_id === "frontend.app.modal_keyboard_guard",
+            )?.readiness_state,
+          ).toBe("ready");
+          await installHostCapture(target, false);
+        },
+      });
+      const containment = await page.evaluate(async () => {
+        const modulePath = "/hostKeyboard.ts";
+        const fixture = (await import(
+          /* @vite-ignore */ modulePath
+        )) as typeof import("../../../e2e/hostKeyboard");
+        return {
+          predicate: fixture.hostModalPredicateActive(),
+          modal: fixture.hostAriaModalOpen(),
+        };
+      });
+      expect(containment).toEqual({
+        predicate: shape !== "absent",
+        modal: true,
+      });
+      const clip = page.locator(
+        '[data-h3-nle-clip="clip-0"] [data-h3-nle-control="selection.set"]',
+      );
+      await clip.click();
+      await expect
+        .poll(async () => (await shellSnapshot(page)).receipts)
+        .toBe(1);
+      await page.keyboard.press("Control+z");
+      expect((await hostWitness(page)).undoActions).toBe(0);
+      expect((await hostWitness(page)).undoCapture).toBe(1);
+      await expect
+        .poll(async () => (await shellSnapshot(page)).receipts)
+        .toBe(2);
+      await page.locator('[data-h3-nle-action="close"]').click();
+      await expect(page.locator(shellSurface)).toHaveCount(0);
+      await page.keyboard.press("Control+z");
+      expect((await hostWitness(page)).undoActions).toBe(1);
+    },
   );
-  await clip.click();
-  await expect.poll(async () => (await shellSnapshot(page)).receipts).toBe(1);
-  await page.keyboard.press("Control+z");
-  expect((await hostWitness(page)).undoActions).toBe(0);
-  expect((await hostWitness(page)).undoCapture).toBe(1);
-  await expect.poll(async () => (await shellSnapshot(page)).receipts).toBe(2);
-  await page.locator('[data-h3-nle-action="close"]').click();
-  await expect(page.locator(shellSurface)).toHaveCount(0);
-  await page.keyboard.press("Control+z");
-  expect((await hostWitness(page)).undoActions).toBe(1);
-});
 
 test("canonical ghost Delete and keyup stay suspended until the editor closes", async ({
   page,

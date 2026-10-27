@@ -348,16 +348,16 @@ describe("M25-63 top bar and bin copy", () => {
     "B-M2563-11: the empty monitor points at the card's visible controls in %s",
     (locale) => {
       const copy = nleCopy(locale);
-      // Since a card shows "+" and is dragged; "Add to timeline" is only in its context
-      // menu. The hint names what the card shows, as the empty lane's hint does. moves the
-      // monitor's hint to the empty-timeline overlay's key.
-      for (const hint of [copy.monitor.emptyHint, copy.timeline.emptyLane])
-        expect(hint, locale).toContain("+");
+      // Both bins add from the thumbnail card; the authoring bin has no "+" control.
+      for (const hint of [copy.monitor.emptyHint, copy.timeline.emptyLane]) {
+        expect(hint, locale).not.toContain("+");
+        expect(hint, locale).toMatch(
+          /Click.*thumbnail|按一下.*縮圖|点击.*缩略图/u,
+        );
+      }
       expect(copy.monitor.emptyHint, locale).not.toContain(
         copy.assets.addToTimeline,
       );
-      // "Drag" in each locale: the hint names both ways a card reaches the timeline.
-      expect(copy.monitor.emptyHint, locale).toMatch(/drag|拖曳|拖到/u);
     },
   );
 });

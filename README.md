@@ -18,6 +18,27 @@ implementation.
 
 <details>
 
+<summary><strong>1.4.1 — Newer ComfyUI frontends and clip editor fixes</strong></summary>
+
+- App Mode works with ComfyUI frontend 1.56.1 and later. These frontends add node pack details to
+  the compiled workflow, which 1.4.0 refused with "The visible H3 graph could not be compiled."
+- The clip editor and image crop open with ComfyUI frontend 1.57.1 and later, where 1.4.0 said the
+  full editor was unavailable and the image could not be opened. Keys used inside them, such as
+  Ctrl+Z, still stay there instead of changing the canvas.
+- The sidebar, crop dialog and clip editor follow ComfyUI's light or dark palette on newer
+  frontends too. Before, they could turn light while ComfyUI used a dark palette.
+- The sidebar stays within the window on older and newer frontends, including after you make the
+  window narrower. Before, it could reach past the window edge.
+- Hover descriptions of the clip editor's icon buttons keep a readable width. A button alone in its
+  group no longer squeezes its description into a narrow column.
+- The empty preview monitor and empty timeline tracks now say to click a thumbnail in **Media**,
+  instead of mentioning a **+** button the media bin does not show.
+- **Settings → Language** names the Traditional Chinese option 正體中文.
+
+</details>
+
+<details>
+
 <summary><strong>1.4.0 — Directional wipes, image cropping and easier App Mode setup</strong></summary>
 
 - The clip editor adds four directional wipes, **Wipe from left**, **Wipe from right**,
@@ -254,8 +275,8 @@ message names it. The canvas nodes keep working even when the sidebar cannot loa
 
 - The prompt pipeline runs on Windows, Linux and WSL. The media features need Windows x64 for now;
   Linux support for them is coming in an upcoming update.
-- The clip editor and image crop have been tested on ComfyUI 0.41.0 with frontend 1.55.18. This is
-  a tested combination, not a minimum version.
+- The clip editor, image crop and App Mode have been tested on ComfyUI 0.42.0 with frontend 1.55.18
+  and with frontend 1.57.1. These are tested combinations, not minimum versions.
 - Longer-video generation checks the installed H3 implementation separately. If it reports an
   incompatibility, use a complete, compatible ComfyUI installation; installing FFmpeg or waiting
   does not fix it.
@@ -372,7 +393,7 @@ Open **MiniMax H3 Studio** from the ComfyUI sidebar. It has three pages:
 | Production | Your generated clips as a project, longer-video planning, and the entry to the clip editor    |
 | Settings   | Language, media tools, recovery metadata, retained media, local-perception status and the optional assisted-authoring provider |
 
-**Settings → Language** offers **Automatic (ComfyUI locale)**, English, 繁體中文 and 简体中文.
+**Settings → Language** offers **Automatic (ComfyUI locale)**, English, 正體中文 and 简体中文.
 
 **Settings → Local perception** shows whether the host's existing visual and audio setup is
 available. **Refresh status** reads its readiness; it does not install dependencies, launch a

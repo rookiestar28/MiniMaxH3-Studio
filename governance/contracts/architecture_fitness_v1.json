@@ -49,7 +49,7 @@
       "path": "frontend/src/entry.tsx"
     }
   ],
-  "fingerprint": "sha256:ef90ef7571ffd24276ecca2bba9fd80b15545671e25a4c97304d137b936f4add",
+  "fingerprint": "sha256:1ad6fda27b0c4d1a6e0e1c04571ff2e58552c414765a6a2955598d3c0349b1b8",
   "known_violations": [],
   "modules": [
     {
@@ -9279,6 +9279,7 @@
         "frontend/src/host/authoringFrameCoordinator.ts",
         "frontend/src/host/buildProvenanceClient.ts",
         "frontend/src/host/durationResolutionClient.ts",
+        "frontend/src/host/hostTheme.ts",
         "frontend/src/host/imageCropContract.ts",
         "frontend/src/host/languageSettings.ts",
         "frontend/src/host/productionMediaPreview.ts",
@@ -9301,7 +9302,7 @@
         "frontend/src/state/sidebarWorkspace.ts"
       ],
       "language": "typescript",
-      "lines": 1945,
+      "lines": 1958,
       "path": "frontend/src/components/H3Sidebar.tsx",
       "source_reachability": {
         "class": "product",
@@ -9332,12 +9333,13 @@
     {
       "imports": [
         "frontend/src/host/hostSeams.ts",
+        "frontend/src/host/hostTheme.ts",
         "frontend/src/host/imageCropGeometry.ts",
         "frontend/src/host/imageCropSource.ts",
         "frontend/src/i18n/catalog.ts"
       ],
       "language": "typescript",
-      "lines": 421,
+      "lines": 427,
       "path": "frontend/src/components/ImageCropDialog.tsx",
       "source_reachability": {
         "class": "product",
@@ -9791,7 +9793,7 @@
     {
       "imports": [],
       "language": "typescript",
-      "lines": 601,
+      "lines": 623,
       "path": "frontend/src/components/nle/NleIconActions.tsx",
       "source_reachability": {
         "class": "product",
@@ -9947,11 +9949,12 @@
         "frontend/src/components/nle/nleCopy.ts",
         "frontend/src/components/nle/nleMonitorChannel.ts",
         "frontend/src/components/nle/nleWorkspaceBinding.ts",
+        "frontend/src/host/hostTheme.ts",
         "frontend/src/runtime/nleSaveIndicator.ts",
         "frontend/src/state/nleWorkspaceState.ts"
       ],
       "language": "typescript",
-      "lines": 680,
+      "lines": 683,
       "path": "frontend/src/components/nle/NleOverlay.tsx",
       "source_reachability": {
         "class": "product",
@@ -10501,7 +10504,7 @@
         "frontend/src/i18n/catalog.ts"
       ],
       "language": "typescript",
-      "lines": 2123,
+      "lines": 2122,
       "path": "frontend/src/components/nle/nleCopy.ts",
       "source_reachability": {
         "class": "product",
@@ -11724,6 +11727,7 @@
         "frontend/src/host/appModeRoutes.ts",
         "frontend/src/host/appModeTemplateSources.ts",
         "frontend/src/host/canvasOwnedWrite.ts",
+        "frontend/src/host/compiledMetadata.ts",
         "frontend/src/host/generationProfileClient.ts",
         "frontend/src/host/graphAdapter.ts",
         "frontend/src/host/graphSerialization.ts",
@@ -11736,7 +11740,7 @@
         "frontend/src/host/templateMaterialization.ts"
       ],
       "language": "typescript",
-      "lines": 1200,
+      "lines": 1197,
       "path": "frontend/src/host/appMode.ts",
       "source_reachability": {
         "class": "product",
@@ -11806,6 +11810,7 @@
       "imports": [
         "frontend/src/contracts/canonicalFingerprint.ts",
         "frontend/src/contracts/generationProfileCodec.ts",
+        "frontend/src/host/compiledMetadata.ts",
         "frontend/src/host/graphAdapter.ts",
         "frontend/src/host/imageCropContract.ts",
         "frontend/src/host/inputGeometry.ts",
@@ -11816,7 +11821,7 @@
         "frontend/src/host/templateMaterialization.ts"
       ],
       "language": "typescript",
-      "lines": 1185,
+      "lines": 1177,
       "path": "frontend/src/host/appModeContract.ts",
       "source_reachability": {
         "class": "product",
@@ -12263,6 +12268,20 @@
       }
     },
     {
+      "imports": [],
+      "language": "typescript",
+      "lines": 56,
+      "path": "frontend/src/host/compiledMetadata.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
       "imports": [
         "frontend/src/contracts/generatedDurationResolution.ts"
       ],
@@ -12499,6 +12518,20 @@
       "language": "typescript",
       "lines": 346,
       "path": "frontend/src/host/hostSeams.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [],
+      "language": "typescript",
+      "lines": 40,
+      "path": "frontend/src/host/hostTheme.ts",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -12774,7 +12807,7 @@
         "frontend/src/host/hostSeams.ts"
       ],
       "language": "typescript",
-      "lines": 161,
+      "lines": 331,
       "path": "frontend/src/host/modalKeyboardGuard.ts",
       "source_reachability": {
         "class": "product",
@@ -13272,7 +13305,7 @@
     {
       "imports": [],
       "language": "typescript",
-      "lines": 440,
+      "lines": 485,
       "path": "frontend/src/host/sidebarWidth.ts",
       "source_reachability": {
         "class": "product",

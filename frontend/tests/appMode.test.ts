@@ -1,4 +1,9 @@
+import {
+  withCompiledPackIdentity,
+  hasSameCompiledMetadata,
+} from "./support/compiledMetadataFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as canvasOwnedWrite from "../src/host/canvasOwnedWrite";
 
 import {
   APP_MODE_MODE_CAPABILITIES,
@@ -1114,6 +1119,89 @@ describe("H3 App Mode host seam", () => {
       expect(host.api.queuePrompt).toHaveBeenCalledOnce();
     });
 
+    it("keeps base title compatibility through an adopting queue", async () => {
+      const inputs = {
+        task_mode: "t2va" as const,
+        user_intent: "safe",
+        duration_milliseconds: 8000,
+        frame_count: 192,
+      };
+      let expectedCompiled: AppModeCompiledPrompt | undefined;
+      const host = definitionsExistingHost(inputs, ({ compiled }) => {
+        withCompiledPackIdentity(compiled);
+        for (const value of Object.values(compiled.output)) {
+          const meta = (value as Record<string, unknown>)._meta as Record<
+            string,
+            unknown
+          >;
+          meta.title = "x".repeat(300);
+        }
+        expectedCompiled = structuredClone(compiled);
+        return compiled;
+      });
+      const result = await createAppModeController(host.app, host.api, {
+        loadTemplate,
+        loadProfile,
+        createDetachedGraph: host.createDetachedGraph,
+      }).start(inputs, { useExisting: true });
+
+      expect(result.route).toBe("existing");
+      expect(host.api.queuePrompt).toHaveBeenCalledOnce();
+      const queued = host.api.queuePrompt.mock.calls[0]![1];
+      expect(
+        expectedCompiled !== undefined &&
+          hasSameCompiledMetadata(queued, expectedCompiled),
+      ).toBe(true);
+      expect(
+        expectedCompiled !== undefined &&
+          fingerprint(queued.output) === fingerprint(expectedCompiled.output),
+      ).toBe(true);
+    });
+
+    it("restores an adopting graph once when compiled pack metadata is refused", async () => {
+      const inputs = {
+        task_mode: "t2va" as const,
+        user_intent: "safe",
+        duration_milliseconds: 8000,
+        frame_count: 192,
+      };
+      const host = definitionsExistingHost(inputs, ({ compiled }) => {
+        withCompiledPackIdentity(compiled);
+        (compiled.output["1"] as Record<string, unknown>)._meta = {
+          undisclosed: "private-value",
+        };
+        return compiled;
+      });
+      // Observe the private restoreOwnedGraph closure at its rollback effect boundary.
+      const restoreOwnedGraph = vi.spyOn(canvasOwnedWrite, "restoreGraph");
+      try {
+        const failure = await createAppModeController(host.app, host.api, {
+          loadTemplate,
+          loadProfile,
+          createDetachedGraph: host.createDetachedGraph,
+        })
+          .start(inputs, { useExisting: true })
+          .then(
+            () => undefined,
+            (error: unknown) => error,
+          );
+        expect(
+          failure instanceof AppModeError &&
+            failure.code === "compile_failed" &&
+            failure.message ===
+              "compile_failed: an unrecognized compiled _meta member",
+        ).toBe(true);
+        expect(restoreOwnedGraph).toHaveBeenCalledOnce();
+        expect(host.loadGraphData).toHaveBeenCalledTimes(2);
+        expect(
+          JSON.stringify(host.visible()) === JSON.stringify(host.before),
+        ).toBe(true);
+        expect(host.api.queuePrompt).not.toHaveBeenCalled();
+      } finally {
+        restoreOwnedGraph.mockRestore();
+      }
+    });
+
     it("restores a definitions-carrying existing graph when root compilation throws", async () => {
       const inputs = {
         task_mode: "t2va" as const,
@@ -2031,17 +2119,18 @@ describe("H3 App Mode host seam", () => {
     },
   );
 
-  it("materializes in the active workflow without creating a tab", async () => {
+  it("materializes host pack metadata in the active workflow without creating a tab", async () => {
     const inputs = {
       task_mode: "t2va" as const,
       user_intent: "A single canvas remains active across explicit runs.",
       duration_milliseconds: 5167,
       frame_count: 124,
     };
-    const compiled = {
+    const compiled = withCompiledPackIdentity({
       output: createMaterializedPrompt(inputs),
       workflow: {},
-    };
+    });
+    const expectedCompiled = structuredClone(compiled);
     let visibleGraph: Json = { nodes: [], links: [] };
     const activeWorkflow: object = { path: "workflows/repeated-run.json" };
     const workflowStore = {
@@ -2075,8 +2164,9 @@ describe("H3 App Mode host seam", () => {
         graph: { serialize: () => visibleGraph },
       },
       {
-        queuePrompt: vi.fn(async () =>
-          acceptedQueueResponse(20 + ++promptNumber),
+        queuePrompt: vi.fn(
+          async (_batch: number, _compiled: AppModeCompiledPrompt) =>
+            acceptedQueueResponse(20 + ++promptNumber),
         ),
       },
     );
@@ -2088,6 +2178,16 @@ describe("H3 App Mode host seam", () => {
     const materialized = await controller.start(inputs);
     expect(materialized.route).toBe("new");
     expect(api.queuePrompt).toHaveBeenCalledOnce();
+    expect(
+      hasSameCompiledMetadata(
+        api.queuePrompt.mock.calls[0]![1] as AppModeCompiledPrompt,
+        expectedCompiled,
+      ),
+    ).toBe(true);
+    expect(
+      fingerprint(api.queuePrompt.mock.calls[0]![1].output) ===
+        fingerprint(expectedCompiled.output),
+    ).toBe(true);
     expect(loadGraphData).toHaveBeenCalledOnce();
     expect(
       loadGraphData.mock.calls.every((call) => call[3] === activeWorkflow),
@@ -2178,6 +2278,8 @@ describe("H3 App Mode host seam", () => {
       frame_count: 192,
     };
     const fixture = existingGraphRouteFixture(inputs);
+    withCompiledPackIdentity(fixture.compiled);
+    const expectedCompiled = structuredClone(fixture.compiled);
     const visibleGraph = structuredClone(fixture.workflow);
     const request = (visibleGraph.nodes as Json[]).find(
       (node) => node.type === H3_NODE_TYPES.request,
@@ -2247,6 +2349,16 @@ describe("H3 App Mode host seam", () => {
     expect(graph.receipt.widgetCallback).not.toHaveBeenCalled();
     expect(graph.receipt.onWidgetChanged).not.toHaveBeenCalled();
     expect(api.queuePrompt).toHaveBeenCalledOnce();
+    expect(
+      hasSameCompiledMetadata(
+        api.queuePrompt.mock.calls[0]![1] as AppModeCompiledPrompt,
+        expectedCompiled,
+      ),
+    ).toBe(true);
+    expect(
+      fingerprint(api.queuePrompt.mock.calls[0]![1].output) ===
+        fingerprint(expectedCompiled.output),
+    ).toBe(true);
   });
 
   it.each(["mutate_in_place", "forward_copy"] as const)(
@@ -3848,7 +3960,7 @@ describe("H3 App Mode host seam", () => {
     ).toBe(false);
   });
 
-  it("keeps the c44 API envelope closed while allowing _meta.title", () => {
+  it("keeps the c44 API envelope closed while allowing host pack metadata", () => {
     const output = createQualifiedBasePrompt({
       task_mode: "t2va",
       user_intent: "safe",
@@ -3856,6 +3968,16 @@ describe("H3 App Mode host seam", () => {
       frame_count: 124,
     }) as Record<string, Record<string, unknown>>;
     output["1"] = { ...output["1"], _meta: { title: "Request" } };
+    expect(isCompatibleExistingPrompt({ output, workflow: {} })).toBe(true);
+    output["1"] = {
+      ...output["1"],
+      _meta: {
+        title: "Request",
+        cnr_id: "pack",
+        aux_id: "owner/pack",
+        ver: "1",
+      },
+    };
     expect(isCompatibleExistingPrompt({ output, workflow: {} })).toBe(true);
     expect(
       isCompatibleExistingPrompt({

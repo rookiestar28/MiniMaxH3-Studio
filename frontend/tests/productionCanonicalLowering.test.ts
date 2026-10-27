@@ -1,3 +1,7 @@
+import {
+  withCompiledPackIdentity,
+  hasSameCompiledMetadata,
+} from "./support/compiledMetadataFixture";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -73,7 +77,10 @@ function environment(
     mutateLoaded?.(visible);
   });
   const graphToPrompt = vi.fn().mockResolvedValue(compiled);
-  const queuePrompt = vi.fn().mockResolvedValue(acceptedQueueResponse(31));
+  const queuePrompt = vi.fn(
+    async (_batch: number, _compiled: AppModeCompiledPrompt) =>
+      acceptedQueueResponse(31),
+  );
   const bound = fixtureBackedAppModeHost(
     {
       extensionManager: {
@@ -119,7 +126,9 @@ function environment(
 
 describe("M26-03 Production canonical graph lowering", () => {
   it("materializes, compiles and queues the one certified AuditOverride graph", async () => {
-    const subject = environment();
+    const compiled = withCompiledPackIdentity(compiledPreparedPrompt());
+    const expectedCompiled = structuredClone(compiled);
+    const subject = environment(compiled);
     await expect(
       createAppModeController(subject.app, subject.api, {
         loadProfile: loadAvailableProfile,
@@ -182,6 +191,12 @@ describe("M26-03 Production canonical graph lowering", () => {
     expect(subject.onQueueAccepted).toHaveBeenCalledOnce();
     expect(subject.onQueueFailed).not.toHaveBeenCalled();
     expect(subject.queuePrompt).toHaveBeenCalledOnce();
+    expect(
+      hasSameCompiledMetadata(
+        subject.queuePrompt.mock.calls[0]![1] as AppModeCompiledPrompt,
+        expectedCompiled,
+      ),
+    ).toBe(true);
   });
 
   it.each([

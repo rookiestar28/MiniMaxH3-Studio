@@ -128,7 +128,7 @@ export const copy = {
       pillAdded: "Added",
       pillImported: "Imported",
       addToTimeline: "Add to timeline",
-      // D-6: "+" states what Add does today ( makes it append to Main).
+      // D-6: Add appends to Main; thumbnail-card activation works in both media bins.
       addNamed: "Add {name} to the timeline",
       addTip: "Append to the end of the primary video track",
       addPrimaryMissing: "Add refused: the primary video track is unavailable.",
@@ -273,7 +273,7 @@ export const copy = {
       selectedSourceOnly: "Selected source only",
       selectedSourceNone: "Select a clip with a source to preview it.",
       emptyHint:
-        "Press + on a thumbnail in Media, or drag it to the timeline, to preview it here.",
+        "Click a thumbnail in Media to add it to the timeline and preview it here.",
     },
     audio: {
       title: "Embedded audio",
@@ -379,7 +379,7 @@ export const copy = {
       clip: "{name}, {start}–{end}, {duration}",
       titleClip: "Title",
       railLabel: "{name} · {start}–{end}",
-      emptyLane: "Drag media here, or press + on a thumbnail",
+      emptyLane: "Click a thumbnail in Media to add it here",
       selected: "selected",
       trimStart: "Trim start of {name}",
       snap: "Snap edges",
@@ -978,8 +978,7 @@ export const copy = {
       },
       selectedSourceOnly: "僅顯示所選來源",
       selectedSourceNone: "選取含來源的片段以預覽。",
-      emptyHint:
-        "按「媒體」中縮圖上的「+」，或將它拖曳到時間軸，即可在此預覽。",
+      emptyHint: "按一下「媒體」中的縮圖，即可放到時間軸上並在此預覽。",
     },
     audio: {
       title: "內嵌音訊",
@@ -1077,7 +1076,7 @@ export const copy = {
       clip: "{name}，{start}–{end}，{duration}",
       titleClip: "標題",
       railLabel: "{name} · {start}–{end}",
-      emptyLane: "將素材拖曳到這裡，或按縮圖上的「+」",
+      emptyLane: "按一下「媒體」中的縮圖，即可加入此處",
       selected: "已選取",
       trimStart: "修剪 {name} 的起點",
       snap: "邊緣吸附",
@@ -1655,7 +1654,7 @@ export const copy = {
       },
       selectedSourceOnly: "仅显示所选来源",
       selectedSourceNone: "选择含来源的片段以预览。",
-      emptyHint: "按“媒体”中缩略图上的“+”，或将它拖到时间线，即可在此预览。",
+      emptyHint: "点击“媒体”中的缩略图，即可放到时间线上并在此预览。",
     },
     audio: {
       title: "内嵌音频",
@@ -1753,7 +1752,7 @@ export const copy = {
       clip: "{name}，{start}–{end}，{duration}",
       titleClip: "标题",
       railLabel: "{name} · {start}–{end}",
-      emptyLane: "将素材拖到这里，或按缩略图上的“+”",
+      emptyLane: "点击“媒体”中的缩略图，即可添加到此处",
       selected: "已选中",
       trimStart: "修剪 {name} 的起点",
       snap: "边缘吸附",

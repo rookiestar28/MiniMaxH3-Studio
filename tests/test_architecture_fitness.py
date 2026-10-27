@@ -145,7 +145,8 @@ def test_inventory_covers_both_stacks_and_the_shipped_entrypoint() -> None:
     # Canvas preparation adds bounded sources, source guidance and write-bound state.
     # Reference cropping adds two UI owners and six bounded host geometry/contract owners.
     # Title admission shares the exact packaged coverage between insertion and Inspector.
-    assert len([row for row in document["modules"] if row["language"] == "typescript"]) == 291
+    # Compiled metadata admission and host theme detection each add one frontend owner.
+    assert len([row for row in document["modules"] if row["language"] == "typescript"]) == 293
     assert document["entrypoints"] == [
         {
             "kind": "shipped_frontend_runtime",

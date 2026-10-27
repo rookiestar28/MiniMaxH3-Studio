@@ -1,4 +1,5 @@
 import { qualifyAppMode } from "./appModeQualification";
+import { compiledPromptAdmissionFailure } from "./compiledMetadata";
 import { readImageCropCapability } from "./imageCropCapability";
 import {
   createImageCropSources,
@@ -763,12 +764,8 @@ export function createAppModeController(
       )
     ) {
       await restoreOwnedGraph();
-      throw new AppModeError(
-        adopting ? "incompatible_graph" : "compile_failed",
-        adopting
-          ? "the current graph is not a complete H3 flow with one Product Shell and native generation anchor"
-          : "host compilation returned an unqualified H3 prompt envelope",
-      );
+      const failure = compiledPromptAdmissionFailure(compiled, adopting);
+      throw new AppModeError(failure.code, failure.message);
     }
     if (
       options.useExisting === true &&

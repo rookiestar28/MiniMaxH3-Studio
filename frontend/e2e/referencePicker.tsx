@@ -4,11 +4,19 @@ import {
   initialAppModeDraft,
   type AppModeDraft,
 } from "../src/components/H3Sidebar";
-import { SUPPORTED_LOCALES, type Locale } from "../src/i18n/catalog";
+import {
+  sidebarCopy,
+  SUPPORTED_LOCALES,
+  type Locale,
+} from "../src/i18n/catalog";
+import { ImageCropAction } from "../src/components/ImageCropAction";
 import { initialShellState } from "../src/state/shellState";
 import { createImageCropSources } from "../src/host/imageCropSource";
 import { seamReady } from "../src/host/hostSeams";
 import { fixtureBackedAppModeApi } from "../tests/support/hostSeamTestDouble";
+import { acquireModalKeyboardGuard } from "../src/host/modalKeyboardGuard";
+import { acquireCanvasKeyboardGuard } from "../src/host/canvasKeyboardGuard";
+import { app as keyboardHost } from "./hostKeyboard";
 
 const mediaSources = (["image", "video", "audio"] as const).flatMap(
   (kind, group) =>
@@ -21,6 +29,7 @@ const mediaSources = (["image", "video", "audio"] as const).flatMap(
 );
 const empty: AppModeDraft = { ...initialAppModeDraft, taskMode: "ref2va" };
 export function ReferencePickerHarness({ crop = false }: { crop?: boolean }) {
+  const sample = new URLSearchParams(location.search).get("crop-description");
   const [locale, setLocale] = useState<Locale>("en");
   const [draft, setDraft] = useState(empty);
   const [starts, setStarts] = useState(0);
@@ -105,55 +114,84 @@ export function ReferencePickerHarness({ crop = false }: { crop?: boolean }) {
         </>
       ) : null}
       <div id="reference-picker-sidebar" style={{ width: "100%" }}>
-        <H3Sidebar
-          locale={locale}
-          state={initialShellState}
-          appModeDraft={draft}
-          onAppModeDraftChange={setDraft}
-          appMode={{
-            ...(crop
-              ? {
-                  imageCrop: {
-                    available: cropAvailable,
-                    actions: cropSources,
-                    acquireKeyboardGuard: () => {
-                      setLeases((n) => n + 1);
-                      let released = false;
-                      return seamReady({
-                        release() {
-                          if (!released) {
-                            released = true;
-                            setLeases((n) => n - 1);
-                          }
-                        },
-                      });
+        {crop && (sample === "choose" || sample === "useExisting") ? (
+          <section className="h3c" data-crop-description-sample>
+            <div className="h3-frame-source">
+              <span>{sidebarCopy(locale).firstFrameSource}</span>
+              <ImageCropAction
+                id="sample"
+                actions={{
+                  crops: {},
+                  label: sidebarCopy(locale).crop.action,
+                  reason: sidebarCopy(locale).crop[sample],
+                  open() {},
+                }}
+              />
+            </div>
+          </section>
+        ) : (
+          <H3Sidebar
+            locale={locale}
+            state={initialShellState}
+            appModeDraft={draft}
+            onAppModeDraftChange={setDraft}
+            appMode={{
+              ...(crop
+                ? {
+                    imageCrop: {
+                      available: cropAvailable,
+                      actions: cropSources,
+                      acquireKeyboardGuard: (onInvalidated) => {
+                        const modal = acquireModalKeyboardGuard(keyboardHost);
+                        if (modal.status !== "ready") return modal;
+                        const canvas = acquireCanvasKeyboardGuard(
+                          keyboardHost,
+                          onInvalidated,
+                        );
+                        if (canvas.status !== "ready") {
+                          modal.value.release();
+                          return canvas;
+                        }
+                        setLeases((n) => n + 1);
+                        let released = false;
+                        return seamReady({
+                          release() {
+                            if (!released) {
+                              released = true;
+                              canvas.value.release();
+                              modal.value.release();
+                              setLeases((n) => n - 1);
+                            }
+                          },
+                        });
+                      },
                     },
-                  },
-                }
-              : {}),
-            capability: { status: "ready" },
-            mediaSources,
-            imageSources: mediaSources.filter(
-              (source) => source.kind === "image",
-            ),
-            durationResolution: {
-              status: "resolved",
-              resolution: {
-                schema: "h3.context.duration_resolution.v1",
-                requested_seconds: 5,
-                requested_milliseconds: 5000,
-                effective_milliseconds: 5167,
-                frame_count: 124,
-                snapped: true,
+                  }
+                : {}),
+              capability: { status: "ready" },
+              mediaSources,
+              imageSources: mediaSources.filter(
+                (source) => source.kind === "image",
+              ),
+              durationResolution: {
+                status: "resolved",
+                resolution: {
+                  schema: "h3.context.duration_resolution.v1",
+                  requested_seconds: 5,
+                  requested_milliseconds: 5000,
+                  effective_milliseconds: 5167,
+                  frame_count: 124,
+                  snapped: true,
+                },
               },
-            },
-            onStart: (inputs) => {
-              setPayload(JSON.stringify(inputs));
-              setStarts((value) => value + 1);
-            },
-            onCancel: () => {},
-          }}
-        />
+              onStart: (inputs) => {
+                setPayload(JSON.stringify(inputs));
+                setStarts((value) => value + 1);
+              },
+              onCancel: () => {},
+            }}
+          />
+        )}
       </div>
     </>
   );

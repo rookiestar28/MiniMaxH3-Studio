@@ -311,6 +311,15 @@ test("theme follows the host signal and yields to an explicit override", async (
       ({ present: hostPresent, dark: hostDark, explicit: override }) => {
         document.body.classList.toggle("litegraph", hostPresent);
         document.documentElement.classList.toggle("dark-theme", hostDark);
+        // the host theme controller observes only <html> class and
+        // style; body.litegraph is a static marker it reads when <html>
+        // changes. IMPORTANT: write the style on every step so each step
+        // re-resolves, as a host theme change does. Toggling the body class
+        // alone changes nothing. "normal" is the hermetic no-signal value; ""
+        // leaves the old-host class signals to decide.
+        document.documentElement.style.colorScheme = hostPresent
+          ? ""
+          : "normal";
         if (override === null)
           document.documentElement.removeAttribute("data-theme");
         else document.documentElement.setAttribute("data-theme", override);

@@ -164,13 +164,35 @@ export function NleIconGroup({
         clipTop = Math.max(node.getBoundingClientRect().top, 0);
         break;
       }
+    let clipLeft = 0;
+    let clipRight = document.documentElement.clientWidth;
+    for (let node = group.parentElement; node; node = node.parentElement) {
+      if (getComputedStyle(node).overflowX !== "visible") {
+        const box = node.getBoundingClientRect();
+        clipLeft = Math.max(clipLeft, box.left + node.clientLeft);
+        clipRight = Math.min(
+          clipRight,
+          box.left + node.clientLeft + node.clientWidth,
+        );
+      }
+    }
+    // IMPORTANT: a one-action group is only 44px wide. Keep description width independent of
+    // that group, then anchor inside every horizontal clip; inheriting its width splits words.
+    tip.style.maxInlineSize = `min(20rem, ${Math.max(0, clipRight - clipLeft)}px)`;
+    const groupBox = group.getBoundingClientRect();
+    const width = tip.getBoundingClientRect().width;
+    const start = groupBox.left;
+    const end = groupBox.right - width;
+    const left =
+      start + width <= clipRight
+        ? Math.max(start, clipLeft)
+        : Math.max(clipLeft, Math.min(end, clipRight - width));
+    tip.style.left = `${left - groupBox.left}px`;
     // IMPORTANT: placement is presentation-only. Publishing it through React adds a second root
     // commit to every focused edit action and breaks the <=4 accepted-edit budget; mutate the
     // already-owned tooltip node after layout instead.
     tip.dataset.placement =
-      group.getBoundingClientRect().top - clipTop < tip.offsetHeight + 6
-        ? "below"
-        : "above";
+      groupBox.top - clipTop < tip.offsetHeight + 6 ? "below" : "above";
   };
   const open = (tip: NonNullable<Tip>, target: HTMLElement | null) => {
     if (visibleGroup !== null && visibleGroup !== owner) visibleGroup.dismiss();

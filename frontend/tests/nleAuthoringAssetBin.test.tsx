@@ -23,6 +23,7 @@ import {
   admitAuthoringPrimaryAppend,
   NleAuthoringAssetBin,
 } from "../src/components/nle/NleAuthoringAssetBin";
+import { nleCopy } from "../src/components/nle/nleCopy";
 
 afterEach(() => cleanup());
 
@@ -82,6 +83,48 @@ function emptyAuthoring(): NleAuthoringStateV2 {
 }
 
 describe("NleAuthoringAssetBin", () => {
+  it.each(["en", "zh-TW", "zh-CN"] as const)(
+    "%s media hints name the thumbnail action the authoring bin renders",
+    (locale) => {
+      const text = nleCopy(locale);
+      const clickThumbnail = {
+        en: /Click.*thumbnail/,
+        "zh-TW": /按一下.*縮圖/,
+        "zh-CN": /点击.*缩略图/,
+      }[locale];
+      for (const hint of [text.monitor.emptyHint, text.timeline.emptyLane]) {
+        expect(hint).not.toContain("+");
+        expect(hint).toMatch(clickThumbnail);
+      }
+      const onIntent = vi.fn(async (_intent: AuthoringIntent) => undefined);
+      const { container } = render(
+        <NleAuthoringAssetBin
+          locale={locale}
+          authoring={emptyAuthoring()}
+          highlightedAssetIds={[]}
+          busy={false}
+          runtimeEpoch={1}
+          leaseClient={{} as AuthoringMediaSourceLeaseClient}
+          currentFrame={() => 0}
+          onIntent={onIntent}
+        />,
+      );
+      expect(container.querySelector(".h3-nle-media-add")).toBeNull();
+      const card = container.querySelector<HTMLButtonElement>(
+        ".h3-nle-media-primary",
+      )!;
+      expect(card.disabled).toBe(false);
+      fireEvent.click(card);
+      expect(onIntent).toHaveBeenCalledTimes(1);
+      expect(onIntent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "apply_timeline_commands",
+          commands: [expect.objectContaining({ kind: "insert_asset_clip" })],
+        }),
+      );
+    },
+  );
+
   it("appends exact 124-frame clips to primary content, not playhead or overlay extent", () => {
     const source: PublicCompositionAsset = {
       ...video,

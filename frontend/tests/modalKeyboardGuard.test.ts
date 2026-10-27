@@ -119,20 +119,31 @@ describe("callable modal keyboard guard", () => {
   });
 
   it.each([false, undefined, {}, 0])(
-    "refuses incompatible static value %j",
+    "uses DOM containment for formerly refused incompatible static value %j",
     (value) => {
-      const { host } = fixture(null, { value });
-      expect(acquireModalKeyboardGuard(host).status).toBe("unavailable");
-      expect(probeModalKeyboardGuard(host).status).toBe("unavailable");
+      const { host, constructor } = fixture(null, { value });
+      const before = descriptor(constructor);
+      const lease = acquire(host);
+      expect(lease.tier).toBe("absent");
+      expect(probeModalKeyboardGuard(host).status).toBe("ready");
+      expect(descriptor(constructor)).toEqual(before);
+      lease.release();
+      expect(descriptor(constructor)).toEqual(before);
     },
   );
 
   it.each([{ configurable: false }, { writable: false }])(
-    "refuses immutable shape %j",
+    "uses DOM containment for formerly refused immutable initial shape %j",
     (flags) => {
-      expect(acquireModalKeyboardGuard(fixture(null, flags).host).status).toBe(
-        "unavailable",
-      );
+      const original = vi.fn(() => false);
+      const { host, constructor } = fixture(original, flags);
+      const before = descriptor(constructor);
+      const lease = acquire(host);
+      expect(lease.tier).toBe("absent");
+      expect(descriptor(constructor)).toEqual(before);
+      lease.release();
+      expect(descriptor(constructor)).toEqual(before);
+      expect(original).not.toHaveBeenCalled();
     },
   );
 
@@ -151,7 +162,13 @@ describe("callable modal keyboard guard", () => {
       get: staticGetter,
     });
     expect(acquireModalKeyboardGuard(accessorHost).status).toBe("unavailable");
-    expect(acquireModalKeyboardGuard(host).status).toBe("unavailable");
+    // A getter-only shape used to refuse; host DOM containment now permits mounting.
+    const before = descriptor(constructor);
+    const lease = acquire(host);
+    expect(lease.tier).toBe("absent");
+    expect(descriptor(constructor)).toEqual(before);
+    lease.release();
+    expect(descriptor(constructor)).toEqual(before);
     const throwing = new Proxy(
       {},
       {
@@ -179,7 +196,7 @@ describe("callable modal keyboard guard", () => {
     expect(hook(target)).toBeNull();
   });
 
-  it("bounds prototype traversal and rejects inherited static fields", () => {
+  it("bounds prototype traversal and uses DOM containment for formerly refused inherited static fields", () => {
     const { host, constructor } = fixture();
     let deep: object = host;
     for (let index = 0; index < 8; index += 1)
@@ -187,10 +204,17 @@ describe("callable modal keyboard guard", () => {
     expect(acquireModalKeyboardGuard(deep).status).toBe("unavailable");
     const inherited = function InheritedConstructor() {};
     Object.setPrototypeOf(inherited, constructor);
-    expect(
-      acquireModalKeyboardGuard(Object.create({ constructor: inherited }))
-        .status,
-    ).toBe("unavailable");
+    const original = vi.fn(() => false);
+    Reflect.set(constructor, "maskeditor_is_opended", original);
+    const before = descriptor(constructor);
+    const lease = acquire(Object.create({ constructor: inherited }) as object);
+    expect(lease.tier).toBe("absent");
+    expect(Object.hasOwn(inherited, "maskeditor_is_opended")).toBe(false);
+    expect(descriptor(constructor)).toEqual(before);
+    lease.release();
+    expect(Object.hasOwn(inherited, "maskeditor_is_opended")).toBe(false);
+    expect(descriptor(constructor)).toEqual(before);
+    expect(original).not.toHaveBeenCalled();
   });
 
   it("refuses an accessor frozen during installation and deactivates the handed-out callable", () => {

@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SeamResult } from "../host/hostSeams";
+import { createHostThemeController } from "../host/hostTheme";
 import type {
   CropSourceImage,
   ImageCropSourceActions,
@@ -67,6 +68,11 @@ export function ImageCropDialog({
   const titleId = useId();
   const helpId = useId();
   const dialog = useRef<HTMLDivElement>(null);
+  const themeRoot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (themeRoot.current !== null)
+      return createHostThemeController(themeRoot.current);
+  }, []);
   const imageBox = useRef<HTMLDivElement>(null);
   const release = useRef<() => void>(() => {});
   const [source, setSource] = useState<CropSourceImage>();
@@ -153,7 +159,7 @@ export function ImageCropDialog({
   };
   return createPortal(
     <div data-h3-context-mount="" className="h3-crop-portal">
-      <div className="h3c h3-crop-backdrop">
+      <div className="h3c h3-crop-backdrop" ref={themeRoot}>
         <div
           ref={dialog}
           className="h3-crop-dialog"

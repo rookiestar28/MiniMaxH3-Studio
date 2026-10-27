@@ -384,8 +384,9 @@ describe("M25-62 empty lane (A62-7)", () => {
     const zone = view.container.querySelector<HTMLElement>(
       "[data-h3-nle-empty-lane]",
     )!;
-    // the bin's Add is the "+" on a thumbnail.
-    expect(zone.textContent).toBe("Drag media here, or press + on a thumbnail");
+    // Both media bins add from the thumbnail card.
+    expect(zone.textContent).toBe("Click a thumbnail in Media to add it here");
+    expect(zone.textContent).not.toContain("+");
     expect(zone.closest('[data-h3-nle-track="track-0"]')).not.toBeNull();
     expect(zone.getAttribute("aria-hidden")).toBeNull();
     expect(view.container.textContent).not.toContain(

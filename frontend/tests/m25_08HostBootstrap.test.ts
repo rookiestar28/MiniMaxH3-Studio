@@ -358,37 +358,9 @@ describe("M25-08 supplied-host model-free bootstrap", () => {
     expect(runtime.__h3HostProjectionTrace).toEqual([]);
   });
 
-  it("accepts only ComfyUI's closed title metadata before exact projection", () => {
-    const bootstrap = buildM2508HostBootstrap(LOCATOR);
-    installM2508ManagedExecutionProjection(bootstrap.executionPrompt);
-    const project = (
-      window as unknown as {
-        __h3M2508ManagedExecutionProjection: (
-          compiled: Record<string, unknown>,
-        ) => Record<string, unknown>;
-      }
-    ).__h3M2508ManagedExecutionProjection;
-    const output = Object.fromEntries(
-      Object.entries(bootstrap.executionPrompt).map(([id, node]) => [
-        id,
-        { ...structuredClone(node), _meta: { title: `Node ${id}` } },
-      ]),
-    );
-    output[bootstrap.nativeAnchorNodeId] = {
-      ...structuredClone(
-        bootstrap.visiblePrompt[bootstrap.nativeAnchorNodeId]!,
-      ),
-      _meta: { title: "Native anchor" },
-    };
-
-    expect(project({ output, workflow: {} })).toMatchObject({
-      output: bootstrap.executionPrompt,
-    });
-  });
-
-  it.each([{ title: "Request", extra: true }, { title: 1 }])(
-    "rejects non-closed ComfyUI metadata: %j",
-    (_meta) => {
+  it.each(["old", "new"] as const)(
+    "accepts the %s closed host metadata shape before exact projection",
+    (shape) => {
       const bootstrap = buildM2508HostBootstrap(LOCATOR);
       installM2508ManagedExecutionProjection(bootstrap.executionPrompt);
       const project = (
@@ -398,19 +370,65 @@ describe("M25-08 supplied-host model-free bootstrap", () => {
           ) => Record<string, unknown>;
         }
       ).__h3M2508ManagedExecutionProjection;
-      const output = structuredClone(bootstrap.executionPrompt) as Record<
-        string,
-        Record<string, unknown>
-      >;
-      output["1"]!._meta = _meta;
-      output[bootstrap.nativeAnchorNodeId] =
-        bootstrap.visiblePrompt[bootstrap.nativeAnchorNodeId]!;
-
-      expect(() => project({ output, workflow: {} })).toThrow(
-        "M25-08 model-free execution projection is not exact",
+      const output = Object.fromEntries(
+        Object.entries(bootstrap.executionPrompt).map(([id, node]) => [
+          id,
+          {
+            ...structuredClone(node),
+            _meta: {
+              title: `Node ${id}`,
+              ...(shape === "new"
+                ? Number(id) % 2 === 0
+                  ? { cnr_id: "pack", ver: "1" }
+                  : { aux_id: "owner/pack", ver: "1" }
+                : {}),
+            },
+          },
+        ]),
       );
+      output[bootstrap.nativeAnchorNodeId] = {
+        ...structuredClone(
+          bootstrap.visiblePrompt[bootstrap.nativeAnchorNodeId]!,
+        ),
+        _meta: { title: "Native anchor" },
+      };
+
+      expect(
+        JSON.stringify(project({ output, workflow: {} }).output) ===
+          JSON.stringify(bootstrap.executionPrompt),
+      ).toBe(true);
     },
   );
+
+  it.each([
+    ["unknown", { title: "Request", extra: true }],
+    ["type", { title: 1 }],
+    ["oversize", { ver: "x".repeat(257) }],
+    ["prototype-sensitive", JSON.parse('{"__proto__":"x"}')],
+    ["null", null],
+    ["array", []],
+  ])("rejects non-closed ComfyUI metadata class %s", (_label, _meta) => {
+    const bootstrap = buildM2508HostBootstrap(LOCATOR);
+    installM2508ManagedExecutionProjection(bootstrap.executionPrompt);
+    const project = (
+      window as unknown as {
+        __h3M2508ManagedExecutionProjection: (
+          compiled: Record<string, unknown>,
+        ) => Record<string, unknown>;
+      }
+    ).__h3M2508ManagedExecutionProjection;
+    const output = structuredClone(bootstrap.executionPrompt) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    output["1"]!._meta = _meta;
+    output[bootstrap.nativeAnchorNodeId] =
+      bootstrap.visiblePrompt[bootstrap.nativeAnchorNodeId]!;
+
+    expect(() => project({ output, workflow: {} })).toThrow(
+      "M25-08 model-free execution projection is not exact",
+    );
+  });
 
   it.each([
     ["wrong native id", "12", "MiniMaxH3ReferenceToVideo"],

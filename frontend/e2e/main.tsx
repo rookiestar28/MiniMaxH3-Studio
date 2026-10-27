@@ -1140,7 +1140,7 @@ function ConnectGuidanceHarness() {
             onChange={(event) => setLocale(event.target.value as Locale)}
           >
             <option value="en">English</option>
-            <option value="zh-TW">繁體中文</option>
+            <option value="zh-TW">正體中文</option>
             <option value="zh-CN">简体中文</option>
           </select>
         </label>
@@ -1900,7 +1900,7 @@ function ProductionHarness() {
             onChange={(event) => setLocale(event.target.value as Locale)}
           >
             <option value="en">English</option>
-            <option value="zh-TW">繁體中文</option>
+            <option value="zh-TW">正體中文</option>
             <option value="zh-CN">简体中文</option>
           </select>
         </label>
@@ -2528,7 +2528,7 @@ function Harness() {
             onChange={(event) => setLocale(event.target.value as Locale)}
           >
             <option value="en">English</option>
-            <option value="zh-TW">繁體中文</option>
+            <option value="zh-TW">正體中文</option>
             <option value="zh-CN">简体中文</option>
           </select>
         </label>

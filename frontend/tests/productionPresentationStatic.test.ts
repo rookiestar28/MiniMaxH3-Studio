@@ -143,19 +143,16 @@ describe("M17-21 presentation redesign", () => {
 
 describe("M17-22 host theme binding", () => {
   const lightSelector =
-    ":root:not([data-theme]):not(.dark-theme) body.litegraph";
+    ':root:not([data-theme]) .h3c[data-h3-host-theme="light"]';
   const lightBlock = css.slice(
     css.indexOf(lightSelector),
     css.indexOf(".h3n {"),
   );
 
-  it("activates the light palette on the host's own dark signal", () => {
-    // ComfyUI 1.48.7 marks dark with `.dark-theme` on the root element and
-    // treats bare `:root` as light; `body.litegraph` is the host marker that
-    // keeps the offline/hermetic case on the accepted dark palette.
-    expect(css).toContain(
-      ":root:not([data-theme]):not(.dark-theme) body.litegraph .h3c:not([data-theme])",
-    );
+  it("activates the light palette on the resolved host signal", () => {
+    // The mounted probe covers both host signals; CSS must not reinterpret a missing class.
+    expect(css).toContain(`${lightSelector}:not([data-theme])`);
+    expect(css).not.toContain(":not(.dark-theme) body.litegraph");
     // The explicit overrides stay available to harnesses and tests.
     for (const selector of [
       '.h3c[data-theme="light"]',

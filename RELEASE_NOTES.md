@@ -1,3 +1,69 @@
+# Release 1.4.1
+
+## Newer ComfyUI frontends
+
+- App Mode works with ComfyUI frontend 1.56.1 and later. These frontends add the node pack's
+  identity (`cnr_id`, `aux_id` and `ver`) beside each node's title in the compiled workflow. 1.4.0
+  accepted only the title there, so preparing, connecting or queueing an H3 graph stopped with "The
+  visible H3 graph could not be compiled." These three details are now accepted as short text; any
+  other addition is still refused. Earlier frontends behave as before.
+- The clip editor and image crop open with frontend 1.57.1 and later. These frontends report
+  whether ComfyUI's mask editor is open in a different way, so 1.4.0 could not keep its own keys
+  apart from ComfyUI's shortcuts there: **Open full editor** said the full editor was unavailable,
+  and **Crop image** said the image could not be opened. Both ways are now supported. Keys used
+  inside the editor or the crop dialog, such as Ctrl+Z, still stay there instead of changing the
+  canvas, and ComfyUI's own shortcuts work again once they close.
+- ComfyUI frontends from 1.59.0 no longer mark a dark palette the way earlier frontends do, so
+  1.4.0 showed the sidebar, crop dialog and clip editor in light colours even with a dark palette.
+  They now also read the palette's colour scheme, and earlier frontends' dark-palette marker works
+  as before.
+- Frontend 1.57.1 and later lay out the side panels differently, so 1.4.0 lost the sidebar's width
+  limits there: it kept its minimum width in a narrow window and could reach past the window edge.
+  The sidebar now finds both panel layouts and stays within the window and clear of a panel open on
+  the other side. It keeps its usual minimum width when the window has room.
+- On earlier frontends, a sidebar at its minimum width could stay too wide after the window was
+  made narrower, and reach past the window edge until the window was widened again. It now follows
+  the window in both directions, on every frontend.
+
+## Clip editor
+
+- Hover descriptions of icon buttons keep a readable width, up to the space the editor shows. A
+  button alone in its group used to squeeze its description to the button's width, which split
+  words across lines.
+- The empty preview monitor and empty timeline tracks now say to click a thumbnail in **Media**,
+  which adds it to the timeline. They no longer mention a **+** button that the media bin does not
+  show. The hints are updated in English, Traditional Chinese and Simplified Chinese.
+
+## Language setting
+
+- **Settings → Language** lists the Traditional Chinese option as 正體中文, in every interface
+  language. The saved setting is unchanged, so an existing choice stays selected.
+
+## Compatibility
+
+- The clip editor, image crop and App Mode were tested on ComfyUI 0.42.0 with frontend 1.55.18 and
+  with frontend 1.57.1, including the light and dark palettes and narrow windows.
+
+## Package links
+
+- The package's repository, documentation, issue tracker and icon links now use the repository's
+  current name, `MiniMaxH3-Studio`, so they no longer go through GitHub's redirect from the old name.
+  The Comfy Registry name **ComfyUI-MiniMaxH3-Studio** is unchanged.
+
+## Developer notes
+
+- Browser tests model both side-panel layouts and both palette signals, and narrow and widen one
+  page step by step instead of only loading it at each size. Unit tests cover both ways the host
+  reports the mask editor and the node pack details in compiled workflows.
+
+## Upgrade and limits
+
+Replace the complete package, restart ComfyUI and refresh the browser. Project, settings and other
+public data formats are unchanged from 1.4.0. The supported FFmpeg build, platform requirements and
+storage requirements are unchanged.
+
+---
+
 # Release 1.4.0
 
 ## Clip editor transitions

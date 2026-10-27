@@ -64,7 +64,7 @@ export const PERMANENT_IDENTIFIERS: ReadonlySet<string> = new Set([
   // A language option is written in its own language in every locale, which is
   // the correct behaviour and the reason these are not violations.
   "English",
-  "繁體中文",
+  "正體中文",
   "简体中文",
 ]);
 

@@ -15,7 +15,10 @@ import {
 import type { AuthoringMediaDecorationLeaseClient } from "../src/host/authoringMediaSourceLease";
 import { defaultDigest } from "../src/host/authoringMediaLeaseTransport";
 import type { AuthoringMediaVideoSourceContext } from "../src/runtime/authoringDecorationLeaseRequest";
-import type { MediaTransportOpen } from "../src/runtime/editorRuntime";
+import {
+  NATIVE_MEDIA_OPERATION_DEADLINE_MS,
+  type MediaTransportOpen,
+} from "../src/runtime/editorRuntime";
 import { validatePublicAssetManifest } from "../src/runtime/publicAssetManifest";
 
 const geometry = (width: number, height: number): AuthoringMediaGeometry => ({
@@ -36,22 +39,23 @@ const geometry = (width: number, height: number): AuthoringMediaGeometry => ({
 // duplicates the primary's), each with its own element and its own clock, so the asset-keyed
 // entry is only ever the most recent lease; a journey asking which source time a *clip* presents
 // reads the clip-keyed entry.
+// `sourceHandoverReadyStates` records each source element's `readyState` at the moment it is
+// handed to the runtime, so a journey can prove the hand-over precondition below.
 declare global {
   interface Window {
     __nleMediaDebug?: {
       videoElementsByAsset: Map<string, HTMLVideoElement>;
       videoElementsByClip: Map<string, HTMLVideoElement>;
+      sourceHandoverReadyStates: number[];
     };
   }
 }
-function debugRegistry(): {
-  videoElementsByAsset: Map<string, HTMLVideoElement>;
-  videoElementsByClip: Map<string, HTMLVideoElement>;
-} {
+function debugRegistry(): NonNullable<Window["__nleMediaDebug"]> {
   if (window.__nleMediaDebug === undefined) {
     window.__nleMediaDebug = {
       videoElementsByAsset: new Map(),
       videoElementsByClip: new Map(),
+      sourceHandoverReadyStates: [],
     };
   }
   return window.__nleMediaDebug;
@@ -391,28 +395,57 @@ async function still(
 }
 
 /**
+ * Waits until a source element has metadata, the state the product's own source owner hands over
+ * (`waitForVideoMetadata` in `src/host/authoringMediaSourceLease.ts`), with the same bound.
+ *
+ * IMPORTANT: every source video, generic or corpus, must be handed over only after this wait.
+ * The runtime assigns `currentTime` at once. At HAVE_NOTHING that assignment only records a start
+ * position: no seek, `seeked` or `timeupdate` follows, so the open depends on a single first-frame
+ * frame callback. A busy browser can lose that callback, and the native 3 s presentation deadline
+ * then latches the monitor as "source unavailable" with Play disabled (about 1 open in 30-60 with
+ * the browser held to two CPUs). Returning generic media before metadata, as this harness once
+ * did, is the divergence to avoid.
+ */
+async function sourceMetadata(
+  element: HTMLVideoElement,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) throw new Error("cancelled");
+  if (element.readyState >= 1) return;
+  await new Promise<void>((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (error?: Error) => {
+      element.removeEventListener("loadedmetadata", loaded);
+      element.removeEventListener("error", undecodable);
+      element.removeEventListener("abort", undecodable);
+      signal.removeEventListener("abort", cancelled);
+      clearTimeout(timer);
+      if (error === undefined) resolve();
+      else reject(error);
+    };
+    const loaded = () => finish();
+    const undecodable = () => finish(new Error("synthetic_media_undecodable"));
+    const cancelled = () => finish(new Error("cancelled"));
+    element.addEventListener("loadedmetadata", loaded, { once: true });
+    element.addEventListener("error", undecodable, { once: true });
+    element.addEventListener("abort", undecodable, { once: true });
+    signal.addEventListener("abort", cancelled, { once: true });
+    timer = setTimeout(undecodable, NATIVE_MEDIA_OPERATION_DEADLINE_MS);
+  });
+}
+
+/**
  * The served corpus source's true pixel size for `geometry.sourceWidth`/`sourceHeight`, measured
  * from the decoded media itself (a transform or crop row's expectation is derived from
  * `semantic_conformance_media.SOURCE_WIDTH`/`SOURCE_HEIGHT` and the clip's own transform, so the
  * runtime must present the real source size). Only a response the corpus route marked is
  * measured; an unmarked response keeps the generic placeholder geometry every other journey
- * already relies on, whatever asset id it was requested under.
+ * already relies on, whatever asset id it was requested under. Call it after `sourceMetadata`.
  */
-async function measuredVideoGeometry(
-  element: HTMLVideoElement,
-): Promise<{ width: number; height: number }> {
-  if (element.readyState < 1) {
-    await new Promise<void>((resolve, reject) => {
-      element.addEventListener("loadedmetadata", () => resolve(), {
-        once: true,
-      });
-      element.addEventListener(
-        "error",
-        () => reject(new Error("synthetic_media_undecodable")),
-        { once: true },
-      );
-    });
-  }
+function measuredVideoGeometry(element: HTMLVideoElement): {
+  width: number;
+  height: number;
+} {
   return { width: element.videoWidth, height: element.videoHeight };
 }
 
@@ -562,8 +595,15 @@ const untrackedMediaClient: AuthoringMediaDecorationLeaseClient = {
       videoElements--;
       dropRetention();
     }, "source");
+    try {
+      await sourceMetadata(element, request.signal);
+    } catch (error) {
+      release();
+      throw error;
+    }
+    registry.sourceHandoverReadyStates.push(element.readyState);
     const { width, height } = corpus
-      ? await measuredVideoGeometry(element)
+      ? measuredVideoGeometry(element)
       : { width: 320, height: 180 };
     return {
       element,

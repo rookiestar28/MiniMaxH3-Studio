@@ -792,8 +792,11 @@ test("A62-7: an empty Main lane shows the dashed drop zone instead of a sentence
   await page.getByRole("button", { name: "Open full editor" }).click();
   await expect(page.locator(surface)).toBeVisible();
   const zone = page.locator(surface).locator("[data-h3-nle-empty-lane]");
-  //  updated the sentence for the bin's "+".
-  await expect(zone).toHaveText("Drag media here, or press + on a thumbnail");
+  // both media bins add from the thumbnail card. IMPORTANT: this
+  // literal mirrors `emptyLane` in nleCopy.ts and the unit pin in
+  // nleTimelineClipSurface.test.tsx; change all three together. Only the
+  // Hosted browser job runs this journey; the Windows Full Gate does not.
+  await expect(zone).toHaveText("Click a thumbnail in Media to add it here");
   const lane = page
     .locator(surface)
     .locator('[data-h3-nle-track="track-0"] .h3-nle-track-lane');

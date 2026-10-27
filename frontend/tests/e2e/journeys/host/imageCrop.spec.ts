@@ -124,13 +124,17 @@ async function prepare(page: Page, mode: "ref2va" | "fl2va") {
       );
       const nodes = app.graph.serialize().nodes;
       return {
-        modal:
-          modal?.configurable === true &&
-          (("value" in modal &&
-            modal.writable === true &&
-            (modal.value === null || typeof modal.value === "function")) ||
-            (typeof modal.get === "function" &&
-              typeof modal.set === "function")),
+        modalTier:
+          modal !== undefined &&
+          "value" in modal &&
+          modal.configurable === true &&
+          modal.writable === true &&
+          (modal.value === null || typeof modal.value === "function")
+            ? "data"
+            : typeof modal?.get === "function" &&
+                typeof modal.set === "function"
+              ? "accessor"
+              : "absent",
         canvas:
           canvas?.canvas instanceof HTMLCanvasElement &&
           canvas.canvas.ownerDocument === document &&

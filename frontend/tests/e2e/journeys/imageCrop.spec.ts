@@ -1,5 +1,315 @@
-import { expect, test } from "../fixtures/h3Page";
+import { expect, test, type Locator } from "../fixtures/h3Page";
 import { sidebarCopy, SUPPORTED_LOCALES } from "../../../src/i18n/catalog";
+import { observeFrontendHostSeamsInPage } from "../../support/hostSeamLiveProbe";
+
+for (const shape of ["data", "accessor", "absent"] as const)
+  test(`crop contains host undo and canvas keys with ${shape} predicate`, async ({
+    page,
+  }) => {
+    const text = sidebarCopy("en");
+    const image = await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 640;
+      canvas.height = 480;
+      const context = canvas.getContext("2d")!;
+      context.fillStyle = "#439e86";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/png").split(",")[1]!;
+    });
+    await page.route("**/view?*", (route) =>
+      route.fulfill({
+        contentType: "image/png",
+        body: Buffer.from(image, "base64"),
+      }),
+    );
+    await page.goto("/?mode=image-crop");
+    await page.route("**/scripts/app.js", (route) =>
+      route.fulfill({
+        contentType: "text/javascript",
+        body: 'export { app } from "/hostKeyboard.ts";',
+      }),
+    );
+    await page.route("**/scripts/api.js", (route) =>
+      route.fulfill({
+        contentType: "text/javascript",
+        body: 'export { api } from "/hostKeyboard.ts";',
+      }),
+    );
+    await page.evaluate(async (shape) => {
+      const modulePath = "/hostKeyboard.ts";
+      const fixture = (await import(
+        /* @vite-ignore */ modulePath
+      )) as typeof import("../../../e2e/hostKeyboard");
+      fixture.configureHostModalPredicate(shape);
+      (window as any).cropHostKeyWitness = fixture.installHostCapture(true);
+    }, shape);
+    const probe = await page.evaluate(observeFrontendHostSeamsInPage);
+    expect(probe.modalKeyboardTier).toBe(shape);
+    expect(
+      probe.observations.find(
+        (row) => row.seam_id === "frontend.app.modal_keyboard_guard",
+      )?.readiness_state,
+    ).toBe("ready");
+    await page
+      .getByRole("combobox", { name: text.referenceImages, exact: true })
+      .selectOption("10");
+    await page
+      .getByRole("button", { name: text.crop.action, exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: text.crop.title });
+    await expect(
+      dialog.getByRole("group", { name: text.crop.regionLabel }),
+    ).toBeVisible();
+    expect(
+      await dialog
+        .locator("img")
+        .evaluate((image) =>
+          image instanceof HTMLImageElement ? image.naturalWidth : 0,
+        ),
+    ).toBeGreaterThan(0);
+    const containment = await page.evaluate(async () => {
+      const modulePath = "/hostKeyboard.ts";
+      const fixture = (await import(
+        /* @vite-ignore */ modulePath
+      )) as typeof import("../../../e2e/hostKeyboard");
+      return {
+        predicate: fixture.hostModalPredicateActive(),
+        modal: fixture.hostAriaModalOpen(),
+      };
+    });
+    expect(containment).toEqual({ predicate: shape !== "absent", modal: true });
+    await page.keyboard.press("Control+z");
+    await page.keyboard.press("Control+y");
+    expect(
+      await page.evaluate(() => (window as any).cropHostKeyWitness),
+    ).toMatchObject({
+      undoCapture: 2,
+      undoActions: 0,
+      canvasKeyups: 0,
+      ghostActions: 0,
+    });
+    await dialog
+      .getByRole("button", { name: text.crop.cancel, exact: true })
+      .click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator("#crop-guard-leases")).toHaveText("0");
+    await page.keyboard.press("Control+z");
+    await page.keyboard.press("Delete");
+    const witness = await page.evaluate(
+      () => (window as any).cropHostKeyWitness,
+    );
+    expect(witness.undoActions).toBe(1);
+    expect(witness.ghostActions).toBe(1);
+    expect(witness.canvasKeyups).toBeGreaterThan(0);
+  });
+
+async function descriptionGeometry(tip: Locator) {
+  return tip.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d")!;
+    context.font = style.font;
+    const text = node.firstChild!;
+    const words = [...(text.textContent ?? "").matchAll(/[A-Za-z]+/g)];
+    const broken = words.flatMap((word) => {
+      const range = document.createRange();
+      range.setStart(text, word.index!);
+      range.setEnd(text, word.index! + word[0].length);
+      const lines = new Set(
+        [...range.getClientRects()].map((r) => Math.round(r.top)),
+      );
+      return lines.size > 1 ? [word[0]] : [];
+    });
+    let left = 0;
+    let right = document.documentElement.clientWidth;
+    for (
+      let parent = node.parentElement;
+      parent;
+      parent = parent.parentElement
+    ) {
+      if (getComputedStyle(parent).overflowX !== "visible") {
+        const clip = parent.getBoundingClientRect();
+        left = Math.max(left, clip.left + parent.clientLeft);
+        right = Math.min(
+          right,
+          clip.left + parent.clientLeft + parent.clientWidth,
+        );
+      }
+    }
+    return {
+      group: node.parentElement!.getAttribute("aria-label"),
+      groupWidth: node.parentElement!.getBoundingClientRect().width,
+      width: box.width,
+      widestWord: Math.max(
+        0,
+        ...words.map((word) => context.measureText(word[0]).width),
+      ),
+      broken,
+      left: box.left,
+      right: box.right,
+      clipLeft: left,
+      clipRight: right,
+      lines: (box.height - 14) / parseFloat(style.lineHeight),
+    };
+  });
+}
+
+function expectReadable(
+  measured: Awaited<ReturnType<typeof descriptionGeometry>>,
+) {
+  const detail = JSON.stringify(measured);
+  expect(measured.width, detail).toBeGreaterThanOrEqual(
+    measured.widestWord + 18,
+  );
+  expect(measured.broken, detail).toEqual([]);
+  expect(measured.left, detail).toBeGreaterThanOrEqual(measured.clipLeft - 1);
+  expect(measured.right, detail).toBeLessThanOrEqual(measured.clipRight + 1);
+}
+
+test("narrow crop descriptions remain readable on hover and focus", async ({
+  page,
+}, testInfo) => {
+  const text = sidebarCopy("en");
+  for (const width of [704, 960]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto("/?mode=image-crop");
+    await page.getByLabel(text.taskMode, { exact: true }).selectOption("i2va");
+    const crop = page.getByRole("button", {
+      name: text.crop.action,
+      exact: true,
+    });
+    await expect(crop).toHaveAttribute("aria-disabled", "true");
+    for (const interaction of ["hover", "focus"] as const) {
+      if (interaction === "hover") await crop.hover();
+      else await crop.focus();
+      const tip = page.getByRole("tooltip");
+      await expect(tip).toHaveText(text.crop.choose);
+      await page.screenshot({
+        path: testInfo.outputPath(`crop-${width}-${interaction}.png`),
+      });
+      const measured = await descriptionGeometry(tip);
+      console.log(
+        "crop description",
+        width,
+        interaction,
+        JSON.stringify(measured),
+      );
+      expectReadable(measured);
+      if (interaction === "focus") await page.keyboard.press("Escape");
+      else await page.mouse.move(0, 0);
+      await expect(tip).toHaveCount(0);
+      await crop.blur();
+      await page.mouse.move(0, 0);
+    }
+  }
+});
+
+test("short and long crop descriptions use real props in every locale", async ({
+  page,
+}) => {
+  for (const width of [704, 960]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const reason of ["choose", "useExisting"] as const) {
+      await page.goto(`/?mode=image-crop&crop-description=${reason}`);
+      for (const locale of SUPPORTED_LOCALES) {
+        await page.getByLabel("Picker locale").selectOption(locale);
+        const text = sidebarCopy(locale);
+        const crop = page.getByRole("button", {
+          name: text.crop.action,
+          exact: true,
+        });
+        for (const interaction of ["hover", "focus"] as const) {
+          if (interaction === "hover") await crop.hover();
+          else await crop.focus();
+          const tip = page.getByRole("tooltip");
+          await expect(tip).toHaveText(text.crop[reason]);
+          const sample = await descriptionGeometry(tip);
+          console.log(
+            "crop sample",
+            locale,
+            reason,
+            width,
+            interaction,
+            JSON.stringify(sample),
+          );
+          expectReadable(sample);
+          expect(sample.lines).toBeLessThanOrEqual(6.1);
+          if (interaction === "focus") await page.keyboard.press("Escape");
+          else await page.mouse.move(0, 0);
+          await expect(tip).toHaveCount(0);
+          await crop.blur();
+          await page.mouse.move(0, 0);
+        }
+      }
+    }
+  }
+});
+
+test("every sidebar and editor icon group keeps descriptions readable inside its clip", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  // Non-vacuous minima pinned to the rendered owners: H3Sidebar (one/two frame rows),
+  // ReferenceSourcePicker (three image rows with four actions), NlePlanningSection (five main
+  // actions), and the editor's NleTimelineToolbar (at least undo/redo) / sequence planning.
+  for (const [scenario, route, minimum] of [
+    ["first", "/?mode=image-crop", 1],
+    ["first-last", "/?mode=image-crop", 2],
+    ["references", "/?mode=image-crop", 12],
+    ["planning", "/?mode=production&planning=1", 5],
+    ["workspace", "/nleWorkspace.html", 2],
+    ["sequence", "/nleSequence.html", 5],
+  ] as const) {
+    await page.setViewportSize({
+      width: route.startsWith("/?") ? 704 : 1280,
+      height: 1100,
+    });
+    await page.goto(route);
+    if (scenario === "first" || scenario === "first-last")
+      await page
+        .getByLabel(sidebarCopy("en").taskMode, { exact: true })
+        .selectOption(scenario === "first" ? "i2va" : "fl2va");
+    if (scenario === "references")
+      await page.getByLabel("Picker preset").selectOption("sample");
+    if (route.includes("production"))
+      await page
+        .getByRole("button", { name: "Production", exact: true })
+        .click();
+    if (route === "/nleWorkspace.html")
+      await page.getByRole("button", { name: "Open full editor" }).click();
+    const controls = page.locator("button.h3-icon-button");
+    await expect(controls.first()).toBeVisible();
+    let measured = 0;
+    for (let index = 0; index < (await controls.count()); index++) {
+      const button = controls.nth(index);
+      if (!(await button.isVisible())) continue;
+      const slot = button.locator("xpath=..");
+      await slot.hover();
+      const tip = button
+        .locator("xpath=ancestor::*[contains(@class,'h3-icon-group')][1]")
+        .getByRole("tooltip");
+      await expect(tip).toBeVisible();
+      const geometry = await descriptionGeometry(tip);
+      console.log(
+        "icon group sweep",
+        scenario,
+        await button.getAttribute("data-h3-nle-control"),
+        JSON.stringify(geometry),
+      );
+      expectReadable(geometry);
+      if (measured === 0)
+        await page.screenshot({
+          path: testInfo.outputPath(
+            `toolbar-${route.includes("Sequence") ? "sequence" : route.includes("Workspace") ? "workspace" : route.includes("production") ? "planning" : "sidebar"}.png`,
+          ),
+        });
+      measured++;
+      await page.mouse.move(0, 0);
+    }
+    expect(measured, scenario).toBeGreaterThanOrEqual(minimum);
+  }
+});
 
 test("crop images at the sidebar floor in every locale with exact geometry and keyboard containment", async ({
   page,

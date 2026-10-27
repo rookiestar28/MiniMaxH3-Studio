@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "minimax-h3-studio"
-version = "1.4.0"
+version = "1.4.1"
 description = "Turn a description into a finished MiniMax H3 video without leaving ComfyUI, prompt, segments, continuity and final cut in one workbench."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,14 +20,14 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/rookiestar28/ComfyUI-MiniMaxH3-Studio"
-Documentation = "https://github.com/rookiestar28/ComfyUI-MiniMaxH3-Studio/tree/main/docs"
-"Bug Tracker" = "https://github.com/rookiestar28/ComfyUI-MiniMaxH3-Studio/issues"
+Repository = "https://github.com/rookiestar28/MiniMaxH3-Studio"
+Documentation = "https://github.com/rookiestar28/MiniMaxH3-Studio/tree/main/docs"
+"Bug Tracker" = "https://github.com/rookiestar28/MiniMaxH3-Studio/issues"
 
 [tool.comfy]
 PublisherId = "rookiestar"
 DisplayName = "ComfyUI-MiniMaxH3-Studio"
-Icon = "https://raw.githubusercontent.com/rookiestar28/ComfyUI-MiniMaxH3-Studio/main/assets/h3_context.svg"
+Icon = "https://raw.githubusercontent.com/rookiestar28/MiniMaxH3-Studio/main/assets/h3_context.svg"
 includes = [
     "__init__.py",
     "comfyui_h3_context",

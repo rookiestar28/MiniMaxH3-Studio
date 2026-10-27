@@ -37,6 +37,7 @@ export function requireHostHttpAvailability(status: number): void {
 }
 
 export type FrontendHostSeamProbeResult = Readonly<{
+  modalKeyboardTier: "data" | "accessor" | "absent" | "unavailable";
   observations: readonly HostSeamObservationWire[];
   nodeDefinitionCount: number;
   inspectionMilliseconds: number;
@@ -178,19 +179,29 @@ export async function observeFrontendHostSeamsInPage(): Promise<FrontendHostSeam
   };
   // Each capability is independent: a throwing foreign canvas descriptor must not
   // turn a valid modal predicate into an invented missing capability, or vice versa.
+  let modalKeyboardTier: FrontendHostSeamProbeResult["modalKeyboardTier"] =
+    "unavailable";
   const modalKeyboardReady = keyboardShape(() => {
     const constructor = dataDescriptor(app, "constructor")?.value;
+    if (typeof constructor !== "function") return false;
     const predicate =
       typeof constructor === "function"
         ? Reflect.getOwnPropertyDescriptor(constructor, "maskeditor_is_opended")
         : undefined;
-    return (
+    modalKeyboardTier =
       predicate !== undefined &&
       "value" in predicate &&
       predicate.configurable === true &&
       predicate.writable === true &&
       (predicate.value === null || typeof predicate.value === "function")
-    );
+        ? "data"
+        : typeof predicate?.get === "function" &&
+            typeof predicate.set === "function"
+          ? "accessor"
+          : "absent";
+    // The census row represents the guard capability, which includes DOM fallback.
+    // Never call an unknown host getter merely to collect descriptor shape.
+    return true;
   });
   const canvasOwner = (): unknown => {
     // CRITICAL: admit the same descriptor-only canvas shapes as canvasOwner() in
@@ -332,6 +343,7 @@ export async function observeFrontendHostSeamsInPage(): Promise<FrontendHostSeam
     left.seam_id < right.seam_id ? -1 : left.seam_id > right.seam_id ? 1 : 0,
   );
   return {
+    modalKeyboardTier,
     observations,
     nodeDefinitionCount:
       registry === undefined ? 0 : Object.keys(registry).length,

@@ -13,7 +13,10 @@ const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
 export default defineConfig({
   testDir: "tests/e2e",
   testMatch: [
+    "journeys/hostAppearance.spec.ts",
     "journeys/harnessBoot.spec.ts",
+    // The closed open diagnostic a failed integrated-shell open attaches for the hermetic CI.
+    "journeys/integratedShellDiagnostics.spec.ts",
     "journeys/nleWorkspace.spec.ts",
     // empty-capable V2 authoring, content extent, and the V1 render boundary.
     "journeys/m25_57ContentExtent.spec.ts",

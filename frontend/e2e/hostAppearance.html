@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Host appearance compatibility harness</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      #surface {
+        position: relative;
+        margin-left: 58px;
+        width: 1000px;
+        height: 600px;
+      }
+      #panel {
+        position: absolute;
+        left: 0;
+        width: 1100px;
+      }
+      #canvas {
+        position: absolute;
+        left: 234px;
+        width: 478px;
+        height: 500px;
+      }
+      #opposite {
+        position: absolute;
+        left: 712px;
+        width: 288px;
+        height: 500px;
+      }
+      #surface.continuous {
+        display: flex;
+        margin-left: 56px;
+        width: calc(100% - 56px);
+        overflow: hidden;
+      }
+      .continuous #panel {
+        position: relative;
+        flex: 0 0 233px;
+        width: 233px;
+        min-width: 0;
+      }
+      .continuous #main {
+        flex: 1 1 0%;
+        min-width: 0;
+      }
+      .continuous #canvas {
+        position: relative;
+        left: 8px;
+        width: max(0px, calc(100% - 8px));
+      }
+    </style>
+  </head>
+  <body>
+    <div id="surface">
+      <div id="panel" class="side-bar-panel"><div id="root"></div></div>
+      <div id="canvas" class="graph-canvas-panel"></div>
+      <div id="opposite" class="side-bar-panel"></div>
+    </div>
+    <script type="module" src="/hostAppearance.tsx"></script>
+  </body>
+</html>

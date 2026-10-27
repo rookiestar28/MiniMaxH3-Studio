@@ -32,6 +32,34 @@ const FixtureDetachedGraph = function (serialized?: unknown): object {
 
 const defaultCanvasKey: EventListener = () => undefined;
 
+export type ModalKeyboardHostShape = "data" | "accessor" | "absent";
+type ModalHook = ((...args: unknown[]) => unknown) | null;
+
+/** The new changeTracker reads this store directly, bypassing the constructor. */
+export function createModalKeyboardHost(
+  shape: ModalKeyboardHostShape,
+  original: ModalHook = null,
+) {
+  const store = { predicate: original };
+  class Host {
+    static get maskeditor_is_opended(): ModalHook {
+      return store.predicate;
+    }
+    static set maskeditor_is_opended(value: ModalHook) {
+      store.predicate = value;
+    }
+  }
+  if (shape === "data")
+    Object.defineProperty(Host, "maskeditor_is_opended", {
+      value: original,
+      configurable: true,
+      writable: true,
+    });
+  else if (shape === "absent")
+    Reflect.deleteProperty(Host, "maskeditor_is_opended");
+  return { host: new Host(), constructor: Host, store };
+}
+
 function cloneFixtureApp<App extends object>(
   source: App,
   overrides: object,
@@ -65,16 +93,14 @@ function cloneFixtureApp<App extends object>(
   return cloned;
 }
 
-function withKeyboardCapabilities<App extends object>(source: App): App {
+function withKeyboardCapabilities<App extends object>(
+  source: App,
+  shape: ModalKeyboardHostShape = "data",
+): App {
   const cloned = cloneFixtureApp(source, {});
   if (Object.getPrototypeOf(source) !== Object.prototype) return cloned;
   if (Object.getOwnPropertyDescriptor(source, "constructor") === undefined) {
-    const constructor = function FixtureAppConstructor() {};
-    Object.defineProperty(constructor, "maskeditor_is_opended", {
-      value: null,
-      configurable: true,
-      writable: true,
-    });
+    const { constructor } = createModalKeyboardHost(shape);
     Object.defineProperty(cloned, "constructor", {
       value: constructor,
       configurable: true,
@@ -223,6 +249,7 @@ export function fixtureBackedAppModeHost<
   app: App,
   api: Api,
   options: Readonly<{
+    modalKeyboardShape?: ModalKeyboardHostShape;
     workflowVariant?:
       HostWorkflowBehaviourVariantId | HostWorkflowBehaviourFixture;
   }> = {},
@@ -237,7 +264,10 @@ export function fixtureBackedAppModeHost<
       : typeof options.workflowVariant === "string"
         ? createHostWorkflowBehaviourFixture(options.workflowVariant)
         : options.workflowVariant;
-  const keyboardBoundApp = withKeyboardCapabilities(app);
+  const keyboardBoundApp = withKeyboardCapabilities(
+    app,
+    options.modalKeyboardShape,
+  );
   const variantBoundApp = (
     workflowBehaviour === undefined
       ? keyboardBoundApp

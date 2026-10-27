@@ -2,6 +2,7 @@
 // pure validation and identity helpers every App Mode module shares ( split).
 
 import { sha256Text } from "../contracts/canonicalFingerprint";
+import { isSafeCompiledMetadata } from "./compiledMetadata";
 import { referenceCapacity } from "./referenceSelection";
 import { validateImageCrops, type ImageCrops } from "./imageCropContract";
 import type {
@@ -803,9 +804,7 @@ export function isSafeCompiledPromptEnvelope(
 export function isSafeCompiledNodeEnvelope(
   node: Record<string, unknown>,
 ): boolean {
-  // IMPORTANT: ComfyUI's public API envelope includes only class_type, inputs,
-  // and the presentation-only _meta.title. Rejecting other members keeps
-  // private/unknown payloads out of the queue-boundary contract.
+  // IMPORTANT: compiledMetadata owns the closed host metadata contract and bounds.
   if (
     !Object.prototype.hasOwnProperty.call(node, "class_type") ||
     !Object.prototype.hasOwnProperty.call(node, "inputs")
@@ -823,15 +822,8 @@ export function isSafeCompiledNodeEnvelope(
     return false;
   if (typeof node.class_type !== "string" || record(node.inputs) === undefined)
     return false;
-  if (node._meta !== undefined) {
-    const meta = record(node._meta);
-    if (
-      meta === undefined ||
-      Object.keys(meta).some((key) => key !== "title") ||
-      (meta.title !== undefined && typeof meta.title !== "string")
-    )
-      return false;
-  }
+  if (node._meta !== undefined && !isSafeCompiledMetadata(node._meta))
+    return false;
   return true;
 }
 

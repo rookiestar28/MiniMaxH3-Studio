@@ -21,7 +21,7 @@
     "modules": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 640,
+      "maxItems": 704,
       "items": { "$ref": "#/$defs/module" }
     },
     "entrypoints": {

@@ -5,6 +5,7 @@ import {
   admitPrimaryAppend,
   NleMediaBin,
 } from "../src/components/nle/NleMediaBin";
+import { nleCopy } from "../src/components/nle/nleCopy";
 import {
   mediaBinProjection,
   mediaDurationPill,
@@ -70,6 +71,48 @@ const asset = (
 });
 
 describe("M25-48 media-bin model", () => {
+  it.each(["en", "zh-TW", "zh-CN"] as const)(
+    "%s media hints name the thumbnail action the fallback bin renders",
+    (locale) => {
+      const text = nleCopy(locale);
+      const clickThumbnail = {
+        en: /Click.*thumbnail/,
+        "zh-TW": /按一下.*縮圖/,
+        "zh-CN": /点击.*缩略图/,
+      }[locale];
+      for (const hint of [text.monitor.emptyHint, text.timeline.emptyLane]) {
+        expect(hint).not.toContain("+");
+        expect(hint).toMatch(clickThumbnail);
+      }
+      const onIntent = vi.fn(async (_intent: AuthoringIntent) => undefined);
+      const { container } = render(
+        <NleMediaBin
+          locale={locale}
+          snapshot={{ ...snapshotFixture(SMOKE_SHAPE), clips: [] }}
+          highlightedAssetIds={[]}
+          busy={false}
+          runtimeEpoch={1}
+          leaseClient={{} as AuthoringMediaSourceLeaseClient}
+          currentFrame={() => 0}
+          onIntent={onIntent}
+        />,
+      );
+      expect(container.querySelector(".h3-nle-media-add")).not.toBeNull();
+      const card = container.querySelector<HTMLButtonElement>(
+        ".h3-nle-media-primary",
+      )!;
+      expect(card.disabled).toBe(false);
+      fireEvent.click(card);
+      expect(onIntent).toHaveBeenCalledTimes(1);
+      expect(onIntent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "apply_timeline_commands",
+          commands: [expect.objectContaining({ kind: "insert_asset_clip" })],
+        }),
+      );
+    },
+  );
+
   it("admits primary Add at the primary content end, independent of playhead and overlays", () => {
     const original = snapshotFixture(SMOKE_SHAPE);
     const primary = original.tracks.find(

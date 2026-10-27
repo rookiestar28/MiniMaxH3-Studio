@@ -8,7 +8,14 @@ import {
   PreparedSourceGuidance,
 } from "./CanvasSourceGuidance";
 import { referenceCapacity } from "../host/referenceSelection";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
+import { createHostThemeController } from "../host/hostTheme";
 
 import type {
   AppModeAdmission,
@@ -1352,6 +1359,11 @@ export function H3Sidebar({
 }) {
   const text = sidebarCopy(locale);
   const pages = pageCopy(locale);
+  const themeRoot = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (themeRoot.current !== null)
+      return createHostThemeController(themeRoot.current);
+  }, []);
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<
     "copied" | "fallback" | undefined
   >();
@@ -1533,6 +1545,7 @@ export function H3Sidebar({
   return (
     <section
       className="h3c"
+      ref={themeRoot}
       // the panel declares its own language. The CJK type variant keys
       // on `:lang(zh)`, and a screen reader needs the same signal to pick the
       // right voice -- without this attribute both would silently do nothing.

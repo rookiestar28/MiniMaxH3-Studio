@@ -585,14 +585,16 @@ export function installM2508ManagedExecutionProjection(
           : (structuredClone(actual) as Record<string, unknown>);
       if (normalized !== null && "_meta" in normalized) {
         const meta = normalized._meta;
-        const metaKeys =
-          meta !== null && typeof meta === "object" && !Array.isArray(meta)
-            ? Object.keys(meta as Record<string, unknown>).sort()
-            : [];
         if (
-          JSON.stringify(metaKeys) !== JSON.stringify(["title"]) ||
-          typeof (meta as { title?: unknown }).title !== "string" ||
-          (meta as { title: string }).title.length > 256
+          meta === null ||
+          typeof meta !== "object" ||
+          Array.isArray(meta) ||
+          Object.entries(meta).some(
+            ([key, value]) =>
+              !["title", "cnr_id", "aux_id", "ver"].includes(key) ||
+              typeof value !== "string" ||
+              value.length > 256,
+          )
         )
           throw new Error(
             "M25-08 model-free execution projection is not exact",
@@ -600,7 +602,7 @@ export function installM2508ManagedExecutionProjection(
         delete normalized._meta;
       }
       // CRITICAL: class/type equality is not an execution allowlist. Compare the complete bounded
-      // JSON node after removing only ComfyUI's closed title metadata, so a same-class locator or
+      // JSON node after removing only ComfyUI's closed presentation/pack metadata, so a same-class locator or
       // link rewrite cannot cross the pre-fingerprint seam.
       if (
         normalized === null ||

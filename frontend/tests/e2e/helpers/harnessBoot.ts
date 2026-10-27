@@ -98,12 +98,24 @@ export async function harnessBootDiagnostics(page: Page) {
   };
 }
 
-test.afterEach(async ({ page }, info) => {
-  if (info.status === info.expectedStatus) return;
-  const facts = await harnessBootDiagnostics(page);
-  if (!facts) return;
-  await info.attach("harness-boot-diagnostics", {
-    contentType: "application/json",
-    body: Buffer.from(JSON.stringify(facts)),
-  });
-});
+/**
+ * Attaches the boot facts to the running test. `openIntegratedShell` calls it where a boot
+ * failure is caught, before rethrowing. It never throws.
+ *
+ * IMPORTANT: do not turn this back into a `test.afterEach` at the top level of this module.
+ * Playwright adds a hook to the spec file that is loading when the call runs, and Node evaluates
+ * this shared module once per worker, so only the first spec file loaded in each worker had the
+ * hook. Every other spec file's failure was reported with no diagnostic at all.
+ */
+export async function attachHarnessBootDiagnostics(page: Page): Promise<void> {
+  try {
+    const facts = await harnessBootDiagnostics(page);
+    if (!facts) return;
+    await test.info().attach("harness-boot-diagnostics", {
+      contentType: "application/json",
+      body: Buffer.from(JSON.stringify(facts)),
+    });
+  } catch {
+    // A diagnostic must never replace the failure it describes.
+  }
+}

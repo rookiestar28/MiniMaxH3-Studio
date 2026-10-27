@@ -63,6 +63,11 @@ describe("workspace fixture retained source authority", () => {
     vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(
       () => undefined,
     );
+    // The fixture hands a source over only at HAVE_METADATA, as the product does. jsdom never
+    // loads media, so the element is presented as having metadata; this case is about rebind.
+    vi.spyOn(HTMLMediaElement.prototype, "readyState", "get").mockReturnValue(
+      HTMLMediaElement.HAVE_METADATA,
+    );
     const first = binding();
     const source = await workspaceMediaClient.acquireVideoSource(
       first.request,

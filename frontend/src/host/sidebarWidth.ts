@@ -196,13 +196,39 @@ function containsGraphCanvas(element: HTMLElement): boolean {
   );
 }
 
+function splitterFor(hostOwner: HTMLElement): HTMLElement | undefined {
+  // IMPORTANT: PrimeVue marks its splitter; Reka keeps only sidebar/canvas shapes. Resolving
+  // solely by .p-splitter loses canvas/opposite clamps on newer hosts. Stay in the nearest
+  // shared topology, excluding the document body so unrelated host panels never constrain us.
+  for (
+    let parent = hostOwner.parentElement;
+    parent !== null && parent !== hostOwner.ownerDocument.body;
+    parent = parent.parentElement
+  ) {
+    if (
+      parent.matches(splitterSelector) ||
+      [...parent.children].some(
+        (child) =>
+          child instanceof HTMLElement &&
+          !child.contains(hostOwner) &&
+          containsGraphCanvas(child),
+      )
+    )
+      return parent;
+  }
+  return undefined;
+}
+
 function siblingPanel(hostOwner: HTMLElement): HTMLElement | undefined {
-  const splitterRoot = hostOwner.closest<HTMLElement>(splitterSelector);
-  if (splitterRoot === null) return undefined;
+  const splitterRoot = splitterFor(hostOwner);
+  if (splitterRoot === undefined) return undefined;
   const parent = splitterRoot;
   const hostBounds = horizontalBounds(hostOwner);
   if (hostBounds === undefined) return undefined;
-  const hostOnLeft = hostBounds.left <= 1;
+  const canvas =
+    horizontalBounds(siblingCanvas(hostOwner)) ??
+    horizontalBounds(splitterRoot);
+  const hostOnLeft = hostBounds.left <= (canvas?.left ?? 0) + 1;
   // The pinned host marks persistent sidebar owners explicitly; prefer that seam over the
   // generic PrimeVue panel class, whose central sibling normally contains the graph canvas.
   const ownerClass = hostOwner.classList.contains("side-bar-panel")
@@ -239,8 +265,8 @@ function siblingPanel(hostOwner: HTMLElement): HTMLElement | undefined {
 }
 
 function siblingCanvas(hostOwner: HTMLElement): HTMLElement | undefined {
-  const splitterRoot = hostOwner.closest<HTMLElement>(splitterSelector);
-  if (splitterRoot === null) return undefined;
+  const splitterRoot = splitterFor(hostOwner);
+  if (splitterRoot === undefined) return undefined;
   for (const child of splitterRoot.children) {
     if (!(child instanceof HTMLElement) || child === hostOwner) continue;
     const candidate = child.matches(graphCanvasSelector)
@@ -270,7 +296,25 @@ function availableWidthFor(
 ): number {
   if (hostOwner === undefined) return viewportWidth;
   const host = horizontalBounds(hostOwner) ?? { left: 0, right: viewportWidth };
-  let canvas = horizontalBounds(siblingCanvas(hostOwner));
+  const splitterRoot = splitterFor(hostOwner);
+  // CRITICAL: a collapsed canvas is not an absent layout. Use its splitter surface when the
+  // canvas is hidden or <=1px; a 0..viewport fallback misclassifies the left owner as right-attached
+  // after shrinking from the floor, leaving a stable overflow by the toolbar width.
+  let canvas =
+    horizontalBounds(siblingCanvas(hostOwner)) ??
+    horizontalBounds(splitterRoot);
+  if (
+    splitterRoot === undefined &&
+    getComputedStyle(hostOwner).position !== "fixed"
+  ) {
+    const parent = hostOwner.parentElement;
+    const bounds = horizontalBounds(parent ?? undefined);
+    if (bounds !== undefined && bounds.right > bounds.left)
+      return Math.max(
+        1,
+        Math.min(viewportWidth, bounds.right) - Math.max(0, bounds.left),
+      );
+  }
   // IMPORTANT: a fixed owner's inline anchor excludes toolbar space when no canvas is visible.
   // Computed insets resolve `auto` to lengths; using measured width alone prevents desktop growth.
   if (
@@ -327,6 +371,7 @@ export function createSidebarWidthController(
     const { elements, hostOwner } = targetsFor(mount);
     const related = [
       ...elements,
+      hostOwner?.parentElement ?? undefined,
       hostOwner === undefined ? undefined : siblingPanel(hostOwner),
       hostOwner === undefined ? undefined : siblingCanvas(hostOwner),
     ];

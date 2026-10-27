@@ -1,8 +1,13 @@
+import {
+  withCompiledPackIdentity,
+  hasSameCompiledMetadata,
+} from "./support/compiledMetadataFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createAppModeController,
   type AppModeInputs,
+  type AppModeCompiledPrompt,
 } from "../src/host/appMode";
 import {
   admitCanvasForConnect,
@@ -585,18 +590,26 @@ describe("App Mode's connect route", () => {
   it.each(["mutate", "clone"] as const)(
     "connects, queues once, and reports the route through a %s wrapper",
     async (wrapperMode) => {
-      const delegate = vi.fn().mockResolvedValue(acceptedQueueResponse(1));
+      const delegate = vi.fn(
+        async (_batch: number, _compiled: AppModeCompiledPrompt) =>
+          acceptedQueueResponse(1),
+      );
       const host = hostOn(
         communityCanvas(),
         wrapQueuePrompt(delegate, wrapperMode),
       );
-      host.app.graphToPrompt.mockImplementation(compiledFor(t2va));
+      const compiled = withCompiledPackIdentity(await compiledFor(t2va)());
+      const expectedCompiled = structuredClone(compiled);
+      host.app.graphToPrompt.mockResolvedValue(compiled);
       const result = await createAppModeController(host.app, host.api, {
         loadTemplate,
         loadProfile,
       }).start(t2va, { connectExisting: {} });
       expect(result.route).toBe("connect");
       expect(delegate).toHaveBeenCalledTimes(1);
+      expect(
+        hasSameCompiledMetadata(delegate.mock.calls[0]![1], expectedCompiled),
+      ).toBe(true);
       expect(host.app.loadGraphData.mock.calls[0]?.[3]).toBe(
         host.workflowStore.activeWorkflow,
       );

@@ -18,6 +18,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { createHostThemeController } from "../../host/hostTheme";
 
 import type { NleCloseReason } from "../../state/nleWorkspaceState";
 import { saveIndicatorModel } from "../../runtime/nleSaveIndicator";
@@ -333,6 +334,7 @@ export function NleOverlay({ binding }: { binding: NleWorkspaceBinding }) {
     for (const type of ["keydown", "keyup", "keypress"])
       host.addEventListener(type, contain);
     document.body.append(host);
+    const disposeTheme = createHostThemeController(host);
     const topLayer = enterTopLayer(host);
     attached.current = true;
     return () => {
@@ -345,6 +347,7 @@ export function NleOverlay({ binding }: { binding: NleWorkspaceBinding }) {
         } catch {
           // A root already hidden by its removal needs nothing more.
         }
+      disposeTheme();
       host.remove();
       guard.value.release();
       // IMPORTANT: restore after the release commit has re-enabled the launcher.

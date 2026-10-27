@@ -405,8 +405,12 @@ test("A64-1: the empty-timeline overlay is centred, has no action and covers no 
   await expect(overlay.locator("[data-h3-nle-overlay-title]")).toHaveText(
     "Nothing on the timeline yet",
   );
-  await expect(overlay.locator("[data-h3-nle-overlay-detail]")).toContainText(
-    "+",
+  // both media bins add from the thumbnail card, so the hint names
+  // the click and no longer the "+". IMPORTANT: this literal mirrors
+  // `monitor.emptyHint` in nleCopy.ts and the unit pin in
+  // nleWorkspaceMonitor.test.tsx; change all three together.
+  await expect(overlay.locator("[data-h3-nle-overlay-detail]")).toHaveText(
+    "Click a thumbnail in Media to add it to the timeline and preview it here.",
   );
   await expect(overlay.locator("button")).toHaveCount(0);
   const header = page.locator(`${OVERLAY} [data-h3-nle-monitor-header]`);

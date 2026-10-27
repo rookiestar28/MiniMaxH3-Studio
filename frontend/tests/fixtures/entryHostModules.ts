@@ -512,11 +512,23 @@ class FixtureAppConstructor {
   registerExtension = registerExtension;
   ui = { settings: uiSettings };
 }
-Object.defineProperty(FixtureAppConstructor, "maskeditor_is_opended", {
-  value: null,
-  configurable: true,
-  writable: true,
-});
+export let fixtureModalStore = createModalKeyboardHost("data").store;
+export function setFixtureModalKeyboardShape(shape: ModalKeyboardHostShape) {
+  const fixture = createModalKeyboardHost(shape);
+  fixtureModalStore = fixture.store;
+  const descriptor = Object.getOwnPropertyDescriptor(
+    fixture.constructor,
+    "maskeditor_is_opended",
+  );
+  if (descriptor !== undefined)
+    Object.defineProperty(
+      FixtureAppConstructor,
+      "maskeditor_is_opended",
+      descriptor,
+    );
+  else Reflect.deleteProperty(FixtureAppConstructor, "maskeditor_is_opended");
+}
+setFixtureModalKeyboardShape("data");
 export const app = new FixtureAppConstructor();
 
 export const api = {
@@ -732,3 +744,7 @@ export function workflowState(): {
 }
 import { acquireModalKeyboardGuard } from "../../src/host/modalKeyboardGuard";
 import { acquireCanvasKeyboardGuard } from "../../src/host/canvasKeyboardGuard";
+import {
+  createModalKeyboardHost,
+  type ModalKeyboardHostShape,
+} from "../support/hostSeamTestDouble";
