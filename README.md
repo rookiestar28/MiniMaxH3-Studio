@@ -18,6 +18,44 @@ implementation.
 
 <details>
 
+<summary><strong>1.4.5 — Longer videos from frames, CJK titles and title styles</strong></summary>
+
+- Longer videos can now be generated in I2VA, FL2VA and L2VA, as in T2VA, with cuts between
+  segments. The opening frame belongs to the first segment and the closing frame to the last.
+  Ref2VA plans can be proposed and reviewed; their generation is not available yet.
+- In Ref2VA whole-video plans, a first-frame reference belongs only to the opening segment and a
+  last-frame reference only to the closing segment.
+- Planning accepts Contexts whose plan-level sections name a reference or subject label, and a
+  production Context with a subject but no dialogue can be prepared for generation.
+- Titles can use Traditional Chinese, Simplified Chinese, Japanese and Korean text, in regular
+  and bold. The bundled fonts make the download larger. Versions 1.4.0 and 1.4.1 open these
+  projects but refuse CJK title editing and rendering.
+- Eight **Title styles**, such as **Outline**, **Drop shadow** and **Caption box**, in the media
+  bin's and the Inspector's **Text** tab. A style keeps the title's text, font, size, alignment
+  and line height.
+- A prepared I2VA canvas no longer carries an unconnected resolution selector.
+- Fixed: **Start H3 App Mode** on the **Execute / Export** step works on a canvas App Mode
+  prepared or that holds a compatible H3 graph. In 1.4.1 and earlier, the sidebar asked again
+  whether to keep or replace the canvas, and nothing was queued.
+- Fixed: after you crop an image and prepare the canvas, starting from the sidebar works. In
+  1.4.0 and 1.4.1 it stopped with an error, and nothing was queued.
+- Long Windows paths are handled consistently in rendering and segment storage. On Windows,
+  rendering needs a ComfyUI folder path of at most 96 characters and refuses a deeper one before
+  it starts.
+- New checkouts use LF line endings on every platform.
+
+正體中文：已修正：在 App Mode 已準備好、或已含相容 H3 流程的畫布上，
+「執行／匯出」步驟的「啟動 H3 App Mode」現在可正常啟動（1.4.1 及更早版本會再次詢問保留或取代畫布）；
+裁切圖片並準備畫布後，從側邊欄啟動也可正常執行（1.4.0 與 1.4.1 會停在錯誤）。
+
+简体中文：已修复：在 App Mode 已准备好、或已含兼容 H3 流程的画布上，
+“执行／导出”步骤的“启动 H3 App Mode”现在可正常启动（1.4.1 及更早版本会再次询问保留或替换画布）；
+裁剪图片并准备画布后，从侧边栏启动也可正常运行（1.4.0 与 1.4.1 会停在错误）。
+
+</details>
+
+<details>
+
 <summary><strong>1.4.1 — Newer ComfyUI frontends and clip editor fixes</strong></summary>
 
 - App Mode works with ComfyUI frontend 1.56.1 and later. These frontends add node pack details to
@@ -257,12 +295,17 @@ Public source and Registry packages include the test suites and their support fi
 
 - **ComfyUI** with its native MiniMax H3 nodes (`MiniMaxH3ImageToVideo`,
   `MiniMaxH3ReferenceToVideo`), the official `video_minimax_h3_*` workflow templates and a frontend
-  that supports sidebar extensions. Python 3.10 or newer.
+  that supports sidebar extensions. Python 3.10 or newer. Longer videos in the frame modes also
+  use the native `MiniMaxH3AddGuide` node.
 - **MiniMax H3 model weights** and suitable hardware to generate video. Building and checking
   prompts needs no weights.
 - **Windows x64 with 64-bit Python** for the clip editor, Production import, longer-video assembly
   and final rendering, plus the [media tools](#media-tools), which you provide and the extension
   verifies. Linux support for these features is coming in an upcoming update.
+- **A short ComfyUI folder path on Windows** for final-video rendering. The longest scratch-stage
+  file path must fit within 259 UTF-16 code units, so the ComfyUI folder's absolute path can be at
+  most 96 UTF-16 code units. Deeper installations are refused before rendering starts, whatever the
+  Windows long-path settings; move ComfyUI to a shorter folder.
 
 The package has no required Python dependencies and never installs or changes ComfyUI, its
 frontend or your models.
@@ -276,7 +319,9 @@ message names it. The canvas nodes keep working even when the sidebar cannot loa
 - The prompt pipeline runs on Windows, Linux and WSL. The media features need Windows x64 for now;
   Linux support for them is coming in an upcoming update.
 - The clip editor, image crop and App Mode have been tested on ComfyUI 0.42.0 with frontend 1.55.18
-  and with frontend 1.57.1. These are tested combinations, not minimum versions.
+  and with frontend 1.57.1. Longer videos in the frame modes, and starting on a crop-prepared
+  canvas, have been tested on ComfyUI 0.42.0 with frontend 1.57.1. These are tested combinations,
+  not minimum versions.
 - Longer-video generation checks the installed H3 implementation separately. If it reports an
   incompatibility, use a complete, compatible ComfyUI installation; installing FFmpeg or waiting
   does not fix it.
@@ -687,7 +732,7 @@ reference images.
 - **Import** brings in the outputs selected in Production: up to three finished segments. If the
   selection also contains unfinished segments, the button reads **Import ready (2 of 3)** and imports
   only the finished ones. Importing adds sources to the bin; it does not place them on the
-  timeline or start a generation. The bin holds up to 128 items.
+  timeline or start a generation. The bin holds up to 128 items, including the five bundled title fonts.
 - **Search media**, **Sort and filter** (source or reverse order; all media, videos, pictures, or
   those already added to the timeline) and **Grid view** / **List view** help in a full bin.
 - Click a card to add it: a video goes to the end of the **Main** track, a picture goes to a
@@ -708,6 +753,11 @@ within the eight-track limit. A new title lasts one second; trim it like any cli
 length. One **Undo** removes both the new track and its title. You can add the first title to an
 empty project. If insertion is unavailable, the disabled button's explanation says what to change,
 such as freeing a track or choosing a font.
+
+Under **Title styles**, the **Text** tab also offers eight ready-made styles: **Outline**, **Yellow
+outline**, **Drop shadow**, **Outline and shadow**, **Caption box**, **Highlight**, **Inverse box**
+and **Bold outline**. Each card previews its style; choosing one inserts the title text with that
+style.
 
 ### Timeline
 
@@ -801,6 +851,11 @@ one group preserves the other title settings. Decoration opacity is 1–255, whi
 background opacity also allow zero. Shadows use a sharp edge and follow the clip's scale and
 rotation.
 
+For a selected title, **Title styles** in the **Text** tab applies one of the same eight styles.
+A style sets the weight, fill colour, stroke, shadow, background and background padding, turns
+italic off, and replaces any stroke, shadow or padding the title had. It keeps the text, font,
+size, alignment and line height. Applying a style is one undo step.
+
 - Sliders apply when you release them. Number fields apply on **Enter** or the group's apply
   button; moving focus away does not apply them. **Escape** cancels a change, and **Reset** restores
   the whole group as one undo step.
@@ -834,12 +889,24 @@ output** and **Download original**. **Preview output** plays a smaller 640 × 36
 **Download original** gives the full-size file. A render made before later edits is labelled
 **Output from an earlier revision**.
 
-Titles use the bundled Noto Sans fonts, which cover Latin, Greek and Cyrillic characters only.
-**Add title** and the Inspector refuse title text or a style change that needs other characters,
-such as Chinese, Japanese, Korean or emoji, and say why; the text you typed stays in place. A
-title like this from an older project still opens and can be moved, trimmed or deleted. It cannot
-be rendered, and its style cannot be changed, until you edit its text to characters the fonts
-cover.
+Titles use bundled Noto Sans for Latin, Greek and Cyrillic, and Noto Sans TC, SC, JP and KR
+2.004 for Traditional Chinese, Simplified Chinese, Japanese and Korean. CJK supports regular and
+bold, with no italic substitution. The **Font** list shows these faces as **Font 01** to
+**Font 05**: Noto Sans, then TC, SC, JP and KR. The chosen face is used when it covers the whole
+title. Otherwise kana prefers Japanese forms, Hangul prefers Korean forms, and other text tries
+Noto Sans, TC, SC, JP, then KR. One bundled face must cover the whole title;
+emoji and other uncovered characters are refused with an explanation. No system font is used.
+
+CJK titles need 1.4.5 or later. Opening a saved CJK project in 1.4.0 or 1.4.1 keeps its text and
+permits moving, trimming or deleting the title, but CJK editing and rendering are refused.
+
+正體中文：標題內建正體中文、簡體中文、日文及韓文字型，支援一般與粗體；中日韓文字不支援斜體，
+請關閉斜體後再套用。單一內建字型必須涵蓋整段文字，不支援的 emoji 仍會遭拒絕。
+中日韓標題需要 1.4.5 或更新版本；1.4.0 與 1.4.1 可開啟儲存的中日韓專案，但會拒絕編輯與渲染這類標題。
+
+简体中文：标题内置繁中、简中、日文及韩文字体，支持常规和粗体；中日韩文字不支持斜体，
+请关闭斜体后再应用。单一内置字体必须覆盖整段文字，不支持的 emoji 仍会被拒绝。
+中日韩标题需要 1.4.5 或更新版本；1.4.0 与 1.4.1 可打开保存的中日韩项目，但会拒绝编辑和渲染这类标题。
 
 Rendered files are kept for about an hour, at most 16 at a time. Download the ones you want to keep.
 
@@ -909,8 +976,12 @@ it must fit in 15 seconds). A script holds up to 32 shots. **Load shots from Con
 shots the Context already describes as a starting point.
 
 Exact dialogue, on-screen text and timing instructions from the Context stay in the opening part of
-the video, and no cut is placed inside a shot that holds exact text. Plans that use reference media
-can be proposed and reviewed, but generation currently accepts text-to-video plans only.
+the video, and no cut is placed inside a shot that holds exact text. Sequence generation supports
+text to video (T2VA), image to video (I2VA), first and last frame (FL2VA) and last frame (L2VA),
+with cuts between segments. The opening frame belongs to the first segment and the closing frame
+to the last. Keep the declared **Load Image** nodes, images and crops available on the original
+workflow throughout generation. Reference set (Ref2VA) plans can be proposed and reviewed;
+sequence generation for that mode is not available yet.
 
 ### Generate and assemble in the editor
 
@@ -1106,8 +1177,11 @@ Review workflows and screenshots before sharing them. More detail is in
 
 ## Known limitations
 
-- **Longer videos** generate text-to-video plans only. Readiness is valid for about a minute. After a
-  page reload, a running sequence can be viewed but not resumed: cancel it and start again.
+- **Longer videos** support T2VA and the three frame modes (I2VA, FL2VA, L2VA) with cuts between
+  segments; Ref2VA sequence generation is not available yet. Readiness checks plan and host
+  support for about a minute; frame sources are checked when generation starts and before each
+  segment. After a page reload, a running sequence can be viewed but not resumed: cancel it and
+  start again.
 - **Audio as the only reference** is not offered.
 - **Image crop** works on images from 32 to 16,384 pixels per side, and a crop is at least 32
   pixels wide and high.
@@ -1123,9 +1197,9 @@ Review workflows and screenshots before sharing them. More detail is in
   is coming in an upcoming update); unacknowledged edits can be lost. Rendered files remain
   temporary and are kept for about an hour.
 - **Previews** in the monitor are approximate; check the rendered file.
-- **Title characters**: the bundled Noto Sans fonts cover Latin, Greek and Cyrillic characters
-  only. The editor refuses titles with other characters, such as Chinese, Japanese, Korean or
-  emoji, and such a title from an older project cannot be rendered into the final video.
+- **Title characters**: bundled fonts cover Latin, Greek, Cyrillic and regional CJK. CJK supports
+  regular and bold; turn off italic. A single face must cover the whole title. Emoji and other
+  uncovered characters remain unsupported.
 - **Quality**: validation and guide readiness check the prompt, not the visual result, and do not
   make this equivalent to MiniMax's own implementation.
 - **Local perception** requires the qualified native Windows setup described in the host
@@ -1166,8 +1240,9 @@ Review workflows and screenshots before sharing them. More detail is in
 | An imported clip is in the bin but not on the timeline    | Import only adds sources; click its card.                                                                                                         |
 | An imported clip became unavailable                       | Keep its Production project available, or open a saved project and explicitly relink compatible retained media. A released source is never silently replaced. |
 | **Add title** is unavailable                              | Read the reason beside the button. Choose an available font, shorten the text, or free a text track at the playhead when all eight track slots are in use. |
-| The final render says the title font cannot render some characters | Edit the title text to Latin, Greek or Cyrillic characters, or delete the title, then render again. |
-| **Add title** says some characters are not supported      | Use Latin, Greek or Cyrillic characters. The bundled title font does not include others, such as Chinese, Japanese, Korean or emoji.                       |
+| The final render says the title font cannot render some characters | Remove uncovered characters, or turn off italic for CJK text, then render again. |
+| The final render says the ComfyUI folder path is too deep | On Windows, move ComfyUI to a folder whose absolute path is at most 96 characters, then render again. |
+| **Add title** says some characters are not supported      | Use supported Latin, Greek, Cyrillic or CJK characters. Remove uncovered characters such as emoji. CJK supports regular and bold only.                       |
 | A number changed but the picture did not                  | Number fields apply on **Enter** or the group's apply button.                                                                                              |
 | On-picture handles are missing                            | Select one clip, put the playhead inside it, and make sure the clip and track are enabled and unlocked.                                                    |
 | The Audio tab is missing or has no effect                 | It appears only for a video with sound, and is heard only on the **Main** track.                                                                           |

@@ -22,7 +22,12 @@ from typing import NoReturn, SupportsIndex
 from ..core.authoring_render_jobs import RenderJobLimits
 from ..core.authoring_render_receipts import AuthoringRenderReceiptV1, MeasuredRenderOutput
 from ..core.canonical import canonical_bytes
-from ..core.safe_paths import UnsafePathError, validate_directory, validate_regular_file
+from ..core.safe_paths import (
+    UnsafePathError,
+    _native_io_path,
+    validate_directory,
+    validate_regular_file,
+)
 from .segment_artifact_store import (
     ArtifactStoreError,
     _read_regular_bytes,
@@ -63,14 +68,60 @@ class RenderStoreError(RuntimeError):
         super().__init__(code)
 
 
+class _CleanupCause(Exception):
+    def __init__(self, category: str, errno: int | None, winerror: int | None) -> None:
+        self.category = category
+        self.errno = errno
+        self.winerror = winerror
+        super().__init__(category, errno, winerror)
+
+
+def _cleanup_cause(error: BaseException) -> _CleanupCause:
+    category = "cleanup_error"
+    for _ in range(8):
+        for kind in (
+            PermissionError,
+            FileNotFoundError,
+            OSError,
+            UnsafePathError,
+            ArtifactStoreError,
+        ):
+            if isinstance(error, kind):
+                category = kind.__name__
+                break
+        if isinstance(error, OSError):
+            number = error.errno
+            winerror = getattr(error, "winerror", None)
+            return _CleanupCause(
+                category,
+                number if type(number) is int else None,
+                winerror if type(winerror) is int else None,
+            )
+        following = error.__cause__ or error.__context__
+        if following is None:
+            break
+        error = following
+    return _CleanupCause(category, None, None)
+
+
+def _raise_cleanup_failure(cause: _CleanupCause) -> NoReturn:
+    try:
+        raise RenderStoreError("cleanup_failed") from cause
+    except RenderStoreError as failure:
+        # CRITICAL: from None only hides context in formatting. Detach it even during rollback
+        # inside another exception handler, or filename-bearing OS errors remain reachable.
+        failure.__context__ = None
+        raise
+
+
 def _directory_identity(path: Path) -> tuple[int, int]:
-    metadata = validate_directory(path).lstat()
+    metadata = _native_io_path(validate_directory(path)).lstat()
     return metadata.st_dev, metadata.st_ino
 
 
 def _file_names(directory: Path, maximum: int) -> tuple[str, ...]:
     names: list[str] = []
-    with os.scandir(directory) as entries:
+    with os.scandir(_native_io_path(directory)) as entries:
         for entry in entries:
             if len(names) >= maximum:
                 raise RenderStoreError("resource_limit")
@@ -92,20 +143,21 @@ def _remove_directory(path: Path, identity: tuple[int, int]) -> None:
             raise RenderStoreError("unsafe_store")
         for name in names:
             entry = validate_regular_file(path / name)
-            if entry.lstat().st_nlink != 1:
+            if _native_io_path(entry).lstat().st_nlink != 1:
                 raise RenderStoreError("unsafe_store")
         for name in names:
-            validate_regular_file(path / name).unlink()
+            _native_io_path(validate_regular_file(path / name)).unlink()
     if _directory_identity(path) != identity:
         raise RenderStoreError("unsafe_store")
-    path.rmdir()
+    _native_io_path(path).rmdir()
 
 
 def _lock_marker(path: Path) -> int:
     admitted = validate_regular_file(path, maximum_bytes=1024)
-    before = admitted.lstat()
+    before = _native_io_path(admitted).lstat()
     descriptor = os.open(
-        admitted, os.O_RDWR | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        _native_io_path(admitted),
+        os.O_RDWR | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0),
     )
     try:
         opened = os.fstat(descriptor)
@@ -157,8 +209,8 @@ def _recover_orphans(root: Path) -> None:
             os.close(descriptor)
         if _directory_identity(session) != identity:
             raise RenderStoreError("unsafe_store")
-        validate_regular_file(marker, maximum_bytes=1024).unlink()
-        session.rmdir()
+        _native_io_path(validate_regular_file(marker, maximum_bytes=1024)).unlink()
+        _native_io_path(session).rmdir()
 
 
 class RenderStage:
@@ -223,7 +275,7 @@ class RenderStage:
                 if name not in self._files:
                     raise RenderStoreError("unsafe_store")
                 path = validate_regular_file(self._directory / name)
-                metadata = path.lstat()
+                metadata = _native_io_path(path).lstat()
                 if metadata.st_nlink != 1:
                     raise RenderStoreError("unsafe_store")
                 total += metadata.st_size
@@ -275,7 +327,7 @@ class RenderOutputStore:
             with _validated_directories(self._root):
                 _recover_orphans(self._root)
                 self._session = self._root / ("h3-render-" + uuid.uuid4().hex)
-                self._session.mkdir(mode=0o700)
+                _native_io_path(self._session).mkdir(mode=0o700)
                 self._session_identity = _directory_identity(self._session)
                 marker = self._session / "owner.json"
                 _write_new_file(
@@ -285,6 +337,21 @@ class RenderOutputStore:
                 self._marker_descriptor = _lock_marker(marker)
         except (OSError, ValueError, ArtifactStoreError):
             raise RenderStoreError("store_unavailable") from None
+
+    @property
+    def native_render_path_supported(self) -> bool:
+        if sys.platform != "win32":
+            return True
+        longest = self._session / ("stage-" + "0" * 32) / ("0" * 32 + max(_SUFFIXES, key=len))
+        ordinary = str(longest)
+        if ordinary.startswith("\\\\?\\UNC\\"):
+            ordinary = "\\\\" + ordinary[8:]
+        elif ordinary.startswith("\\\\?\\"):
+            ordinary = ordinary[4:]
+        # IMPORTANT: measured child capability is 259 UTF-16 units, independent of registry
+        # policy. REPORT-069 found cwd error 267; R374 also failed relative opens past MAX_PATH.
+        # Generic store operations still support long paths; refuse only native render admission.
+        return len(ordinary.encode("utf-16-le")) // 2 <= 259
 
     @property
     def staging_count(self) -> int:
@@ -327,7 +394,7 @@ class RenderOutputStore:
                 raise RenderStoreError("resource_limit")
             with _validated_directories(self._root, self._session):
                 directory = self._session / ("stage-" + uuid.uuid4().hex)
-                directory.mkdir(mode=0o700)
+                _native_io_path(directory).mkdir(mode=0o700)
                 stage = RenderStage(self, job_id, request_fingerprint, directory)
                 self._stages[job_id] = stage
                 return stage
@@ -337,11 +404,14 @@ class RenderOutputStore:
             if self._stages.get(stage.job_id) is not stage:
                 return
             stage.cancel()
+            cause = None
             try:
                 with _validated_directories(self._root, self._session):
                     _remove_directory(stage._directory, stage._identity)
-            except (OSError, UnsafePathError, ArtifactStoreError):
-                raise RenderStoreError("cleanup_failed") from None
+            except (OSError, UnsafePathError, ArtifactStoreError) as error:
+                cause = _cleanup_cause(error)
+            if cause is not None:
+                _raise_cleanup_failure(cause)
             del self._stages[stage.job_id]
 
     def commit(
@@ -399,18 +469,21 @@ class RenderOutputStore:
                 with _validated_directories(self._root, self._session, stage._directory):
                     # Encoder return is not publication: flush/close the complete output and
                     # receipt, discard inputs, then rename only the verified pair atomically.
-                    with stage.output_path.open("r+b") as stream:
+                    with _native_io_path(stage.output_path).open("r+b") as stream:
                         os.fsync(stream.fileno())
                     _write_new_file(stage._directory / "receipt.json", payload)
                     for name in tuple(stage._files - {"output.mp4"}):
-                        validate_regular_file(stage._directory / name).unlink()
+                        _native_io_path(validate_regular_file(stage._directory / name)).unlink()
                     stage._files = {"output.mp4", "receipt.json"}
                 self._stage(stage)
                 destination = self._session / ("artifact-" + uuid.uuid4().hex)
                 with _validated_directories(self._root, self._session):
-                    if destination.exists() or destination.is_symlink():
+                    if (
+                        _native_io_path(destination).exists()
+                        or _native_io_path(destination).is_symlink()
+                    ):
                         raise RenderStoreError("job_conflict")
-                    os.replace(stage._directory, destination)
+                    os.replace(_native_io_path(stage._directory), _native_io_path(destination))
                     if _directory_identity(destination) != stage._identity:
                         raise RenderStoreError("unsafe_store")
                     self._verify_body(destination / "output.mp4", receipt)
@@ -442,7 +515,7 @@ class RenderOutputStore:
                 # directory identity authorizes destination cleanup; preserve foreign entries.
                 if (
                     destination is not None
-                    and destination.exists()
+                    and _native_io_path(destination).exists()
                     and _directory_identity(destination) == stage._identity
                 ):
                     with _validated_directories(self._root, self._session):
@@ -507,8 +580,10 @@ class RenderOutputStore:
                 if self._marker_descriptor is not None:
                     os.close(self._marker_descriptor)
                     self._marker_descriptor = None
-                validate_regular_file(self._session / "owner.json", maximum_bytes=1024).unlink()
+                _native_io_path(
+                    validate_regular_file(self._session / "owner.json", maximum_bytes=1024)
+                ).unlink()
             if _directory_identity(self._session) != self._session_identity:
                 raise RenderStoreError("unsafe_store")
-            self._session.rmdir()
+            _native_io_path(self._session).rmdir()
             self._closed = True

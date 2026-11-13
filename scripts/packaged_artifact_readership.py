@@ -44,7 +44,7 @@ CONTRACTS = f"{PACKAGE}/contracts"
 FONTS = f"{PACKAGE}/fonts"
 FONT_MANIFEST_PATH = f"{FONTS}/font_manifest_v1.json"
 FONT_RUNTIME_READER = f"{PACKAGE}/adapters/authoring_fonts.py"
-_EXPECTED_FONT_FACE_COUNT = 4
+_EXPECTED_FONT_FACE_COUNT = 12
 _MAX_FONT_MANIFEST_BYTES = 512 * 1024
 _MAX_READER_SOURCE_BYTES = 1024 * 1024
 # CRITICAL: `CONTRACTS` is the directory this generator *classifies* and must keep naming
@@ -125,7 +125,7 @@ def _read_bounded(path: Path, maximum: int, label: str) -> bytes:
     return payload
 
 
-def _safe_declared_font_path(value: object, suffix: str) -> str:
+def _safe_declared_font_path(value: object, suffix: str | tuple[str, ...]) -> str:
     if not isinstance(value, str) or not value or len(value) > 512:
         raise ReadershipError("font package_path must be a bounded string")
     pure = PurePosixPath(value)
@@ -135,7 +135,7 @@ def _safe_declared_font_path(value: object, suffix: str) -> str:
         or "\\" in value
         or not pure.parts
         or pure.parts[0] != "fonts"
-        or pure.suffix != suffix
+        or pure.suffix not in ((suffix,) if isinstance(suffix, str) else suffix)
     ):
         raise ReadershipError("font package_path is outside the closed packaged font profile")
 
@@ -186,20 +186,25 @@ def _font_artifacts() -> tuple[str, ...]:
     if not isinstance(raw_assets, list) or not isinstance(raw_license, dict):
         raise ReadershipError("the packaged font manifest has no closed artifact declarations")
     raw_faces: list[object] = []
+    licenses = [raw_license]
     for asset in raw_assets:
         if not isinstance(asset, dict) or not isinstance(asset.get("faces"), list):
             raise ReadershipError("the packaged font manifest has an invalid face declaration")
         raw_faces.extend(asset["faces"])
+        if not isinstance(asset.get("license"), dict):
+            raise ReadershipError("each packaged font asset must declare its license")
+        licenses.append(asset["license"])
     if len(raw_faces) != _EXPECTED_FONT_FACE_COUNT:
-        raise ReadershipError("the packaged font manifest must declare exactly four faces")
+        raise ReadershipError("the packaged font manifest must declare exactly twelve faces")
 
     declared = {FONT_MANIFEST_PATH}
     for face in raw_faces:
         if not isinstance(face, dict):
             raise ReadershipError("the packaged font manifest has an invalid face declaration")
-        declared.add(_safe_declared_font_path(face.get("package_path"), ".ttf"))
-    declared.add(_safe_declared_font_path(raw_license.get("package_path"), ".txt"))
-    if len(declared) != _EXPECTED_FONT_FACE_COUNT + 2:
+        declared.add(_safe_declared_font_path(face.get("package_path"), (".ttf", ".otf")))
+    for license_wire in licenses:
+        declared.add(_safe_declared_font_path(license_wire.get("package_path"), ".txt"))
+    if len(declared) != _EXPECTED_FONT_FACE_COUNT + 3:
         raise ReadershipError("packaged font artifact paths must be unique")
 
     # SECURITY: the manifest is the complete package allowlist. An extra font file must not gain
@@ -323,12 +328,66 @@ def _font_runtime_reader() -> str:
     if loader is None:
         raise ReadershipError("the packaged font runtime reader has no manifest loader")
 
+    helper = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_read_font_input"
+        ),
+        None,
+    )
+    helper_qualified = False
+    if helper is not None:
+        parameters = [*helper.args.posonlyargs, *helper.args.args]
+        body = {node for statement in helper.body for node in ast.walk(statement)}
+        nested = {
+            child
+            for node in body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda))
+            for child in ast.walk(node)
+        }
+        body -= nested
+        resolved_paths: dict[str, int] = {}
+        for node in body:
+            if not (
+                len(parameters) >= 2
+                and isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Tuple)
+                and len(node.targets[0].elts) == 2
+                and isinstance(node.targets[0].elts[1], ast.Name)
+                and isinstance(node.value, ast.Call)
+                and _called_name(node.value) == "_safe_package_file"
+                and len(node.value.args) >= 2
+                and all(
+                    isinstance(argument, ast.Name) and argument.id == parameter.arg
+                    for argument, parameter in zip(node.value.args[:2], parameters[:2], strict=True)
+                )
+            ):
+                continue
+            resolved_paths[node.targets[0].elts[1].id] = node.lineno
+        helper_qualified = any(
+            isinstance(node, ast.Call)
+            and _called_name(node) == "_read_bounded"
+            and bool(node.args)
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id in resolved_paths
+            and node.lineno > resolved_paths[node.args[0].id]
+            for node in body
+        )
+
     calls = [node for node in ast.walk(loader) if isinstance(node, ast.Call)]
+    helper_reads = [
+        call
+        for call in calls
+        if helper_qualified and _called_name(call) == "_read_font_input" and len(call.args) >= 2
+    ]
     safe_arguments = [
         call.args[1]
         for call in calls
         if _called_name(call) == "_safe_package_file" and len(call.args) >= 2
     ]
+    safe_arguments.extend(call.args[1] for call in helper_reads)
     dynamic_inputs = {
         value for argument in safe_arguments if (value := _subscript_string(argument)) is not None
     }
@@ -346,12 +405,15 @@ def _font_runtime_reader() -> str:
         for argument in safe_arguments
     )
     bounded_inputs = {
-        argument.id
+        ("direct", argument.id)
         for call in calls
         if _called_name(call) == "_read_bounded" and call.args
         for argument in call.args[:1]
         if isinstance(argument, ast.Name)
     }
+    bounded_inputs.update(
+        ("helper", ast.dump(call.args[1], include_attributes=False)) for call in helper_reads
+    )
     if (
         not fixed_manifest
         or len({owner for owner, key in dynamic_inputs if key == "package_path"}) < 2
@@ -359,6 +421,8 @@ def _font_runtime_reader() -> str:
     ):
         # CRITICAL: face and license names are data, so grep cannot prove readership. Credit the
         # adapter only while its executable loader resolves and reads every manifest-selected path.
+        # Credit only the named primitive whose own body resolves its parameters and reads that
+        # resolved path; a helper name, an uncalled definition or string text proves nothing.
         raise ReadershipError("the packaged font runtime reader lacks executable dynamic reads")
     return FONT_RUNTIME_READER
 

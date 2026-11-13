@@ -1,3 +1,8 @@
+import {
+  currentHostSeamTransitions,
+  verifyCurrentHostSeamBaseline,
+} from "./support/hostSeamCompatibility";
+import rawFrameSourcesTransition from "../../governance/contracts/host_seam_census_transition_frame_sources_v1.json" with { type: "json" };
 import rawReferenceCropTransition from "../../governance/contracts/host_seam_census_transition_reference_crop_v1.json" with { type: "json" };
 import rawPerceptionHostTransition from "../../governance/contracts/host_seam_census_transition_perception_host_v1.json" with { type: "json" };
 import rawModalKeyboardTransition from "../../governance/contracts/host_seam_census_transition_modal_keyboard_v1.json" with { type: "json" };
@@ -96,6 +101,7 @@ const currentTransitionChain = [
   rawProjectPersistenceTransition,
   rawPerceptionHostTransition,
   rawReferenceCropTransition,
+  rawFrameSourcesTransition,
 ] as const;
 
 function replacingCurrentTransition(reference: unknown, value: unknown) {
@@ -119,6 +125,144 @@ type MutableTransition = {
 };
 
 describe("complete current compatibility chain", () => {
+  it("executes the supported-host preflight with the complete current chain offline", () => {
+    expect(currentHostSeamTransitions).toEqual(currentTransitionChain);
+    expect(verifyCurrentHostSeamBaseline(censusBytes, fixtureBytes)).toEqual({
+      result: "PASS",
+      reason: "COMPATIBILITY_TRANSITION_MATCH",
+    });
+  });
+
+  it("rejects unauthorized additions and removals independently", () => {
+    for (const key of ["added_source_paths", "removed_source_paths"] as const) {
+      const bad = structuredClone(rawFrameSourcesTransition);
+      bad.changes[0]![key] = [
+        ...bad.changes[0]![key],
+        "frontend/src/host/unapproved.ts",
+      ].sort();
+      expect(
+        verifyHostSeamBaseline(
+          rawBaseline,
+          censusBytes,
+          fixtureBytes,
+          replacingCurrentTransition(rawFrameSourcesTransition, bad),
+        ),
+      ).toEqual({
+        result: "DRIFTED",
+        reason: "REPOSITORY_BREAKAGE",
+      });
+    }
+  });
+
+  const malformedPathChanges: {
+    name: string;
+    mutate: (value: MutableTransition) => void;
+  }[] = [
+    {
+      name: "both arrays empty",
+      mutate: (v) => {
+        v.changes[0]!.added_source_paths = [];
+        v.changes[0]!.removed_source_paths = [];
+      },
+    },
+    {
+      name: "overlapping arrays",
+      mutate: (v) => {
+        v.changes[0]!.removed_source_paths = v.changes[0]!.added_source_paths;
+      },
+    },
+    ...(["added_source_paths", "removed_source_paths"] as const).flatMap(
+      (key) => [
+        {
+          name: key + " duplicate",
+          mutate: (v: MutableTransition) => {
+            v.changes[0]![key] = ["frontend/src/a.ts", "frontend/src/a.ts"];
+          },
+        },
+        {
+          name: key + " unsorted",
+          mutate: (v: MutableTransition) => {
+            v.changes[0]![key] = ["frontend/src/z.ts", "frontend/src/a.ts"];
+          },
+        },
+        {
+          name: key + " invalid path",
+          mutate: (v: MutableTransition) => {
+            v.changes[0]![key] = ["../outside.ts"];
+          },
+        },
+        {
+          name: key + " missing",
+          mutate: (v: MutableTransition) => {
+            delete v.changes[0]![key];
+          },
+        },
+        {
+          name: key + " unbounded",
+          mutate: (v: MutableTransition) => {
+            v.changes[0]![key] = Array.from(
+              { length: 65 },
+              (_, i) => `frontend/src/path${String(i).padStart(2, "0")}.ts`,
+            );
+          },
+        },
+        {
+          name: key + " wrong type",
+          mutate: (v: MutableTransition) => {
+            v.changes[0]![key] = "frontend/src/a.ts";
+          },
+        },
+      ],
+    ),
+    {
+      name: "owner field",
+      mutate: (v) => {
+        v.changes[0]!.to_owner = "frontend/src/host/appMode.ts";
+      },
+    },
+    {
+      name: "repeated seam",
+      mutate: (v) => {
+        v.changes[1] = v.changes[0]!;
+      },
+    },
+    {
+      name: "reordered seams",
+      mutate: (v) => {
+        v.changes.reverse();
+      },
+    },
+  ];
+  it.each(malformedPathChanges)(
+    "rejects frame source reconciliation: $name",
+    ({ mutate }) => {
+      const value = structuredClone(
+        rawFrameSourcesTransition,
+      ) as unknown as MutableTransition;
+      mutate(value);
+      expect(() =>
+        verifyHostSeamBaseline(
+          rawBaseline,
+          censusBytes,
+          fixtureBytes,
+          replacingCurrentTransition(rawFrameSourcesTransition, value),
+        ),
+      ).toThrow();
+    },
+  );
+
+  it("rejects an extra transition beyond the complete current chain", () => {
+    expect(
+      verifyHostSeamBaseline(rawBaseline, censusBytes, fixtureBytes, [
+        ...currentTransitionChain,
+        rawFrameSourcesTransition,
+      ]),
+    ).toEqual({
+      result: "DRIFTED",
+      reason: "REPOSITORY_BREAKAGE",
+    });
+  });
+
   it.each(currentTransitionChain.map((row, index) => ({ row, index })))(
     "rejects corruption/omission/reorder of transition $index ($row.item)",
     ({ row, index }) => {
@@ -318,6 +462,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("closed shape");
     const wrongSource = {
@@ -573,6 +718,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("closed shape");
   });
@@ -649,6 +795,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -666,6 +813,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -744,6 +892,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -760,6 +909,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -839,6 +989,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -854,6 +1005,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -930,6 +1082,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -944,6 +1097,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -999,6 +1153,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -1012,6 +1167,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("unsupported identity");
   });
@@ -1090,6 +1246,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("closed shape");
     expect(() =>
@@ -1102,6 +1259,7 @@ describe("HC-10 host seam drift classification", () => {
         rawProjectPersistenceTransition,
         rawPerceptionHostTransition,
         rawReferenceCropTransition,
+        rawFrameSourcesTransition,
       ]),
     ).toThrow("unsupported identity");
   });

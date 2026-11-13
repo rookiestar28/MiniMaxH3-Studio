@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import unittest
 from collections import Counter
 from pathlib import Path
@@ -25,6 +26,21 @@ def test_collection_environment_keeps_interpreter_but_removes_native_authority()
         "H3_CONTEXT_E2E_SERVICE_LOOPBACK": "1",
     }
     assert original["H3_CONTEXT_AUTHORIZED_FFMPEG_PATH"] == "native"
+
+
+def test_scratch_directory_removes_a_tree_beyond_the_windows_path_limit(tmp_path: Path) -> None:
+    scratch = tmp_path / "owned-scratch"
+    scratch.mkdir()
+    with browser_ci.scratch_directory(scratch) as directory:
+        deep = os.path.join(os.path.abspath(directory), *(name * 60 for name in "abcde"))
+        assert len(deep) > 259
+        # Playwright (Node) creates such trees whatever the host's long-path setting; do the same.
+        created = "\\\\?\\" + deep if os.name == "nt" else deep
+        os.makedirs(created)
+        with open(os.path.join(created, "evidence.json"), "w", encoding="utf-8") as stream:
+            stream.write("{}")
+    assert not Path(directory).exists()
+    assert list(scratch.iterdir()) == []
 
 
 def report(title: str = "portable", *, expected: str = "passed") -> dict[str, Any]:

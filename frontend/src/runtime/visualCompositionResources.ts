@@ -1,3 +1,4 @@
+import { isPackagedFontAssetId } from "./packagedFontAssets";
 import {
   AUTHORING_MEDIA_LEASE_REQUEST_SCHEMA,
   canonicalPublicRuntimeAssetFingerprint,
@@ -169,7 +170,7 @@ function sameStaticBinding(left: StaticBinding, right: StaticBinding): boolean {
   );
 }
 
-async function loadPackagedFace(
+export async function loadPackagedFace(
   bytes: ArrayBuffer,
   family: string,
   weight: string,
@@ -529,7 +530,8 @@ export function createVisualCompositionResources(options: Options) {
         continue;
       }
       if (asset.kind === "font") {
-        if (!text || assetId !== "h3.font.noto_sans.v1") return fail();
+        // CRITICAL: use the bundled manifest's font set; a legacy literal refuses regional titles.
+        if (!text || !isPackagedFontAssetId(assetId)) return fail();
         fontCount += 1;
       } else imageCount += 1;
       const derivativeKind =
@@ -700,7 +702,10 @@ export function createVisualCompositionResources(options: Options) {
                 nativeHeight: geometry.sourceHeight,
               });
             } else {
-              if (body.blob.size > 1024 * 1024 || body.blob.type !== "font/ttf")
+              if (
+                body.blob.size > 12 * 1024 * 1024 ||
+                !["font/ttf", "font/otf"].includes(body.blob.type)
+              )
                 return fail();
               const family = `h3_preview_${crypto.randomUUID().replaceAll("-", "")}`;
               const bytes = await body.blob.arrayBuffer();

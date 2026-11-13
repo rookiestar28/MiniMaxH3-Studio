@@ -443,7 +443,7 @@ class MediaLeaseAuthority:
             "runtimeEpoch": entry.runtime_epoch,
             "ttlMs": max(0, min(60_000, int((entry.expires - self._clock()) * 1000))),
             "derivativeKind": facts.kind,
-            "mediaType": derivative_media_type(facts.kind),
+            "mediaType": facts.media_type or derivative_media_type(facts.kind),
             "byteCount": facts.byte_count,
             "derivativeFingerprint": facts.derivative.derivative_fingerprint,
             "profileFingerprint": RUNTIME_PROFILE_FINGERPRINT,

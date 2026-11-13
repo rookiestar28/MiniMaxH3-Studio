@@ -64,6 +64,7 @@ class RenderServiceError(RuntimeError):
             "job_unavailable",
             "output_unavailable",
             "runtime_unavailable",
+            "path_too_deep",
             "resource_limit",
             "service_closed",
             "source_unavailable",
@@ -292,6 +293,10 @@ class AuthoringRenderService:
             replay = self._replay(request)
             if replay is not None:
                 return replay
+            # IMPORTANT: reject the child's measured path limit before qualification, source
+            # acquisition or staging; a late child failure obscures this actionable cause.
+            if not self._store.native_render_path_supported:
+                raise RenderServiceError(RenderJobFailure.PATH_TOO_DEEP.value)
             self._capacity(request)
             if self._admissions >= self._limits.queue_depth:
                 raise RenderServiceError("resource_limit")

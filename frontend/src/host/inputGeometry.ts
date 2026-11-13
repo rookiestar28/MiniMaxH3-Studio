@@ -81,11 +81,13 @@ function hasExactKeys(
   return Object.keys(value).sort().join("\0") === [...keys].sort().join("\0");
 }
 
-function isSafeLocator(value: unknown): value is string {
+export function isSafeInputLocator(value: unknown): value is string {
   if (
     typeof value !== "string" ||
     value.length < 1 ||
-    value.length > 512 ||
+    // IMPORTANT: the backend bounds Unicode characters, not UTF-16 units. Keep four-byte
+    // filenames inside the same 512-character contract and the separate UTF-8 request cap.
+    Array.from(value).length > 512 ||
     value !== value.trim() ||
     value.includes("\0") ||
     value.includes(":") ||
@@ -112,7 +114,7 @@ function validateRequest(value: InputGeometryRequest): InputGeometryRequest {
     !isObject(value) ||
     !hasExactKeys(value, ["schema", "locator"]) ||
     value.schema !== INPUT_GEOMETRY_REQUEST_SCHEMA ||
-    !isSafeLocator(value.locator)
+    !isSafeInputLocator(value.locator)
   )
     throw new InputGeometryClientError("invalid_request");
   return value;

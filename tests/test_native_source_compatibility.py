@@ -6,7 +6,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from native_source_doubles import (
@@ -52,6 +52,40 @@ _NATIVE_CLASSES = (
     "MiniMaxH3ReferenceToVideo",
     "MiniMaxH3SigmaShift",
 )
+
+
+@pytest.mark.parametrize("mode", (TaskMode.I2VA, TaskMode.L2VA, TaskMode.FL2VA))
+def test_keyframe_receipt_has_its_own_scope_and_original_source_currentness(mode: TaskMode) -> None:
+    from comfyui_h3_context.core.native_guide import GUIDE_REQUIRED_INPUTS, NativeGuideCapability
+    from comfyui_h3_context.core.native_keyframe_structure import (
+        PRODUCTION_MANIFEST,
+        KeyframeStructureReason,
+        NativeKeyframeStructureVerdict,
+    )
+
+    report = _keyframe_report() if mode is TaskMode.FL2VA else _single_keyframe_report(mode)
+    wiring = build_native_h3_wiring(report)
+    base = cast(NativeSourceObservation, observed_source(EQUIVALENT_BLOB))
+    assert qualify_native_source_compatibility(base, wiring) is None
+    source = replace(
+        base,
+        keyframes=NativeKeyframeStructureVerdict(
+            KeyframeStructureReason.ADMITTED, "admitted", PRODUCTION_MANIFEST.fingerprint
+        ),
+        guide=NativeGuideCapability(True, GUIDE_REQUIRED_INPUTS),
+    )
+    receipt = qualify_native_source_compatibility(source, wiring)
+    assert receipt is not None and receipt.scope == "structural_keyframe"
+    assert receipt.admits(source, wiring)
+    assert not receipt.admits(replace(source, source_blob="2" * 40), wiring)
+    assert not receipt.admits(replace(source, _origin=("replaced",)), wiring)
+    assert not receipt.admits(
+        replace(source, guide=NativeGuideCapability(False, GUIDE_REQUIRED_INPUTS)), wiring
+    )
+    assert not receipt.admits(source, build_native_h3_wiring(_report()))
+    qualified = _qualify([source], report=report, wiring=wiring, receipt=receipt)
+    assert qualified.qualified
+    qualified.assert_current(report, wiring)
 
 
 def _qualify(

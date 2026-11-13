@@ -1,7 +1,40 @@
+* text=auto eol=lf
+
+# Byte pins and source anchors require LF on every platform. Binary overrides keep
+# normalization from corrupting media, fonts and archives.
+*.bin binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.ogg binary
+*.m4a binary
+*.mp4 binary
+*.webm binary
+*.mov binary
+*.zip binary
+*.7z binary
+*.tar binary
+*.gz binary
+*.bz2 binary
+*.xz binary
+
 # Exact native observer admission hashes checkout bytes, not only the Git blob.
 scripts/process_audio_observer.py text eol=lf
 # Runtime font authority pins LF text; keep default Windows checkouts usable.
 comfyui_h3_context/fonts/LICENSE-OFL-1.1.txt text eol=lf
+comfyui_h3_context/fonts/LICENSE-NotoSansCJK-OFL-1.1.txt text eol=lf
+comfyui_h3_context/fonts/*.otf binary
 comfyui_h3_context/fonts/font_manifest_v1.json text eol=lf
 # Compatibility retention hashes immutable checkout bytes; CRLF would reject this authority.
 comfyui_h3_context/contracts/authoring_renderer_qualification_v1.json text eol=lf

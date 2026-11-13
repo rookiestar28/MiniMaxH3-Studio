@@ -46,7 +46,8 @@ UNTOUCHED: Final[dict[DerivativeKind, int]] = {
     "frame_timing_index": 16 * 1024,
     "thumbnail": 512 * 1024,
     "image_proxy": 16 * 1024 * 1024,
-    "packaged_font_face": 1024 * 1024,
+    # Raised from 1 MiB by / for the bundled CJK title faces (SC Bold 8,543,168 bytes).
+    "packaged_font_face": 12 * 1024 * 1024,
 }
 
 

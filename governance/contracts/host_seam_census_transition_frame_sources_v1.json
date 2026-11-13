@@ -1,0 +1,68 @@
+{
+  "schema": "h3.context.host_seam_census_transition_frame_sources.v1",
+  "item": "FRAME-SOURCES",
+  "source": {
+    "commit_parts": [
+      "e363c1b8",
+      "b745d705",
+      "676936f4",
+      "0d9b0edf",
+      "7434ce3c"
+    ],
+    "tree_parts": ["42bc6fb0", "80c1d572", "bdaf41a1", "0c8d81ca", "7738db5a"]
+  },
+  "artifacts": {
+    "from_census_sha256_parts": [
+      "22771d7d",
+      "55ccc7e5",
+      "9a243363",
+      "0865d4b0",
+      "2152735f",
+      "cf639d43",
+      "0a5cc28f",
+      "da61c1c6"
+    ],
+    "to_census_sha256_parts": [
+      "191b1f89",
+      "ab02266b",
+      "d817d67e",
+      "a44ee4b5",
+      "55164aa2",
+      "2df7a070",
+      "10657621",
+      "bb0b6126"
+    ],
+    "fixture_sha256_parts": [
+      "ff152fbb",
+      "78ca29b4",
+      "4a0c439e",
+      "9281a0ef",
+      "5bafc89c",
+      "943a3965",
+      "41f8478e",
+      "763e6ad7"
+    ],
+    "seam_contract_sha256_parts": [
+      "40132e41",
+      "d71efd79",
+      "5a853ecc",
+      "1d6e0eef",
+      "572a207c",
+      "8460dfe8",
+      "d4b0edff",
+      "01336a12"
+    ]
+  },
+  "changes": [
+    {
+      "seam_id": "frontend.api.fetch_api",
+      "added_source_paths": ["frontend/src/host/appModeProfileAdmission.ts"],
+      "removed_source_paths": ["frontend/src/host/appMode.ts"]
+    },
+    {
+      "seam_id": "frontend.app.graph",
+      "added_source_paths": ["frontend/src/lifecycle/nleWorkspaceSession.ts"],
+      "removed_source_paths": []
+    }
+  ]
+}

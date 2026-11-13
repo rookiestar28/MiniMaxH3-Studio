@@ -11,6 +11,39 @@ class UnsafePathError(ValueError):
     """Raised when a filesystem path crosses an unsafe component."""
 
 
+def _native_io_path(path: Path, *, force: bool = False) -> Path:
+    if os.name != "nt":
+        return path
+    value = str(path)
+    extended = value.startswith("\\\\?\\")
+    if value.startswith("\\\\.\\") or (
+        extended
+        and not (
+            value.startswith("\\\\?\\UNC\\")
+            or (
+                len(value) >= 7
+                and value[4].isascii()
+                and value[4].isalpha()
+                and value[5:7] == ":\\"
+            )
+        )
+    ):
+        raise UnsafePathError("unsupported native path namespace")
+    if (
+        not extended
+        and not force
+        and len(value.encode("utf-16-le", errors="surrogatepass")) // 2 < 248
+    ):
+        return path
+    if not path.is_absolute() or ".." in path.parts:
+        raise UnsafePathError("native path must be lexically absolute")
+    if extended:
+        return path
+    # CRITICAL: convert only syscall operands; resolving here could cross a reparse point,
+    # and persisting this spelling would change logical identities and public path contracts.
+    return Path("\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value)
+
+
 def _absolute_lexical(path: Path) -> Path:
     if not isinstance(path, Path):
         raise UnsafePathError("path must be a pathlib.Path")
@@ -23,7 +56,7 @@ def _absolute_lexical(path: Path) -> Path:
 def _is_link_or_reparse(path: Path, metadata: os.stat_result) -> bool:
     attributes = getattr(metadata, "st_file_attributes", 0)
     return bool(
-        path.is_symlink()
+        _native_io_path(path).is_symlink()
         or stat.S_ISLNK(metadata.st_mode)
         or (attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
     )
@@ -38,7 +71,7 @@ def validate_path_components(path: Path) -> tuple[Path, os.stat_result]:
     for part in candidate.parts[1:]:
         current /= part
         try:
-            metadata = current.lstat()
+            metadata = _native_io_path(current).lstat()
         except OSError as exc:
             raise UnsafePathError("path component is missing or unavailable") from exc
         # CRITICAL: never replace lstat/reparse checks with resolving or leaf-only inspection.
@@ -46,7 +79,7 @@ def validate_path_components(path: Path) -> tuple[Path, os.stat_result]:
             raise UnsafePathError("path contains a link or reparse component")
     if metadata is None:
         try:
-            metadata = current.lstat()
+            metadata = _native_io_path(current).lstat()
         except OSError as exc:
             raise UnsafePathError("path is missing or unavailable") from exc
         if _is_link_or_reparse(current, metadata):
@@ -72,7 +105,7 @@ def read_regular_file_bytes(path: Path, *, maximum_bytes: int) -> bytes:
 
     candidate = validate_regular_file(path, maximum_bytes=maximum_bytes)
     try:
-        with candidate.open("rb") as stream:
+        with _native_io_path(candidate).open("rb") as stream:
             payload = stream.read(maximum_bytes + 1)
     except OSError as exc:
         raise UnsafePathError("regular file cannot be read") from exc
@@ -98,11 +131,11 @@ def ensure_directory(path: Path) -> Path:
     for part in candidate.parts[1:]:
         current /= part
         try:
-            metadata = current.lstat()
+            metadata = _native_io_path(current).lstat()
         except FileNotFoundError:
             try:
-                current.mkdir()
-                metadata = current.lstat()
+                _native_io_path(current).mkdir()
+                metadata = _native_io_path(current).lstat()
             except OSError as exc:
                 raise UnsafePathError("directory component cannot be created") from exc
         except OSError as exc:
@@ -123,7 +156,7 @@ def prepare_regular_output(path: Path) -> Path:
     parent = ensure_directory(path.parent)
     target = parent / path.name
     try:
-        metadata = target.lstat()
+        metadata = _native_io_path(target).lstat()
     except FileNotFoundError:
         return target
     except OSError as exc:

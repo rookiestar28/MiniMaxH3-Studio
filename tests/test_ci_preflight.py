@@ -675,3 +675,50 @@ def test_public_minimum_dispatches_original_toml_reader_and_bounded_real_tests(
     assert "scripts.nle_hardening_dependency_audit import tomllib" in calls[0][2]
     assert "tomllib.loads" in calls[0][2]
     assert calls[1] == ci_preflight.minimum_command(tmp_path)
+
+
+def test_frontend_job_prepares_the_interpreter_its_unit_tests_start() -> None:
+    workflow: dict[str, Any] = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    steps = workflow["jobs"]["frontend"]["steps"]
+    python = next(
+        i for i, row in enumerate(steps) if "actions/setup-python@" in row.get("uses", "")
+    )
+    interpreter = next(
+        i
+        for i, row in enumerate(steps)
+        if row.get("run", "").strip() == ci_preflight.FRONTEND_INTERPRETER_COMMAND
+    )
+    unit = next(
+        i for i, row in enumerate(steps) if row.get("run") == ci_preflight.FRONTEND_UNIT_COMMAND
+    )
+    assert python < interpreter < unit
+    assert workflow["jobs"]["frontend"]["runs-on"] == "ubuntu-latest"
+    # The unit test that needs it starts exactly this interpreter, so the two change together.
+    source = (ROOT / "frontend/tests/cjkTitleFonts.test.ts").read_text(encoding="utf-8")
+    assert '".venv"' in source and '"bin/python"' in source and "spawnSync(python" in source
+
+
+@pytest.mark.parametrize(
+    "defect", ["no_setup_python", "no_interpreter", "after_unit_tests", "other_command", "windows"]
+)
+def test_frontend_unit_interpreter_absence_is_refused(defect: str) -> None:
+    workflow: dict[str, Any] = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    job = workflow["jobs"]["frontend"]
+    steps = job["steps"]
+    interpreter = next(
+        i
+        for i, row in enumerate(steps)
+        if row.get("run", "").strip() == ci_preflight.FRONTEND_INTERPRETER_COMMAND
+    )
+    if defect == "no_setup_python":
+        steps[:] = [row for row in steps if "actions/setup-python@" not in row.get("uses", "")]
+    elif defect == "no_interpreter":
+        del steps[interpreter]
+    elif defect == "after_unit_tests":
+        steps.append(steps.pop(interpreter))
+    elif defect == "other_command":
+        steps[interpreter]["run"] = "python -m venv .venv\n"
+    else:
+        job["runs-on"] = "windows-latest"
+    with pytest.raises(ValueError, match="frontend unit-test interpreter bootstrap"):
+        ci_preflight.validate_workflow(workflow)

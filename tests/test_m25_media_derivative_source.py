@@ -56,7 +56,7 @@ def request_for(
     )
 
 
-@pytest.mark.parametrize("face_index", range(4))
+@pytest.mark.parametrize("face_index", range(12))
 def test_packaged_font_face_is_exact_verified_body_and_revocable(face_index: int) -> None:
     fonts = load_packaged_font_manifest()
     face = fonts.faces[face_index]
@@ -73,6 +73,7 @@ def test_packaged_font_face_is_exact_verified_body_and_revocable(face_index: int
     assert bytes(body) == face.read_verified_bytes()
     assert facts.derivative.derivative_fingerprint == "sha256:" + hashlib.sha256(body).hexdigest()
     assert facts.audio_disposition == "absent"
+    assert facts.media_type == ("font/otf" if face.package_path.endswith(".otf") else "font/ttf")
     assert getattr(facts, "geometry", None) is None
     for operation in (copy.copy, copy.deepcopy, pickle.dumps):
         with pytest.raises(TypeError):
@@ -81,6 +82,29 @@ def test_packaged_font_face_is_exact_verified_body_and_revocable(face_index: int
     with pytest.raises(MediaLeaseError, match="stale"):
         claim.confirm(time.monotonic() + 5)
     body.clear()
+
+
+def test_cjk_preview_uses_the_render_fallback_bytes_and_otf_mime() -> None:
+    fonts = load_packaged_font_manifest()
+    wire = fixture_snapshot()
+    next(asset for asset in wire["assets"] if asset["kind"] == "font")["asset_id"] = (
+        "h3.font.noto_sans.v1"
+    )
+    text = next(clip for clip in wire["clips"] if clip["clip_id"] == "clip-title")["text"]
+    text.update(content="汉语", weight=700, style="normal", font_asset_id="h3.font.noto_sans.v1")
+    snapshot = decode_public_snapshot(resign(wire))
+    history = PreparedAuthoringHistory(snapshot, 1, (), fonts)
+    request = request_for(snapshot, "clip-title", text["font_asset_id"], "packaged_font_face")
+    claim = AuthoringDerivativeClaim(request, snapshot, history, None, lambda: True, None, None)
+    body, facts = claim.generate(time.monotonic() + 10, None)
+    expected = next(
+        face for face in fonts.faces if face.artifact_id == "h3.font.noto_sans_sc.bold.v1"
+    )
+    assert bytes(body) == expected.read_verified_bytes()
+    assert len(body) == 8_543_168
+    assert facts.media_type == "font/otf"
+    body.clear()
+    history.discard()
 
 
 @pytest.mark.parametrize(

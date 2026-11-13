@@ -2860,3 +2860,33 @@
 .h3-nle-media-tools button {
   justify-self: start;
 }
+
+.h3-nle-presets {
+  min-width: 0;
+  display: grid;
+  gap: 0.5rem;
+  padding-block: 0.75rem;
+}
+.h3-nle-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
+  gap: 0.5rem;
+  min-width: 0;
+}
+.h3-nle-preset {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  align-content: start;
+  gap: 0.25rem;
+  min-width: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.h3-nle-preset canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 8 / 3;
+  background: var(--h3-preset-backdrop);
+  border-radius: var(--h3-radius-control, 0.25rem);
+}

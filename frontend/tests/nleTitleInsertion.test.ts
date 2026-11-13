@@ -299,7 +299,7 @@ describe("title insertion admission", () => {
       (separator) => [Array(33).fill("line").join(separator), false] as const,
     ),
   ] as const;
-  it.each(["中文", "한국어", "😀".repeat(2_048)])(
+  it.each(["😀", "中文😀", "😀".repeat(2_048)])(
     "refuses unrenderable packaged glyphs independently of scalar limits",
     (content) => {
       const authority = base();

@@ -1,3 +1,11 @@
+import * as failureDiagnostics from "../src/host/managedSequenceDiagnostics";
+import { ManagedSerialSequenceRunnerError } from "../src/host/managedSequenceRunnerContract";
+import { createPreparedSequenceGraphGuard } from "../src/host/preparedSequenceGraph";
+import { observePreparedSequenceMedia } from "../src/host/preparedSequenceObservation";
+import {
+  sequenceFailureFixture,
+  sequenceFailureObserver,
+} from "./support/sequenceFailureFixture";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -20,16 +28,25 @@ import type {
   ManagedAppModePreflight,
 } from "../src/host/appMode";
 import type { SequenceCoordinatorResult } from "../src/host/sequenceCoordinator";
+import { SequenceMediaBindingError } from "../src/host/sequenceMediaBindings";
+import { AppModeError } from "../src/host/appModeContract";
+import {
+  emptySequenceGate,
+  sequenceChildOrdinal,
+  sequenceDiagnosticFailure,
+} from "../src/host/managedSequenceDiagnostics";
 
 const fingerprint = (digit: string) => `sha256:${digit.repeat(64)}`;
 const parentSequenceId = "managed.sequence.1";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((accept) => {
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((accept, refuse) => {
     resolve = accept;
+    reject = refuse;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function mutationWire() {
@@ -492,6 +509,300 @@ describe("one bounded managed-sequence reattach pointer", () => {
 });
 
 describe("managed serial sequence runner", () => {
+  it.each(
+    ["resolve", "compile"].flatMap((phase) => [
+      {
+        phase,
+        error: new SequenceMediaBindingError("sequence_media_changed"),
+        code: "sequence_media_changed",
+      },
+      {
+        phase,
+        error: new SequenceMediaBindingError("sequence_media_unavailable"),
+        code: "sequence_media_unavailable",
+      },
+      {
+        phase,
+        error: new AppModeError(
+          "sequence_media_changed",
+          "bounded media refusal",
+        ),
+        code: "sequence_media_changed",
+      },
+      { phase, error: new Error("sequence_media_changed"), code: undefined },
+    ]),
+  )(
+    "preserves only typed pre-bind media reasons at $phase: $code",
+    async ({ phase, error, code }) => {
+      const calls: { action: string; payload: Record<string, unknown> }[] = [];
+      const frameResult = (
+        revision: number,
+        state: Parameters<typeof mutationResult>[1],
+        executionValue: EligibleSegmentExecution | null = null,
+        failureCode: string | null = null,
+      ) => ({
+        ...mutationResult(revision, state, executionValue),
+        schema: "h3.context.managed_sequence_result.v2" as const,
+        sequenceTaskMode: "i2va" as const,
+        failureCode: failureCode as
+          "sequence_media_changed" | "sequence_media_unavailable" | null,
+      });
+      const parentClient = {
+        send: vi.fn(
+          async (
+            _id: string,
+            action: string,
+            payload: Record<string, unknown>,
+          ) => {
+            calls.push({ action, payload });
+            if (action === "authorize_sequence")
+              return frameResult(0, "authorized");
+            if (action === "start_sequence") return frameResult(1, "active");
+            if (action === "prepare_sequence_child")
+              return frameResult(2, "active", execution("segment.1", 2));
+            if (action === "fail_prepared_child")
+              return frameResult(
+                3,
+                "paused_failure",
+                null,
+                (payload.failure_code as string) ?? null,
+              );
+            throw new Error(`unexpected ${action}`);
+          },
+        ),
+        read: vi.fn(),
+      };
+      const coordinatorClient = { send: vi.fn() };
+      const runner = createManagedSerialSequenceRunner({
+        parentClient,
+        coordinatorClient,
+        reattachStore: createManagedSequenceReattachStore(
+          memoryStorage(),
+          () => 1_000,
+        ),
+        resolveChild: async () => {
+          if (phase === "resolve") throw error;
+          return {
+            inputs: {
+              task_mode: "i2va",
+              first_frame_source: "9",
+              user_intent: "synthetic",
+              duration_milliseconds: 8_000,
+              frame_count: 192,
+            },
+            workflowAuthority: {},
+            activeWorkflowFingerprint: fingerprint("9"),
+            previousOwnedProjectionFingerprint: fingerprint("0"),
+          };
+        },
+        startChild: async () => {
+          throw error;
+        },
+      });
+      await expect(
+        runner.start({ ...startIntent, sequenceTaskMode: "i2va" }),
+      ).rejects.toThrow();
+      const failed = calls.find(
+        (call) => call.action === "fail_prepared_child",
+      )!;
+      expect(failed.payload.failure_code).toBe(code);
+      expect(Object.hasOwn(failed.payload, "failure_code")).toBe(
+        code !== undefined,
+      );
+      expect(calls.some((call) => call.action === "bind_prepared_child")).toBe(
+        false,
+      );
+      expect(coordinatorClient.send).not.toHaveBeenCalled();
+      expect(runner.snapshot()).toMatchObject({
+        parentState: "paused_failure",
+        activeSegmentId: null,
+      });
+    },
+  );
+
+  it.each(["success", "refused"])(
+    "refuses a duplicate captured while Start is in flight before eventual %s",
+    async (outcome) => {
+      const gate = deferred<ManagedSequenceMutationResult>();
+      const actions: string[] = [];
+      const parentClient = {
+        send: vi.fn(async (_id: string, action: string) => {
+          actions.push(action);
+          if (action === "authorize_sequence")
+            return mutationResult(0, "authorized");
+          if (action === "start_sequence") return gate.promise;
+          if (action === "record_reuse") return mutationResult(2, "succeeded");
+          throw new Error(`unexpected ${action}`);
+        }),
+        read: vi.fn(),
+      };
+      const runner = createManagedSerialSequenceRunner({
+        parentClient,
+        coordinatorClient: { send: vi.fn() },
+        reattachStore: createManagedSequenceReattachStore(
+          memoryStorage(),
+          () => 1_000,
+        ),
+        startChild: vi.fn(),
+        resolveChild: vi.fn(),
+        resolveReuse: async () => ({
+          artifactReceiptFingerprint: fingerprint("5"),
+          byteLength: 1,
+          terminalFingerprint: fingerprint("6"),
+        }),
+      });
+      const intent = { ...startIntent, segmentIds: ["segment.1"] };
+      const first = runner.start(intent);
+      const firstExpectation =
+        outcome === "success"
+          ? expect(first).resolves.toBeUndefined()
+          : expect(first).rejects.toThrow("sequence_media_unavailable");
+      await vi.waitFor(() =>
+        expect(actions).toEqual(["authorize_sequence", "start_sequence"]),
+      );
+      let duplicateSettled = false;
+      const duplicate = expect(
+        runner.start(intent).finally(() => {
+          duplicateSettled = true;
+        }),
+      ).rejects.toThrow("already_started");
+      // The duplicate refusal must wait on the in-flight transport, even when its caller attaches
+      // a rejection handler later. Assert that ordering directly instead of relying on runner errors.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(duplicateSettled).toBe(false);
+      if (outcome === "success") gate.resolve(mutationResult(1, "active"));
+      else {
+        // Rejection originates in a real asynchronous transport, after the duplicate was captured.
+        gate.reject(new Error("sequence_media_unavailable"));
+      }
+      await firstExpectation;
+      await duplicate;
+      expect(
+        actions.filter((action) => action === "authorize_sequence"),
+      ).toHaveLength(1);
+      expect(
+        actions.filter((action) => action === "start_sequence"),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("retains authorization after a refused concrete Start and retries the same plan", async () => {
+    const starts: Record<string, unknown>[] = [];
+    const parentClient = {
+      send: vi.fn(
+        async (
+          _id: string,
+          action: string,
+          payload: Record<string, unknown>,
+        ) => {
+          if (action === "authorize_sequence")
+            return mutationResult(0, "authorized");
+          if (action === "start_sequence") {
+            starts.push(payload);
+            if (starts.length === 1)
+              throw new Error("sequence_media_unavailable");
+            return mutationResult(1, "active");
+          }
+          if (action === "record_reuse") return mutationResult(2, "succeeded");
+          throw new Error(`unexpected ${action}`);
+        },
+      ),
+      read: vi.fn(),
+    };
+    const startChild = vi.fn();
+    const runner = createManagedSerialSequenceRunner({
+      parentClient,
+      coordinatorClient: { send: vi.fn() },
+      reattachStore: createManagedSequenceReattachStore(
+        memoryStorage(),
+        () => 1_000,
+      ),
+      startChild,
+      resolveChild: vi.fn(),
+      resolveReuse: async () => ({
+        artifactReceiptFingerprint: fingerprint("5"),
+        byteLength: 1,
+        terminalFingerprint: fingerprint("6"),
+      }),
+    });
+    const intent = { ...startIntent, segmentIds: ["segment.1"] };
+    await expect(runner.start(intent)).rejects.toThrow(
+      "sequence_media_unavailable",
+    );
+    expect(startChild).not.toHaveBeenCalled();
+    await runner.start(intent);
+    expect(
+      parentClient.send.mock.calls.filter(
+        ([, action]) => action === "authorize_sequence",
+      ),
+    ).toHaveLength(1);
+    expect(starts).toHaveLength(2);
+    expect(starts[1]).toEqual(starts[0]);
+    expect(runner.snapshot().parentState).toBe("succeeded");
+  });
+
+  it.each(["sequence_media_changed", "sequence_media_unavailable"] as const)(
+    "adopts a claim-time %s pause before refusing the queue",
+    async (failureCode) => {
+      const frameResult = (
+        revision: number,
+        state: Parameters<typeof mutationResult>[1],
+        executionValue: EligibleSegmentExecution | null = null,
+      ) => ({
+        ...mutationResult(revision, state, executionValue),
+        schema: "h3.context.managed_sequence_result.v2" as const,
+        sequenceTaskMode: "i2va" as const,
+        failureCode: state === "paused_failure" ? failureCode : null,
+      });
+      const parentClient = {
+        send: vi.fn(async (_id: string, action: string) => {
+          if (action === "authorize_sequence")
+            return frameResult(0, "authorized");
+          if (action === "start_sequence") return frameResult(1, "active");
+          if (action === "prepare_sequence_child")
+            return frameResult(2, "active", execution("segment.1", 2));
+          if (action === "bind_prepared_child")
+            return frameResult(3, "paused_failure");
+          throw new Error(`unexpected ${action}`);
+        }),
+        read: vi.fn(),
+      };
+      let queues = 0;
+      const runner = createManagedSerialSequenceRunner({
+        parentClient,
+        coordinatorClient: { send: vi.fn() },
+        reattachStore: createManagedSequenceReattachStore(
+          memoryStorage(),
+          () => 1_000,
+        ),
+        startChild: async (_inputs, options = {}) => {
+          await options.prepareManaged!(preflight(fingerprint("9")));
+          queues++;
+          throw new Error("must not queue");
+        },
+        resolveChild: async () => ({
+          inputs: {
+            task_mode: "i2va",
+            user_intent: "synthetic",
+            duration_milliseconds: 8_000,
+            frame_count: 192,
+          },
+          workflowAuthority: {},
+          activeWorkflowFingerprint: fingerprint("9"),
+          previousOwnedProjectionFingerprint: fingerprint("0"),
+        }),
+      });
+      await expect(
+        runner.start({ ...startIntent, sequenceTaskMode: "i2va" }),
+      ).rejects.toThrow(failureCode);
+      expect(queues).toBe(0);
+      expect(runner.snapshot()).toMatchObject({
+        parentState: "paused_failure",
+        activeSegmentId: null,
+      });
+    },
+  );
+
   it.each(["running-first", "artifact-first", "terminal-first"] as const)(
     "keeps monotonic child progress for %s observations and releases before its successor",
     async (order) => {
@@ -1837,5 +2148,759 @@ describe("managed serial sequence runner", () => {
     });
     expect(actions[0]).toBe("retry_segment");
     expect(queueCalls).toBe(1);
+  });
+});
+
+describe("managed compile failure primacy", () => {
+  it.each([
+    { bound: false, notificationRejects: false },
+    { bound: false, notificationRejects: true },
+    { bound: true, notificationRejects: false },
+    { bound: true, notificationRejects: true },
+  ])(
+    "keeps original instance with bound=$bound notificationRejects=$notificationRejects",
+    async ({ bound, notificationRejects }) => {
+      const original = new AppModeError(
+        "compile_failed",
+        "synthetic primary compile detail",
+        { kind: "template_unavailable" },
+        "compiled_admission",
+        "requested_route",
+      );
+      expect(original.compileStep).toBe("compiled_admission");
+      expect(original.compileAdmission).toBe("requested_route");
+      const notificationAction = bound
+        ? "fail_bound_child"
+        : "fail_prepared_child";
+      const parentClient = {
+        read: vi.fn(),
+        send: vi.fn(
+          async (
+            _id: string,
+            action: string,
+            _payload: Record<string, unknown>,
+          ) => {
+            if (action === "authorize_sequence")
+              return mutationResult(0, "authorized");
+            if (action === "start_sequence") return mutationResult(1, "active");
+            if (action === "prepare_sequence_child")
+              return mutationResult(2, "active", execution("segment.1", 2));
+            if (action === "bind_prepared_child")
+              return mutationResult(3, "active", null, {
+                schema: "h3.context.managed_sequence_child_authority.v1",
+                runHandle: `mc_${"d".repeat(40)}`,
+                stateFingerprint: fingerprint("4"),
+                jobId: "job.segment.1",
+                transactionId: "transaction.segment.1",
+              });
+            if (action === notificationAction) {
+              if (notificationRejects)
+                throw new Error("synthetic secondary notification failure");
+              return mutationResult(bound ? 4 : 3, "paused_failure");
+            }
+            throw new Error(`unexpected parent action ${action}`);
+          },
+        ),
+      };
+      const coordinatorClient = { send: vi.fn() };
+      const startChild = vi.fn(
+        async (_inputs: AppModeInputs, options: AppModeStartOptions = {}) => {
+          if (bound) await options.prepareManaged!(preflight(fingerprint("8")));
+          throw original;
+        },
+      );
+      const runner = createManagedSerialSequenceRunner({
+        parentClient,
+        coordinatorClient,
+        reattachStore: createManagedSequenceReattachStore(
+          memoryStorage(),
+          () => 1_000,
+        ),
+        startChild,
+        resolveChild: async () => ({
+          inputs: {
+            task_mode: "t2va",
+            user_intent: "synthetic",
+            duration_milliseconds: 8_000,
+            frame_count: 192,
+          },
+          workflowAuthority: {},
+          activeWorkflowFingerprint: fingerprint("8"),
+          previousOwnedProjectionFingerprint: fingerprint("7"),
+        }),
+      });
+      const rejection: unknown = await runner.start(startIntent).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(startChild).toHaveBeenCalledOnce();
+      expect(parentClient.send.mock.calls.map(([, action]) => action)).toEqual([
+        "authorize_sequence",
+        "start_sequence",
+        "prepare_sequence_child",
+        ...(bound ? ["bind_prepared_child"] : []),
+        notificationAction,
+      ]);
+      expect(coordinatorClient.send).not.toHaveBeenCalled();
+      const payload = parentClient.send.mock.calls.at(-1)![2];
+      expect(payload).not.toHaveProperty("failure_code");
+      expect(payload).not.toHaveProperty("reason");
+      expect(payload).not.toHaveProperty("compileStep");
+      expect(payload).not.toHaveProperty("compileAdmission");
+      const notification = JSON.stringify(payload);
+      for (const forbidden of [
+        "compile_failed",
+        "compiled_admission",
+        "requested_route",
+        original.message,
+        "synthetic secondary notification failure",
+      ])
+        expect(notification).not.toContain(forbidden);
+      // Assert identity last: every notification-path/no-effect precondition passed first.
+      expect(rejection).toBe(original);
+    },
+  );
+});
+
+describe("managed ambiguous invocation reporting", () => {
+  it("propagates a rejected ambiguous mark to protect against duplicate submission", async () => {
+    const original = new Error("synthetic ambiguous queue acknowledgement");
+    const markFailure = new Error("synthetic invocation mark failure");
+    const parentClient = {
+      read: vi.fn(),
+      send: vi.fn(async (_id: string, action: string) => {
+        if (action === "authorize_sequence")
+          return mutationResult(0, "authorized");
+        if (action === "start_sequence") return mutationResult(1, "active");
+        if (action === "prepare_sequence_child")
+          return mutationResult(2, "active", execution("segment.1", 2));
+        if (action === "bind_prepared_child")
+          return mutationResult(3, "active", null, {
+            schema: "h3.context.managed_sequence_child_authority.v1",
+            runHandle: `mc_${"d".repeat(40)}`,
+            stateFingerprint: fingerprint("4"),
+            jobId: "job.segment.1",
+            transactionId: "transaction.segment.1",
+          });
+        if (action === "mark_invocation_unknown") throw markFailure;
+        throw new Error(`unexpected parent action ${action}`);
+      }),
+    };
+    const workflowAuthority = {};
+    const coordinatorClient = { send: vi.fn() };
+    const startChild = vi.fn(
+      async (_inputs: AppModeInputs, options: AppModeStartOptions = {}) => {
+        const authority = await options.prepareManaged!(
+          preflight(fingerprint("9")),
+        );
+        authority.bindCanvasIdentity?.({
+          workflowAuthority,
+          ownedReference: {
+            nodeIds: ["1"],
+            linkIds: [],
+            anchorNodeId: "1",
+            authoredWidgetNodeIds: [],
+          },
+        });
+        authority.onQueueSubmitted();
+        // Exercise the outer catch without the onQueueFailed callback handling it first.
+        throw original;
+      },
+    );
+    const runner = createManagedSerialSequenceRunner({
+      parentClient,
+      coordinatorClient,
+      reattachStore: createManagedSequenceReattachStore(
+        memoryStorage(),
+        () => 1_000,
+      ),
+      startChild,
+      resolveChild: async () => ({
+        inputs: {
+          task_mode: "t2va",
+          user_intent: "synthetic",
+          duration_milliseconds: 8_000,
+          frame_count: 192,
+        },
+        workflowAuthority,
+        activeWorkflowFingerprint: fingerprint("8"),
+        previousOwnedProjectionFingerprint: fingerprint("7"),
+      }),
+    });
+    const rejection: unknown = await runner.start(startIntent).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(startChild).toHaveBeenCalledOnce();
+    expect(parentClient.send.mock.calls.map(([, action]) => action)).toEqual([
+      "authorize_sequence",
+      "start_sequence",
+      "prepare_sequence_child",
+      "bind_prepared_child",
+      "mark_invocation_unknown",
+    ]);
+    expect(coordinatorClient.send).not.toHaveBeenCalled();
+    expect(runner.snapshot()).toMatchObject({
+      parentState: "active",
+      activeSegmentId: "segment.1",
+    });
+    expect(rejection).toBe(markFailure);
+  });
+});
+
+describe("managed sequence acknowledged diagnostics", () => {
+  function diagnosticRunner(
+    count = 1,
+    hold?: { service: "parent" | "child"; action: string; ordinal?: number },
+    pauseResolver = false,
+    probe?: {
+      resolve?: () => Promise<void>;
+      start?: () => Promise<void>;
+      bind?: () => Promise<ManagedSequenceMutationResult>;
+    },
+  ) {
+    const entered = deferred<void>();
+    const acknowledgement = deferred<void>();
+    const resolverEntered = deferred<void>();
+    const resolver = deferred<void>();
+    let revision = 0;
+    let ordinal = 0;
+    let queueInvocations = 0;
+    const workflowAuthority = {};
+    const artifacts = new Set<number>();
+    const terminals = new Set<number>();
+    const diagnosticResult = (
+      ...args: Parameters<typeof mutationResult>
+    ): ManagedSequenceMutationResult => {
+      const value = mutationResult(...args);
+      return probe === undefined
+        ? value
+        : {
+            ...value,
+            schema: "h3.context.managed_sequence_result.v2",
+            sequenceTaskMode: "i2va",
+            failureCode: null,
+          };
+    };
+    const awaitAcknowledgement = async (
+      service: "parent" | "child",
+      action: string,
+    ) => {
+      if (
+        hold?.service === service &&
+        hold.action === action &&
+        (hold.ordinal ?? 1) === ordinal
+      ) {
+        entered.resolve();
+        await acknowledgement.promise;
+      }
+    };
+    const parentClient = {
+      read: vi.fn(),
+      send: vi.fn(
+        async (
+          _id: string,
+          action: string,
+          payload: Record<string, unknown>,
+        ) => {
+          if (action === "prepare_sequence_child")
+            ordinal = Number(String(payload.segment_id).split(".").at(-1));
+          await awaitAcknowledgement("parent", action);
+          if (action === "bind_prepared_child" && probe?.bind)
+            return probe.bind();
+          revision += 1;
+          if (action === "authorize_sequence")
+            return diagnosticResult(revision, "authorized");
+          if (action === "prepare_sequence_child")
+            return diagnosticResult(
+              revision,
+              "active",
+              execution(
+                String(payload.segment_id),
+                revision,
+                payload.predecessor_terminal_fingerprint as string | null,
+              ),
+            );
+          if (action === "bind_prepared_child")
+            return diagnosticResult(revision, "active", null, {
+              schema: "h3.context.managed_sequence_child_authority.v1",
+              runHandle: `mc_${String(ordinal).repeat(40)}`,
+              stateFingerprint: fingerprint("4"),
+              jobId: `job.${ordinal}`,
+              transactionId: `transaction.${ordinal}`,
+            });
+          return diagnosticResult(
+            revision,
+            action === "record_terminal" && ordinal === count
+              ? "succeeded"
+              : "active",
+          );
+        },
+      ),
+    };
+    const coordinatorClient = {
+      send: vi.fn(
+        async (
+          _id: string,
+          action: string,
+          payload: Record<string, unknown>,
+        ) => {
+          await awaitAcknowledgement("child", action);
+          if (action === "record_artifact") artifacts.add(ordinal);
+          if (action === "record_terminal") terminals.add(ordinal);
+          return coordinatorResult(
+            String(payload.run_handle),
+            fingerprint("5"),
+            action === "release_sequence"
+              ? "released"
+              : action === "record_submission"
+                ? "submitted"
+                : artifacts.has(ordinal) && terminals.has(ordinal)
+                  ? "succeeded"
+                  : artifacts.has(ordinal)
+                    ? "artifact_verified"
+                    : "verification_pending",
+            artifacts.has(ordinal)
+              ? {
+                  schema:
+                    "h3.context.generation_coordinator.artifact_authority.v1",
+                  receiptFingerprint: fingerprint("a"),
+                  byteLength: 12,
+                }
+              : null,
+            artifacts.has(ordinal) && terminals.has(ordinal)
+              ? fingerprint("e")
+              : null,
+          );
+        },
+      ),
+    };
+    const runner = createManagedSerialSequenceRunner({
+      parentClient,
+      coordinatorClient,
+      reattachStore: createManagedSequenceReattachStore(
+        memoryStorage(),
+        () => 1_000,
+      ),
+      resolveChild: async () => {
+        await probe?.resolve?.();
+        if (pauseResolver) {
+          resolverEntered.resolve();
+          await resolver.promise;
+        }
+        return {
+          inputs: {
+            task_mode: "t2va",
+            user_intent: "synthetic",
+            duration_milliseconds: 8_000,
+            frame_count: 192,
+          },
+          workflowAuthority,
+          activeWorkflowFingerprint: fingerprint("8"),
+          previousOwnedProjectionFingerprint: fingerprint("0"),
+        };
+      },
+      startChild: async (_inputs, options = {}) => {
+        await probe?.start?.();
+        const prepared = preflight(fingerprint("0"));
+        const authority = await options.prepareManaged!(prepared);
+        authority.bindCanvasIdentity?.({
+          workflowAuthority,
+          ownedReference: {
+            nodeIds: ["1"],
+            linkIds: [],
+            anchorNodeId: "1",
+            authoredWidgetNodeIds: [],
+          },
+        });
+        authority.onQueueSubmitted();
+        queueInvocations += 1;
+        const result: AppModeStartResult = {
+          queueResult: {
+            prompt_id: `prompt.${ordinal}`,
+            number: ordinal,
+            nodeErrorClassTypes: [],
+            nodeErrorTypes: [],
+          },
+          graphFingerprint: prepared.observation.graph_fingerprint,
+          compiledPromptFingerprint:
+            prepared.observation.compiled_prompt_fingerprint,
+          ownedProjectionFingerprint: fingerprint("0"),
+          ownedNodeIds: ["1"],
+          ownedLinkIds: [],
+          queuePromptId: `prompt.${ordinal}`,
+          route: "existing",
+        };
+        await authority.onQueueAccepted(result);
+        return result;
+      },
+    });
+    const artifact = (child: number) =>
+      runner.recordArtifact({
+        promptId: `prompt.${child}`,
+        outputNodeId: "save.1",
+        locator: { filename: "synthetic.mp4", subfolder: "", type: "output" },
+      });
+    const terminal = (child: number) =>
+      runner.recordTerminal({ promptId: `prompt.${child}`, kind: "success" });
+    return {
+      runner,
+      entered,
+      acknowledgement,
+      resolverEntered,
+      resolver,
+      artifact,
+      terminal,
+      queueInvocations: () => queueInvocations,
+      start: () =>
+        runner.start({
+          ...startIntent,
+          ...(probe === undefined ? {} : { sequenceTaskMode: "i2va" as const }),
+          segmentIds: Array.from(
+            { length: count },
+            (_, index) => `segment.${index + 1}`,
+          ),
+        }),
+    };
+  }
+
+  describe("Stage C failure attribution", () => {
+    const attribution = (value: unknown) =>
+      (value as { failureAttribution?: unknown }).failureAttribution;
+    const decode = (value: unknown): unknown => {
+      const candidate = (
+        failureDiagnostics as unknown as Record<string, unknown>
+      )["decodeSequenceFailureAttribution"];
+      expect(candidate).toBeTypeOf("function");
+      return (candidate as (input: unknown) => unknown)(value);
+    };
+    const expected = (
+      origin: string,
+      boundary: string,
+      managedAction = "unattributed",
+      httpStatusClass = "unattributed",
+    ) => ({ origin, boundary, managedAction, httpStatusClass });
+
+    it.each(["graph", "source", "locator", "backend"] as const)(
+      "propagates the real %s producer through a real runner without queueing",
+      async (site) => {
+        const fixture = sequenceFailureFixture();
+        const invoke = async () => {
+          if (site === "graph") {
+            const guard = createPreparedSequenceGraphGuard(
+              fixture.result.workflow,
+              fixture.result.anchorNodeId,
+              fixture.result.mediaNodeIds,
+              fixture.inputs,
+            );
+            const nodes = fixture.result.workflow.nodes as Array<{
+              type: string;
+              widgets_values: Array<{ x: number }>;
+            }>;
+            nodes.find(
+              (node) => node.type === "ImageCropV2",
+            )!.widgets_values[0]!.x = 17;
+            (guard as (value: unknown, boundary?: string) => void)(
+              fixture.result.workflow,
+              "root-write",
+            );
+          } else {
+            const observe = sequenceFailureObserver(fixture.prepared);
+            if (site === "source")
+              observe.mockImplementation(async () => ({
+                ...fixture.prepared.bindings!.entries[0]!.source_identity,
+                source_fingerprint: fingerprint("f"),
+                receipt_handle: "ig_" + "n".repeat(41),
+              }));
+            if (site === "locator") {
+              const output = fixture.compiled.output as Record<
+                string,
+                { class_type: string; inputs: Record<string, unknown> }
+              >;
+              Object.values(output).find(
+                (node) => node.class_type === "LoadImage",
+              )!.inputs.image = "synthetic/changed.png";
+            }
+            await observePreparedSequenceMedia(
+              fixture.result.workflow,
+              fixture.compiled,
+              fixture.result.mediaNodeIds,
+              fixture.inputs,
+              fixture.prepared,
+              observe,
+            );
+          }
+        };
+        const backend = createManagedSequenceClient({
+          fetchApi: async () => ({
+            ok: true,
+            status: 200,
+            headers: { get: () => null },
+            json: async () => ({
+              ...mutationWire(),
+              schema: "h3.context.managed_sequence_result.v2",
+              state: "paused_failure",
+              revision: 3,
+              sequence_task_mode: "i2va",
+              failure_code: "sequence_media_changed",
+            }),
+          }),
+        });
+        const ctx = diagnosticRunner(
+          1,
+          undefined,
+          false,
+          site === "backend"
+            ? {
+                bind: () =>
+                  backend.send("synthetic.bind", "bind_prepared_child", {}),
+              }
+            : site === "graph"
+              ? { resolve: invoke }
+              : { start: invoke },
+        );
+        const other = diagnosticRunner();
+        const before = other.runner.snapshot().diagnostics;
+        await expect(ctx.start()).rejects.toMatchObject(
+          site === "graph" || site === "backend"
+            ? { code: "sequence_media_changed" }
+            : { category: "sequence_media_changed" },
+        );
+        expect(attribution(ctx.runner.snapshot().diagnostics)).toEqual(
+          site === "graph"
+            ? expected("candidate-graph", "root-write")
+            : site === "source"
+              ? expected("renewed-source", "source-observe")
+              : site === "locator"
+                ? expected("compiled-locator", "source-observe")
+                : expected(
+                    "backend-comparison",
+                    "managed-bind",
+                    "bind_prepared_child",
+                    "2xx",
+                  ),
+        );
+        expect(ctx.runner.snapshot().activeSegmentId).toBeNull();
+        expect(ctx.queueInvocations()).toBe(0);
+        expect(other.runner.snapshot().diagnostics).toEqual(before);
+      },
+    );
+
+    it("rejects unknown metadata and never retains response objects in the adopt error", () => {
+      const closed = expected(
+        "backend-comparison",
+        "managed-bind",
+        "bind_prepared_child",
+        "2xx",
+      );
+      expect(decode(closed)).toEqual(closed);
+      expect(
+        decode({ ...closed, privateField: "synthetic-secret" }),
+      ).toBeNull();
+      for (const key of Object.keys(closed))
+        expect(decode({ ...closed, [key]: "unknown" })).toBeNull();
+      const hostile = Object.defineProperty({}, "failureAttribution", {
+        get() {
+          throw new Error("synthetic-secret");
+        },
+      });
+      expect(() => decode(hostile)).not.toThrow();
+      const result = {
+        ...mutationResult(3, "paused_failure"),
+        nested: { secret: {} },
+        failureAttribution: closed,
+      };
+      const Constructor = ManagedSerialSequenceRunnerError as unknown as new (
+        code: "sequence_media_changed",
+        result: unknown,
+      ) => Error;
+      const error = new Constructor("sequence_media_changed", result);
+      expect(Object.getOwnPropertyNames(error).sort()).toEqual([
+        "code",
+        "failureAttribution",
+        "message",
+        "name",
+        "stack",
+      ]);
+      const references = [result, result.nested, result.nested.secret, closed];
+      for (const value of Object.values(
+        Object.getOwnPropertyDescriptors(error),
+      ))
+        for (const reference of references)
+          expect(value.value).not.toBe(reference);
+      expect(
+        Object.getOwnPropertyDescriptor(error, "failureAttribution")
+          ?.enumerable,
+      ).toBe(false);
+      expect(attribution(error)).toEqual(closed);
+      expect(JSON.stringify(error)).not.toContain("synthetic-secret");
+    });
+  });
+
+  it.each([
+    ["artifactRecorded", "parent", "record_artifact"],
+    ["terminalKindKnown", "child", "record_terminal"],
+    ["terminalFingerprintPresent", "child", "record_terminal"],
+    ["released", "child", "release_sequence"],
+    ["parentTerminalRecorded", "parent", "record_terminal"],
+  ] as const)(
+    "sets %s only after its successful acknowledgement",
+    async (flag, service, action) => {
+      const ctx = diagnosticRunner(1, { service, action });
+      await ctx.start();
+      if (flag !== "artifactRecorded") await ctx.artifact(1);
+      const operation =
+        flag === "artifactRecorded" ? ctx.artifact(1) : ctx.terminal(1);
+      await ctx.entered.promise;
+      expect(ctx.runner.snapshot().diagnostics.gate[flag]).toBe(false);
+      ctx.acknowledgement.resolve();
+      await operation;
+      expect(ctx.runner.snapshot().diagnostics.gate[flag]).toBe(true);
+    },
+  );
+
+  it("sets successor prepared only after prepare acknowledgement and resets it at bind", async () => {
+    const ctx = diagnosticRunner(
+      1,
+      { service: "parent", action: "prepare_sequence_child" },
+      true,
+    );
+    const operation = ctx.start();
+    await ctx.entered.promise;
+    expect(ctx.runner.snapshot().diagnostics.successor).toEqual({
+      ordinal: 1,
+      prepared: false,
+    });
+    ctx.acknowledgement.resolve();
+    await ctx.resolverEntered.promise;
+    expect(ctx.runner.snapshot().diagnostics.successor).toEqual({
+      ordinal: 1,
+      prepared: true,
+    });
+    ctx.resolver.resolve();
+    await operation;
+    expect(ctx.runner.snapshot().diagnostics.successor).toEqual({
+      ordinal: null,
+      prepared: false,
+    });
+    expect(ctx.runner.snapshot().diagnostics.gate).toEqual(
+      emptySequenceGate(1),
+    );
+  });
+
+  it("retains child two's acknowledged gate while child three prepare is pending", async () => {
+    const ctx = diagnosticRunner(3, {
+      service: "parent",
+      action: "prepare_sequence_child",
+      ordinal: 3,
+    });
+    await ctx.start();
+    await ctx.artifact(1);
+    await ctx.terminal(1);
+    await ctx.artifact(2);
+    const operation = ctx.terminal(2);
+    await ctx.entered.promise;
+    expect(ctx.runner.snapshot().diagnostics).toEqual({
+      parentState: "active",
+      failureAttribution: {
+        origin: "unattributed",
+        boundary: "unattributed",
+        managedAction: "unattributed",
+        httpStatusClass: "unattributed",
+      },
+      activeChildOrdinal: null,
+      gate: {
+        childOrdinal: 2,
+        artifactRecorded: true,
+        terminalKindKnown: true,
+        terminalFingerprintPresent: true,
+        released: true,
+        parentTerminalRecorded: true,
+      },
+      successor: { ordinal: 3, prepared: false },
+    });
+    ctx.acknowledgement.resolve();
+    await operation;
+    expect(ctx.runner.snapshot().diagnostics.gate).toEqual(
+      emptySequenceGate(3),
+    );
+    expect(ctx.runner.snapshot().diagnostics.activeChildOrdinal).toBe(3);
+  });
+
+  it("keeps terminal-first fingerprint absent until acknowledged artifact authority arrives", async () => {
+    const ctx = diagnosticRunner();
+    await ctx.start();
+    await ctx.terminal(1);
+    expect(ctx.runner.snapshot().diagnostics.gate).toMatchObject({
+      terminalKindKnown: true,
+      terminalFingerprintPresent: false,
+      artifactRecorded: false,
+      released: false,
+      parentTerminalRecorded: false,
+    });
+    await ctx.artifact(1);
+    expect(ctx.runner.snapshot().diagnostics.gate).toEqual({
+      childOrdinal: 1,
+      artifactRecorded: true,
+      terminalKindKnown: true,
+      terminalFingerprintPresent: true,
+      released: true,
+      parentTerminalRecorded: true,
+    });
+  });
+
+  it("never records release or parent terminal success for a rejected release", async () => {
+    const ctx = diagnosticRunner(1, {
+      service: "child",
+      action: "release_sequence",
+    });
+    await ctx.start();
+    await ctx.artifact(1);
+    const rejection = expect(ctx.terminal(1)).rejects.toThrow(
+      "synthetic refusal",
+    );
+    await ctx.entered.promise;
+    ctx.acknowledgement.reject(new Error("synthetic refusal"));
+    await rejection;
+    expect(ctx.runner.snapshot().diagnostics.gate).toMatchObject({
+      released: false,
+      parentTerminalRecorded: false,
+    });
+  });
+
+  it("keeps diagnostic observations isolated between two real runners", async () => {
+    const first = diagnosticRunner();
+    const second = diagnosticRunner();
+    const unchanged = second.runner.snapshot().diagnostics;
+    await first.start();
+    await first.artifact(1);
+    await first.terminal(1);
+    expect(
+      first.runner.snapshot().diagnostics.gate.parentTerminalRecorded,
+    ).toBe(true);
+    expect(second.runner.snapshot().diagnostics).toEqual(unchanged);
+  });
+
+  it("closes ordinal and failure-code domains without leaking hostile typed error strings", () => {
+    expect([-1, 0, 1, 2, 3, 4].map(sequenceChildOrdinal)).toEqual([
+      null,
+      1,
+      2,
+      3,
+      null,
+      null,
+    ]);
+    expect(sequenceDiagnosticFailure(null)).toBeNull();
+    expect(sequenceDiagnosticFailure("managed_sequence_rejected")).toBe(
+      "managed_sequence_rejected",
+    );
+    for (const value of [
+      "private/prompt/value",
+      "sha256:private",
+      "https://private.invalid",
+      undefined,
+      {},
+    ])
+      expect(sequenceDiagnosticFailure(value)).toBe("managed_sequence_failed");
   });
 });

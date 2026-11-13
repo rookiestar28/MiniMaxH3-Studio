@@ -22,18 +22,18 @@
     },
     {
       "path": "NOTICE",
-      "sha256": "sha256:5ac392bdbaa7d66b5ada0f4a1224572adc44f3bacab2a18a4313dfa9a038e45b",
-      "size": 1776
+      "sha256": "sha256:a76d3d436c45c045f16a4e604b227a8efd690de20b07f4cf4067736a75034a55",
+      "size": 2173
     },
     {
       "path": "comfyui_h3_context/contracts/build_provenance_v1.json",
-      "sha256": "sha256:07ee43a95cb59878e2d682898d18833a920fd5fc7b51434ca9fac77ca98995d4",
+      "sha256": "sha256:070c203580b21bce9bebf97c5fb88d167d0019b0c661c9d95ea5f67518c41b5b",
       "size": 1712
     },
     {
       "path": "comfyui_h3_context/contracts/host_seam_census_v1.json",
-      "sha256": "sha256:22771d7d55ccc7e59a2433630865d4b02152735fcf639d430a5cc28fda61c1c6",
-      "size": 17551
+      "sha256": "sha256:191b1f89ab02266bd817d67ea44ee4b555164aa22df7a07010657621bb0b6126",
+      "size": 17624
     },
     {
       "path": "comfyui_h3_context/contracts/host_seam_shape_fixture_v1.json",
@@ -42,7 +42,7 @@
     },
     {
       "path": "comfyui_h3_context/contracts/installation_profiles_v1.json",
-      "sha256": "sha256:dad55125741921f0a363a4351ff2778cce31142c5a63a7559fa9e5f722a8a2b9",
+      "sha256": "sha256:0e85dd457791e53aefe3f010a5c94a4d7739b3a6e6908ce70de1d8d95f03bbe5",
       "size": 3377
     },
     {
@@ -67,7 +67,7 @@
     },
     {
       "path": "frontend/package.json",
-      "sha256": "sha256:aa528082e76c69e91c28ceb23a5a32278aba9711047cacdb1595f412730e6f3d",
+      "sha256": "sha256:20eb9936251816560de648eac39181e0b9353a87a32141fc60c0ac2212abe12e",
       "size": 1307
     },
     {
@@ -87,8 +87,8 @@
     },
     {
       "path": "frontend/src/components/AuthoringOutput.tsx",
-      "sha256": "sha256:cc6d0afb2d0b1c186391732faaf2e4bf715a279fc2299bcbc09be2ba3d0bc778",
-      "size": 9095
+      "sha256": "sha256:a4e711d702ba2d2f3bb335e31840e11fa1d61083cafe74bba57119de7ee36140",
+      "size": 9315
     },
     {
       "path": "frontend/src/components/AuthoringPreviewMonitor.tsx",
@@ -107,8 +107,8 @@
     },
     {
       "path": "frontend/src/components/H3Sidebar.tsx",
-      "sha256": "sha256:958cb5827e456d9940032d4d2bb531dcba30692fe1a4b1ff0fe1d053bda6254b",
-      "size": 72672
+      "sha256": "sha256:01d4d9fca62d96c54c829f2b51a45100b9949c50988d209a90f7447772654b58",
+      "size": 72889
     },
     {
       "path": "frontend/src/components/ImageCropAction.tsx",
@@ -207,8 +207,8 @@
     },
     {
       "path": "frontend/src/components/authoringOutputCopy.ts",
-      "sha256": "sha256:8acf376c6db2bbe908e386a1aa73d5c682c58f3a9f0a56e543c886dfe15fbc82",
-      "size": 4735
+      "sha256": "sha256:27f6bec52f9659159a2992219eb9e0bfb29b256627db6e8c9de25e594eddd36b",
+      "size": 5148
     },
     {
       "path": "frontend/src/components/mediaToolsCard.css",
@@ -242,8 +242,8 @@
     },
     {
       "path": "frontend/src/components/nle/NleInspectorTabs.tsx",
-      "sha256": "sha256:7a0077e46c6a8f372cef44e38d13e8c32aea51d8a6a834f42387ebd620e60b2e",
-      "size": 80886
+      "sha256": "sha256:a0fb46787591c4c627f371c5359f73f1d24a1f851e7dfc30ba334035b98eb4b1",
+      "size": 82397
     },
     {
       "path": "frontend/src/components/nle/NleLauncher.tsx",
@@ -282,8 +282,8 @@
     },
     {
       "path": "frontend/src/components/nle/NleSequencePanel.tsx",
-      "sha256": "sha256:8c34564c9a600b83911134917e154848aba38f44180be5b8449e6caf12410cd4",
-      "size": 14528
+      "sha256": "sha256:df61d07cd39922a2883fdd6cc5877aee782ea09d3deeb103e0f7af47cf5a8484",
+      "size": 16113
     },
     {
       "path": "frontend/src/components/nle/NleShell.tsx",
@@ -297,8 +297,13 @@
     },
     {
       "path": "frontend/src/components/nle/NleTextBin.tsx",
-      "sha256": "sha256:9268e7b75639e04a2097a23b99fc56dc16cecd9bc7f1e606801dca6eb9fe576b",
-      "size": 3593
+      "sha256": "sha256:97a23724dd50d52f7e0a7a27fbff67319c4aa089e7b4ec4d87d7c0e0cd6770ec",
+      "size": 4442
+    },
+    {
+      "path": "frontend/src/components/nle/NleTextPresetGrid.tsx",
+      "sha256": "sha256:79ffae3f8e0d6394b483d071b61b26799042107efc0f5d370fb27946c53a3b09",
+      "size": 5885
     },
     {
       "path": "frontend/src/components/nle/NleTextStyleControls.tsx",
@@ -387,8 +392,8 @@
     },
     {
       "path": "frontend/src/components/nle/nleCopy.ts",
-      "sha256": "sha256:03e761d8b2b623c34722a43f47abc2da105509bff1d6e1720e3071fe698b89cb",
-      "size": 92183
+      "sha256": "sha256:eb1a0c87845428cf437d074953a4bc9844325f84bca340c1ef92a905faf958c9",
+      "size": 94161
     },
     {
       "path": "frontend/src/components/nle/nleMediaBinModel.ts",
@@ -404,6 +409,16 @@
       "path": "frontend/src/components/nle/nleMonitorGeometry.ts",
       "sha256": "sha256:7e87427615b6e26e63da56b068eccac3b05229cb2f602bd6034785946daf67ed",
       "size": 2553
+    },
+    {
+      "path": "frontend/src/components/nle/nleTextPresetFonts.ts",
+      "sha256": "sha256:0a518a1e3f9103728d47d64bdb06fd903b528a3a986747ad742ba22c47f4c435",
+      "size": 2493
+    },
+    {
+      "path": "frontend/src/components/nle/nleTextPresets.ts",
+      "sha256": "sha256:fdeb359844bff355854726b611f127c018fad1bbf2f7aff5dac3bb19bd596311",
+      "size": 2516
     },
     {
       "path": "frontend/src/components/nle/nleTimelineSurface.ts",
@@ -422,13 +437,13 @@
     },
     {
       "path": "frontend/src/components/nle/nleTitleCoverage.ts",
-      "sha256": "sha256:112504154531c6351ecdcd4741706a33a66223e220152ca8af38f7ddd1b4a8be",
-      "size": 1423
+      "sha256": "sha256:4d548844ac74e7868c33e955595c88ec11e45bb9488e6aad7a29d9e96d962fa3",
+      "size": 2936
     },
     {
       "path": "frontend/src/components/nle/nleTitleInsertion.ts",
-      "sha256": "sha256:66c387246e1008bbfffa978c2ed08c5ce0f48a4c5ecc01efc4011a62e36978e9",
-      "size": 4526
+      "sha256": "sha256:95d1a0ca2255e78e2a1af3711e9518297c72f735fccfdd149e814a2353469782",
+      "size": 4615
     },
     {
       "path": "frontend/src/components/nle/nleTransformGesture.ts",
@@ -437,8 +452,8 @@
     },
     {
       "path": "frontend/src/components/nle/nleWorkspace.css",
-      "sha256": "sha256:14a1e92edf4ce326358530d3f2ebae6840fa0d77930a80f6ead58faa0f808565",
-      "size": 85963
+      "sha256": "sha256:2c29f24944db31a8813b338f4478765c5919d28b9856947f5c733d9eace72bff",
+      "size": 86568
     },
     {
       "path": "frontend/src/components/nle/nleWorkspaceBinding.ts",
@@ -522,8 +537,8 @@
     },
     {
       "path": "frontend/src/components/plainReasons.ts",
-      "sha256": "sha256:1b0db076f7bb9ceeb7438eac6f652ba9a7e9d522e6b778e7a30649fbf1d28f48",
-      "size": 53288
+      "sha256": "sha256:23d1990ccc303578f2a81e9f241642ba590d7b8d432aebb431759e6ce760dd17",
+      "size": 57040
     },
     {
       "path": "frontend/src/components/productionStateLabels.ts",
@@ -542,8 +557,8 @@
     },
     {
       "path": "frontend/src/components/useAuthoringOutput.ts",
-      "sha256": "sha256:e7da127892ff5379ae4abfb789cad793f3701c17ca43475ca2b594afeae5d74b",
-      "size": 7985
+      "sha256": "sha256:71bc59036bd19f033f145902fa64d13216c802532c73f0eda39ddef18202b6ed",
+      "size": 8468
     },
     {
       "path": "frontend/src/components/useRetainedSlot.ts",
@@ -567,13 +582,13 @@
     },
     {
       "path": "frontend/src/contracts/authoringMediaLeaseCodec.ts",
-      "sha256": "sha256:43cea2a33fe466bdafb3fb2723e0580b35575696fb31d0d24def370c26ad35e3",
-      "size": 24818
+      "sha256": "sha256:82a0232053e3066e5df093ddad0c03910fe51c13c9a5e9a3eececf801bee8ffb",
+      "size": 24955
     },
     {
       "path": "frontend/src/contracts/authoringOutputCodec.ts",
-      "sha256": "sha256:02e1c1c80520273e3fc7b8c4e6ed86460dce01fe08cf693faa94d20acc4584aa",
-      "size": 10845
+      "sha256": "sha256:2d6d098c113ea04ba0476bfea4b48c863d8c57fb24f222d89859959b5f2f6b64",
+      "size": 10886
     },
     {
       "path": "frontend/src/contracts/authoringPreviewCodec.ts",
@@ -722,13 +737,13 @@
     },
     {
       "path": "frontend/src/host-modules.d.ts",
-      "sha256": "sha256:2ec1d61168c43501f88ce96cad98241c8613c505e713034721fc14aaba142892",
-      "size": 285
+      "sha256": "sha256:8e9a0babbb31176d3a6d2fd20238ddee867bbff7d111d8226812f930e45babe1",
+      "size": 364
     },
     {
       "path": "frontend/src/host/appMode.ts",
-      "sha256": "sha256:438b22486c83ae500098cedcbb2406e21a1f1cd8ca18229fcc577c9b0b1ea857",
-      "size": 43532
+      "sha256": "sha256:fe83f72921233f3bd25285af8de70c26da82eacdbffa3e1c2de9187fb1f6305f",
+      "size": 43828
     },
     {
       "path": "frontend/src/host/appModeAdmission.ts",
@@ -747,18 +762,28 @@
     },
     {
       "path": "frontend/src/host/appModeContract.ts",
-      "sha256": "sha256:bf41b6585721d0dbe9bf231a1ed8d9082b589cd3438130e5244a2cb0ced09e9e",
-      "size": 40503
+      "sha256": "sha256:6d7324a7f3c11d7cadc04beefe6febed2b15504daaae3159d8a7f32cbdf602b4",
+      "size": 38232
+    },
+    {
+      "path": "frontend/src/host/appModeError.ts",
+      "sha256": "sha256:ed4a05d504e5552b194626fd1044b61d244a4be45ddbbe76ce06b86f7641b797",
+      "size": 5174
     },
     {
       "path": "frontend/src/host/appModeExistingRoute.ts",
-      "sha256": "sha256:c52bb52449c2c5b327820129f7b9343ced15f7f96bdf73949ca17dc45092483f",
-      "size": 43659
+      "sha256": "sha256:6f56402203717983531a8250f5904117d5fd0db2836133b6b3db653e360f9255",
+      "size": 44617
     },
     {
       "path": "frontend/src/host/appModeManagedPreparation.ts",
-      "sha256": "sha256:e35752ff1d15c6f655e3f57a85d104acdc179a87de19b2b86c3511e661ba4403",
-      "size": 13996
+      "sha256": "sha256:144827444a59429b9276643345446169fbd23a74fc9e6c6270cc127f34aeb687",
+      "size": 18732
+    },
+    {
+      "path": "frontend/src/host/appModeProfileAdmission.ts",
+      "sha256": "sha256:d73348fefa1fd06932eac8c87208e65764075b93f8a9a3d1eb8791d1929a6c4a",
+      "size": 2096
     },
     {
       "path": "frontend/src/host/appModeQualification.ts",
@@ -767,8 +792,13 @@
     },
     {
       "path": "frontend/src/host/appModeRoutes.ts",
-      "sha256": "sha256:8ecdd87658b8af4d075679254c6e4d93cb3b09dffcad144d0fff74adfd6bc98a",
-      "size": 19129
+      "sha256": "sha256:659b222130f5ae19d49590475367e2479198451246401f407b7ececfad37a652",
+      "size": 22523
+    },
+    {
+      "path": "frontend/src/host/appModeSourceObservation.ts",
+      "sha256": "sha256:8c32f7a549d18f976bf68f4db4394fbbe0d5ceebde06123c5dc5a4424b980370",
+      "size": 2577
     },
     {
       "path": "frontend/src/host/appModeTemplateSources.ts",
@@ -817,8 +847,8 @@
     },
     {
       "path": "frontend/src/host/authoringMediaSourceLease.ts",
-      "sha256": "sha256:9a2925947820cfd82cef7f2d4c3734d361735e61316ea9893414f59611faf28f",
-      "size": 37659
+      "sha256": "sha256:57645ef10a511140e581f6b6f601ced320f0f86287c533adc4d8c8c75259dbcb",
+      "size": 37705
     },
     {
       "path": "frontend/src/host/authoringOutputActions.ts",
@@ -857,8 +887,13 @@
     },
     {
       "path": "frontend/src/host/canvasOwnedWrite.ts",
-      "sha256": "sha256:4ff95ac05dcb5cebb0cb816617cac034e48679089c45bfda1fa929a1bf210be1",
-      "size": 9327
+      "sha256": "sha256:bc82eb4164ae2590dcb17273256ee5eae90b8b7d5bac899c2a9cb2a42ec63272",
+      "size": 9374
+    },
+    {
+      "path": "frontend/src/host/closingGuideNamespace.ts",
+      "sha256": "sha256:bbf6f6259446bb21627472213f409163cc3117b44f5ab36a579db94e7c986e9a",
+      "size": 6310
     },
     {
       "path": "frontend/src/host/comfyPromptHistory.ts",
@@ -869,6 +904,11 @@
       "path": "frontend/src/host/compiledMetadata.ts",
       "sha256": "sha256:a18c99ba64b8cb885a0e9a86cd93459026fcf5b2374eaeccd357a2636380a937",
       "size": 1947
+    },
+    {
+      "path": "frontend/src/host/compiledPromptData.ts",
+      "sha256": "sha256:e109ca4f55e87a93cb82e71dd51d289fdae788033fb016b07974bc991b7f80e1",
+      "size": 3855
     },
     {
       "path": "frontend/src/host/durationResolutionClient.ts",
@@ -887,8 +927,8 @@
     },
     {
       "path": "frontend/src/host/graphAdapter.ts",
-      "sha256": "sha256:8db00e1b9158e2827f6d611bcfb8dd7023880d8a3b68e1d5b05cefc0823a02a9",
-      "size": 17120
+      "sha256": "sha256:2d5abb709402c4b733d8ecb561b80d6ef8af395f7520f0beb4e7b92258e0bc07",
+      "size": 17370
     },
     {
       "path": "frontend/src/host/graphNodeContracts.ts",
@@ -952,8 +992,8 @@
     },
     {
       "path": "frontend/src/host/imageCropBindings.ts",
-      "sha256": "sha256:0f4b8a9fac05524f826fc35add0d3d7f9fcb1a7744c0327694ec3b52bb5c50dd",
-      "size": 4042
+      "sha256": "sha256:df6060b1be7839e801fce6120fed458c1ab2ef3671d7044eb4ed1437ff55f887",
+      "size": 4488
     },
     {
       "path": "frontend/src/host/imageCropCapability.ts",
@@ -982,8 +1022,8 @@
     },
     {
       "path": "frontend/src/host/inputGeometry.ts",
-      "sha256": "sha256:0ba465a83eadcf1662e22af47e1dd0c0152f8a1188f15cdb72bbe9fdc907c2ea",
-      "size": 6861
+      "sha256": "sha256:97ee1babb6779dea38b9b29f9088d0771efa88464d4fe78687f51b8f645d23be",
+      "size": 7072
     },
     {
       "path": "frontend/src/host/languageSettings.ts",
@@ -1006,19 +1046,29 @@
       "size": 167
     },
     {
+      "path": "frontend/src/host/managedSequenceAuthority.ts",
+      "sha256": "sha256:9cf15fb01622e8449d7bbcec80e01d4ce73e89330ed21deb0d92d7a2a9929bca",
+      "size": 5648
+    },
+    {
       "path": "frontend/src/host/managedSequenceClient.ts",
-      "sha256": "sha256:8ea1be0137ab4068a77911cef1001921adf4c1139b232b0ff52883e6e21a6b1e",
-      "size": 22181
+      "sha256": "sha256:e0412e8fd7f0c9f1a7146af3f04943f8c62f4c2d5fa69b30a015e9eb5fed4711",
+      "size": 27029
+    },
+    {
+      "path": "frontend/src/host/managedSequenceDiagnostics.ts",
+      "sha256": "sha256:a23cfa8afe5b87132b1c81641d41268cc56a61ed07759ab3b5c5a63ae06b1da4",
+      "size": 9190
     },
     {
       "path": "frontend/src/host/managedSequenceRunner.ts",
-      "sha256": "sha256:e0fb5639270c051a90dc3e98673ad497de202bbdb46ca1441575651f15343d68",
-      "size": 42778
+      "sha256": "sha256:68e12bf218216bd87fd1f91d7e5b36b9cad3aa648e744ce18d47a6365c80c98e",
+      "size": 43734
     },
     {
       "path": "frontend/src/host/managedSequenceRunnerContract.ts",
-      "sha256": "sha256:f5270a51599e2ef4ce652258096524b8a2d3e7f83e5fd142794e61a087cc1cc8",
-      "size": 5329
+      "sha256": "sha256:e329ea872eadb40158b3b707f088c84b32c30c30c34c13c05c34da7d6ea041a0",
+      "size": 6902
     },
     {
       "path": "frontend/src/host/mediaRuntimeClient.ts",
@@ -1057,13 +1107,43 @@
     },
     {
       "path": "frontend/src/host/ownedGraphIdentity.ts",
-      "sha256": "sha256:aff34b96310e5bd1a80f5c1a9bf05bebc6f2cc82f9b3b637835ba24152ecfadc",
-      "size": 6150
+      "sha256": "sha256:1e9b9af013c0f6e567d8e2c3e4454c7d23afa396a106e7ee67f438f9a9d8c398",
+      "size": 6758
     },
     {
       "path": "frontend/src/host/perceptionHostClient.ts",
       "sha256": "sha256:9338dd306808b9b04c29a4800827629d2ee6381dc83fecf52835862eb89443ca",
       "size": 1789
+    },
+    {
+      "path": "frontend/src/host/preparedCanonicalStart.ts",
+      "sha256": "sha256:03c13235d7b5a546b7c4acb55d718530218119aafbe7eb6eb0b806fefba8bc61",
+      "size": 4249
+    },
+    {
+      "path": "frontend/src/host/preparedSequenceAdmission.ts",
+      "sha256": "sha256:95cee7768f0079302b3b6cab43091132eff1c374accfb0bd038c396b95877bfd",
+      "size": 7396
+    },
+    {
+      "path": "frontend/src/host/preparedSequenceGraph.ts",
+      "sha256": "sha256:c0db0c77c0b7811149cf99604d66e175bd602b82aafc8d5e2fad8c966cd94403",
+      "size": 13136
+    },
+    {
+      "path": "frontend/src/host/preparedSequenceMedia.ts",
+      "sha256": "sha256:8f372aae623b07a5e33f12a210604622f8ee395550edc81abe6726d389137f77",
+      "size": 7455
+    },
+    {
+      "path": "frontend/src/host/preparedSequenceObservation.ts",
+      "sha256": "sha256:48d397fdaa16fe069b6414af3467a49975385243c699f482e90a89b07294d538",
+      "size": 10081
+    },
+    {
+      "path": "frontend/src/host/privateCanonicalPrompt.ts",
+      "sha256": "sha256:b10e2fbda4854d6aac5de42bd31e6722108bbce694d7d5a3979b72d9dd3ab932",
+      "size": 628
     },
     {
       "path": "frontend/src/host/productionActions.ts",
@@ -1087,8 +1167,8 @@
     },
     {
       "path": "frontend/src/host/productionManagedChildResolver.ts",
-      "sha256": "sha256:882b038e92588a46cd80f018517ca6d1a25cf7319c2e74c6fbc41ff76317204e",
-      "size": 23357
+      "sha256": "sha256:7ce5965f19a2c85b287b4c6c04d4e75007e97e922a69bca1a9dc48aebce448e2",
+      "size": 29350
     },
     {
       "path": "frontend/src/host/productionMediaPreview.ts",
@@ -1132,8 +1212,8 @@
     },
     {
       "path": "frontend/src/host/queueSeam.ts",
-      "sha256": "sha256:744f29c22c763f3f42e7a27d722b0d66b0711b581af8847da8f43b4a7d2b572a",
-      "size": 11507
+      "sha256": "sha256:39df2dbeca8c023a396ed16fdd58a27d1d24e9ce87ad270e052564ef32d180a8",
+      "size": 13499
     },
     {
       "path": "frontend/src/host/referenceBindingIdentity.ts",
@@ -1161,6 +1241,31 @@
       "size": 23163
     },
     {
+      "path": "frontend/src/host/sequenceFrameMaterialization.ts",
+      "sha256": "sha256:ce4e3ae1376e2a67cb6e132eb60bef0738735bc7e6cddf5d3613f664d4fa298b",
+      "size": 9220
+    },
+    {
+      "path": "frontend/src/host/sequenceGeometry.ts",
+      "sha256": "sha256:e10999b3b3332417e04ac06f27f9adc437f59bcb07bcd86a59ce5e064d39aba3",
+      "size": 1295
+    },
+    {
+      "path": "frontend/src/host/sequenceMediaBindings.ts",
+      "sha256": "sha256:ea7e17019dd37d3cdf4376bb73d7b28f36d0174a5108e946352a10dd2042a7a2",
+      "size": 7934
+    },
+    {
+      "path": "frontend/src/host/sequenceMediaCapture.ts",
+      "sha256": "sha256:d43c872d1c121155dbcc98db6ca176c2d9f9575c42e5b3d5dc12d50299b78805",
+      "size": 11561
+    },
+    {
+      "path": "frontend/src/host/sequenceTemplateCanvas.ts",
+      "sha256": "sha256:2c7bf7fe4c8a6d7a76556009ebb0aaf28676bd99ce56ad6cf635ab29e062abe5",
+      "size": 3727
+    },
+    {
       "path": "frontend/src/host/sidebarActions.ts",
       "sha256": "sha256:eece73692903b87b2285559afde8c2a5a826b1f379786d9159ddf554adfa5241",
       "size": 10991
@@ -1182,13 +1287,13 @@
     },
     {
       "path": "frontend/src/host/templateGraphTopology.ts",
-      "sha256": "sha256:839599003659254e4f89f8ceace3966649e08721f5f9edba254302507ef9f33d",
-      "size": 32849
+      "sha256": "sha256:401331f4556f39f6f0e237bc718048e33264fd364ac9b5bfae88e9a5488eb230",
+      "size": 38324
     },
     {
       "path": "frontend/src/host/templateMaterialization.ts",
-      "sha256": "sha256:67e6ce2814c8893611f15b5b64fce861b47ef9c6888d48c0913195c161aebfa4",
-      "size": 42835
+      "sha256": "sha256:2efd8a7a3b9143005f6a466bc4b6e69ea2cb7109eb2c7578f178fea1ee15d04a",
+      "size": 41385
     },
     {
       "path": "frontend/src/host/workspaceStateClient.ts",
@@ -1227,13 +1332,13 @@
     },
     {
       "path": "frontend/src/lifecycle/appModeSession.ts",
-      "sha256": "sha256:6f9c32e4f7dbeac91b78c0a3a331dd5785fc80cd2ddb9f4a4a29aa49db0b709c",
-      "size": 48120
+      "sha256": "sha256:4e0cbfd8e127bc824d03fb7a250bfecd90ad038b29ba77ba17e49afa6752e50d",
+      "size": 48175
     },
     {
       "path": "frontend/src/lifecycle/appModeSessionPolicy.ts",
-      "sha256": "sha256:e39a9c0529a8978cf73317de7998edd455889254512b5e82ccf8643c30a86760",
-      "size": 2416
+      "sha256": "sha256:d328634b02a42c02e45c42b1c7694340841016d89b7bcec8003b6466a5856cbf",
+      "size": 2799
     },
     {
       "path": "frontend/src/lifecycle/extensionRegistration.tsx",
@@ -1262,8 +1367,8 @@
     },
     {
       "path": "frontend/src/lifecycle/managedSerialSession.ts",
-      "sha256": "sha256:f27ad648d16f82046e6f244c9011fe1c19fee67785ba864c0054946714939bf6",
-      "size": 8598
+      "sha256": "sha256:39f6f16c5ceeb130b6efab43a7ca32ac8934ef33af78453577ac7432e9241646",
+      "size": 8594
     },
     {
       "path": "frontend/src/lifecycle/mediaRuntimeSession.ts",
@@ -1286,6 +1391,11 @@
       "size": 2347
     },
     {
+      "path": "frontend/src/lifecycle/nleSequenceUi.ts",
+      "sha256": "sha256:26f473b0d24ab9c578d8e0f3ea81d3d1b8b7bb3f23eb3e6b93d4e9d29ea372e2",
+      "size": 1651
+    },
+    {
       "path": "frontend/src/lifecycle/nleWorkspaceImport.ts",
       "sha256": "sha256:647eb2b3b7a2d787936ee3aaa4316fbb8c7639072beab2681afd843de35b6cac",
       "size": 27306
@@ -1297,8 +1407,8 @@
     },
     {
       "path": "frontend/src/lifecycle/nleWorkspaceSession.ts",
-      "sha256": "sha256:7b52929cf046dadeb9d304c618147044880336a105717ace02a105140702ec3a",
-      "size": 37784
+      "sha256": "sha256:900562422e249270a25fa6fa0284092715c52895fb03a8ef371e5adc8f9b026e",
+      "size": 41121
     },
     {
       "path": "frontend/src/lifecycle/perceptionHostSession.ts",
@@ -1377,8 +1487,8 @@
     },
     {
       "path": "frontend/src/runtime/editorRuntime.ts",
-      "sha256": "sha256:69f5cb7f454b49901a5e516d6294dae8880d418ce7fd281196bd739d4db3c5f9",
-      "size": 95626
+      "sha256": "sha256:ce8ec63be0b9b61d91e3b86c6dda2a62747c31a1085ebb456669c7d96d19ca05",
+      "size": 96232
     },
     {
       "path": "frontend/src/runtime/embeddedAudioFollower.ts",
@@ -1456,6 +1566,11 @@
       "size": 21083
     },
     {
+      "path": "frontend/src/runtime/packagedFontAssets.ts",
+      "sha256": "sha256:e952949d7795fa2726f6c373897d9393ab307dcea9cf7ca885ce3fa6faaf9d75",
+      "size": 433
+    },
+    {
       "path": "frontend/src/runtime/previewLookahead.ts",
       "sha256": "sha256:2d3a93010d16232b23a240a94b35160f7ed9318281a2ae96e24691df63de7a34",
       "size": 7232
@@ -1482,8 +1597,8 @@
     },
     {
       "path": "frontend/src/runtime/visualCompositionResources.ts",
-      "sha256": "sha256:b6633af554650b373bc64ae7f25a60060538723404a741539d36d6a697b17fa3",
-      "size": 29718
+      "sha256": "sha256:a6cd14943910078d7aa9247db84c853c33ebc5fdfc87d32b532ffe32ca61143f",
+      "size": 29958
     },
     {
       "path": "frontend/src/runtime/visualCompositionSession.ts",
@@ -1492,8 +1607,8 @@
     },
     {
       "path": "frontend/src/runtime/visualCompositor.ts",
-      "sha256": "sha256:a47ebf29f6e312f9d7b3131e6eb865850a652a3087f0c3e638a23b2ddfce4f1d",
-      "size": 68452
+      "sha256": "sha256:bfd5d70a6faa9186ecd662bb117b722f6b33c85002590bf803d837fb0bde6d16",
+      "size": 68707
     },
     {
       "path": "frontend/src/state/authoringViewState.ts",
@@ -1517,8 +1632,8 @@
     },
     {
       "path": "frontend/src/state/nleWorkspaceState.ts",
-      "sha256": "sha256:fb14bbeb0b6b5330cb616bfc8333e6e4976206c6eeed69c540b75667710c07c7",
-      "size": 8146
+      "sha256": "sha256:268c6918168233ed668946e05a91682386cf6972e8c1064a163cb1db9ffe14a2",
+      "size": 8281
     },
     {
       "path": "frontend/src/state/perceptionHostState.ts",
@@ -1557,8 +1672,8 @@
     },
     {
       "path": "frontend/src/styles/tokens.css",
-      "sha256": "sha256:a12347cccd25a5aed0fcf453c987e4e9ae73aaccdad9de9d493d5fb9201025cf",
-      "size": 85082
+      "sha256": "sha256:f841961b631656c258ebcea0f2d162b345ddfee0f70b398f1b0afe9ba02fda86",
+      "size": 85320
     },
     {
       "path": "frontend/tsconfig.json",
@@ -1582,8 +1697,8 @@
     },
     {
       "path": "governance/contracts/sbom.spdx.json",
-      "sha256": "sha256:f48fe99a84b9c35c4658a082cdb2765d9b63f30824fe2b5ca3050a2e7ee756e6",
-      "size": 80662
+      "sha256": "sha256:8aac315cda347e27585428731a3437b1bedc4738f821dce7edce0d52e68a4522",
+      "size": 82650
     },
     {
       "path": "governance/contracts/supply_chain_v1.schema.json",
@@ -1592,13 +1707,13 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "sha256:afa424335ed50770fe66a296ada52cdf3d25833d1dc4616609fa0b756c9af1b9",
-      "size": 4080
+      "sha256": "sha256:c516237f215d6a399ce8e4b6ef288c41343d5b459ea8844f831ab503aac8af03",
+      "size": 4095
     },
     {
       "path": "scripts/public_build_backend.py",
-      "sha256": "sha256:cc97a71ab188efeb1cb9c1d6aff4bf99624808e10b7defa42acbda03ec613b34",
-      "size": 11331
+      "sha256": "sha256:b2e648b1a880c4cf7d1b4a663c7a17a5fd6c0484d2a6299e3bc4a72f68b507fa",
+      "size": 11529
     },
     {
       "path": "scripts/public_source_policy.py",
@@ -1615,15 +1730,15 @@
   "runtime_entries": [
     {
       "path": "comfyui_h3_context/web/h3-context-sidebar.js",
-      "sha256": "sha256:e437955793c7eb29f2c32af62ff00c1bbc74915d7d99f80a988a0506d5f1630c",
-      "size": 1974807
+      "sha256": "sha256:eb9a7de0179525f6d5fbe2229f5135d4c365b6da2898a3fb6ea8557cda655460",
+      "size": 3932886
     }
   ],
   "schema": "h3-context-supply-chain/1",
   "spdx": {
-    "package_count": 176,
+    "package_count": 180,
     "path": "governance/contracts/sbom.spdx.json",
-    "sha256": "sha256:f48fe99a84b9c35c4658a082cdb2765d9b63f30824fe2b5ca3050a2e7ee756e6",
+    "sha256": "sha256:8aac315cda347e27585428731a3437b1bedc4738f821dce7edce0d52e68a4522",
     "version": "SPDX-2.3"
   },
   "version": 1

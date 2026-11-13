@@ -10,6 +10,7 @@ import type {
   SequenceCoordinatorResult,
 } from "./sequenceCoordinator";
 import type { SaveVideoArtifactEvent } from "./sidebarHost";
+import type { SequenceMediaBindingSet } from "./sequenceMediaBindings";
 import {
   createManagedSequenceReattachStore,
   type EligibleSegmentExecution,
@@ -35,6 +36,8 @@ export type ManagedSerialSequenceStartIntent = Readonly<{
   authorization: ManagedSequenceAuthorizationIntent;
   qualificationFingerprint: string;
   segmentIds: readonly string[];
+  sequenceTaskMode?: "t2va" | "i2va" | "l2va" | "fl2va";
+  mediaBindings?: SequenceMediaBindingSet;
 }>;
 
 type RunnerOwnedStartOptions = Omit<
@@ -43,12 +46,14 @@ type RunnerOwnedStartOptions = Omit<
   | "expectedIdentity"
   | "onQueueSubmitted"
   | "preparedCanonicalPrompt"
+  | "preparedSequenceMedia"
 >;
 
 export type ManagedSerialChildPlan = Readonly<{
   inputs: AppModeInputs;
   options?: RunnerOwnedStartOptions;
   canonicalLowering?: ProductionCanonicalLowering;
+  preparedSequenceMedia?: import("./preparedSequenceMedia").PreparedSequenceMedia;
   workflowAuthority: object;
   activeWorkflowFingerprint: string;
   previousOwnedProjectionFingerprint: string;
@@ -174,6 +179,8 @@ export type ReattachedTerminal = {
   childReleased: boolean;
 };
 
+import { withSequenceFailureAttribution } from "./managedSequenceDiagnostics";
+
 export class ManagedSerialSequenceRunnerError extends Error {
   readonly code:
     | "already_started"
@@ -184,11 +191,47 @@ export class ManagedSerialSequenceRunnerError extends Error {
     | "workflow_identity_changed"
     | "queue_callback_incomplete"
     | "terminal_authority_unavailable"
-    | "child_release_refused";
+    | "child_release_refused"
+    | "sequence_media_changed"
+    | "sequence_media_unavailable";
 
-  constructor(code: ManagedSerialSequenceRunnerError["code"]) {
+  constructor(
+    code: ManagedSerialSequenceRunnerError["code"],
+    attribution?: unknown,
+  ) {
     super(code);
     this.name = "ManagedSerialSequenceRunnerError";
     this.code = code;
+    // CRITICAL: decode immediately; retaining the response would retain private execution data.
+    withSequenceFailureAttribution(this, attribution);
   }
+}
+
+export type ManagedSerialSequenceRunnerDependencies = {
+  parentClient: ManagedParentClient;
+  coordinatorClient: ChildCoordinatorClient;
+  reattachStore: ManagedReattachStore;
+  startChild: ManagedSerialAppModeStart;
+  historyClient?: PromptHistoryClient;
+  resolveReuse?: ManagedSerialResolveReuse;
+  resolveChild: ManagedSerialResolveChild;
+};
+
+export function assertManagedSerialSequenceRunnerDependencies({
+  parentClient,
+  coordinatorClient,
+  reattachStore,
+  startChild,
+  resolveChild,
+  resolveReuse,
+}: ManagedSerialSequenceRunnerDependencies): void {
+  if (
+    typeof parentClient?.send !== "function" ||
+    typeof coordinatorClient?.send !== "function" ||
+    typeof reattachStore?.replace !== "function" ||
+    typeof startChild !== "function" ||
+    typeof resolveChild !== "function" ||
+    (resolveReuse !== undefined && typeof resolveReuse !== "function")
+  )
+    throw new Error("managed serial runner dependency is unavailable");
 }

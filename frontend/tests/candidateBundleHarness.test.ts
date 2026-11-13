@@ -2,12 +2,13 @@ import { createHash } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -18,17 +19,48 @@ import {
   CANDIDATE_BUNDLE_SHA256_ENV,
   CandidateInitiatorNetworkAttribution,
   H3NetworkAttribution,
+  MAX_CANDIDATE_BUNDLE_BYTES,
   loadCandidateBundleEnvironment,
   verifyCandidateBackendRuntimeEnvironment,
 } from "./e2e/helpers/candidateBundleHarness";
 
 const temporaryRoots: string[] = [];
+// IMPORTANT: these fixtures run from frontend; jsdom rewrites import.meta.url away from file:.
+// Keep the existing repository-fixture cwd convention so collection can reach the shipped bytes.
+const shippedRepositoryRoot = resolve(process.cwd(), "..");
+
+function shippedBundleEntry() {
+  const manifest = JSON.parse(
+    readFileSync(
+      join(shippedRepositoryRoot, "governance/contracts/supply_chain_v1.json"),
+      "utf8",
+    ),
+  ) as {
+    runtime_entries: Array<{ path: string; size: number; sha256: string }>;
+  };
+  const entry = manifest.runtime_entries.find(
+    (row) => row.path === "comfyui_h3_context/web/h3-context-sidebar.js",
+  );
+  if (entry === undefined)
+    throw new Error("shipped bundle manifest entry missing");
+  return entry;
+}
+
 const PACKAGED_FONT_FIXTURES = Object.freeze({
   "NotoSans-Regular.ttf": Buffer.from("synthetic regular font bytes\n"),
   "NotoSans-Bold.ttf": Buffer.from("synthetic bold font bytes\n"),
   "NotoSans-Italic.ttf": Buffer.from("synthetic italic font bytes\n"),
   "NotoSans-BoldItalic.ttf": Buffer.from("synthetic bold italic font bytes\n"),
   "LICENSE-OFL-1.1.txt": Buffer.from("synthetic OFL license text\n"),
+  "LICENSE-NotoSansCJK-OFL-1.1.txt": Buffer.from("synthetic Adobe OFL\n"),
+  "NotoSansTC-Regular.otf": Buffer.from("synthetic TC Regular font\n"),
+  "NotoSansTC-Bold.otf": Buffer.from("synthetic TC Bold font\n"),
+  "NotoSansSC-Regular.otf": Buffer.from("synthetic SC Regular font\n"),
+  "NotoSansSC-Bold.otf": Buffer.from("synthetic SC Bold font\n"),
+  "NotoSansJP-Regular.otf": Buffer.from("synthetic JP Regular font\n"),
+  "NotoSansJP-Bold.otf": Buffer.from("synthetic JP Bold font\n"),
+  "NotoSansKR-Regular.otf": Buffer.from("synthetic KR Regular font\n"),
+  "NotoSansKR-Bold.otf": Buffer.from("synthetic KR Bold font\n"),
 });
 
 function temporaryRepository(): string {
@@ -151,8 +183,34 @@ describe("candidate bundle environment", () => {
         },
       });
     };
-    expect(load(1_400_000)?.bytes.length).toBe(1_400_000);
-    expect(() => load(2 * 1_048_576 + 1)).toThrow(/outside the accepted bound/);
+    expect(load(MAX_CANDIDATE_BUNDLE_BYTES)?.bytes.length).toBe(
+      MAX_CANDIDATE_BUNDLE_BYTES,
+    );
+    expect(() => load(MAX_CANDIDATE_BUNDLE_BYTES + 1)).toThrow(
+      /outside the accepted bound/,
+    );
+    expect(() => load(0)).toThrow(/outside the accepted bound/);
+  });
+
+  it("admits the exact manifest-bound current runtime bundle", () => {
+    const entry = shippedBundleEntry();
+    const bytes = readFileSync(join(shippedRepositoryRoot, entry.path));
+    expect(bytes.length).toBe(entry.size);
+    const candidate = loadCandidateBundleEnvironment({
+      repositoryRoot: shippedRepositoryRoot,
+      environment: {
+        [CANDIDATE_BUNDLE_PATH_ENV]: entry.path,
+        [CANDIDATE_BUNDLE_SHA256_ENV]: entry.sha256.replace(/^sha256:/, ""),
+      },
+    });
+    expect(candidate?.bytes).toEqual(bytes);
+    expect(candidate?.sha256).toBe(entry.sha256.replace(/^sha256:/, ""));
+  });
+
+  it("keeps the shipped runtime within the candidate admission cap", () => {
+    const entry = shippedBundleEntry();
+    expect(entry.size).toBeGreaterThan(0);
+    expect(entry.size).toBeLessThanOrEqual(MAX_CANDIDATE_BUNDLE_BYTES);
   });
 
   it("rejects outside-repository and non-regular targets", () => {
@@ -225,6 +283,41 @@ describe("candidate bundle environment", () => {
 });
 
 describe("candidate backend runtime identity", () => {
+  it("admits large pinned font paths while retaining ordinary and font byte limits", () => {
+    const fixture = backendRuntimeFixture();
+    const candidateRoot = join(fixture.repositoryRoot, "comfyui_h3_context");
+    const verify = () =>
+      verifyCandidateBackendRuntimeEnvironment({
+        repositoryRoot: fixture.repositoryRoot,
+        environment: { [CANDIDATE_BACKEND_HOST_ROOT_ENV]: fixture.hostRoot },
+      });
+    for (const root of [candidateRoot, fixture.installedPackageRoot])
+      writeFileSync(
+        join(root, "fonts", "NotoSansSC-Bold.otf"),
+        Buffer.alloc(8_543_168),
+      );
+    expect(verify().status).toBe("exact");
+    writeFileSync(
+      join(fixture.installedPackageRoot, "fonts", "NotoSansSC-Bold.otf"),
+      Buffer.alloc(12 * 1_048_576 + 1),
+    );
+    expect(verify).toThrow(/installed_runtime_unsafe/);
+    writeFileSync(
+      join(candidateRoot, "fonts", "NotoSansSC-Bold.otf"),
+      Buffer.alloc(12 * 1_048_576 + 1),
+    );
+    expect(verify).toThrow(/candidate_inventory_unsafe/);
+    writeFileSync(
+      join(candidateRoot, "fonts", "NotoSansSC-Bold.otf"),
+      Buffer.alloc(8_543_168),
+    );
+    writeFileSync(
+      join(candidateRoot, "core", "product_shell.py"),
+      Buffer.alloc(1_048_576 + 1),
+    );
+    expect(verify).toThrow(/candidate_inventory_unsafe/);
+  });
+
   it("accepts only the exact bounded candidate-owned backend inventory", () => {
     const fixture = backendRuntimeFixture();
     const receipt = verifyCandidateBackendRuntimeEnvironment({
@@ -236,8 +329,8 @@ describe("candidate backend runtime identity", () => {
 
     expect(receipt).toMatchObject({
       status: "exact",
-      candidateFileCount: 8,
-      matchedFileCount: 8,
+      candidateFileCount: 17,
+      matchedFileCount: 17,
       missingFileCount: 0,
       staleFileCount: 0,
     });
@@ -259,7 +352,7 @@ describe("candidate backend runtime identity", () => {
           [CANDIDATE_BACKEND_HOST_ROOT_ENV]: stale.hostRoot,
         },
       }),
-    ).toThrow(/stale_bytes.*expected=8.*matched=7.*missing=0.*stale=1/);
+    ).toThrow(/stale_bytes.*expected=17.*matched=16.*missing=0.*stale=1/);
 
     const partial = backendRuntimeFixture();
     rmSync(join(partial.installedPackageRoot, "contracts", "identity.json"));
@@ -270,7 +363,7 @@ describe("candidate backend runtime identity", () => {
           [CANDIDATE_BACKEND_HOST_ROOT_ENV]: partial.hostRoot,
         },
       }),
-    ).toThrow(/missing_bytes.*expected=8.*matched=7.*missing=1.*stale=0/);
+    ).toThrow(/missing_bytes.*expected=17.*matched=16.*missing=1.*stale=0/);
   });
 
   it("requires exact packaged font and license bytes in the installed runtime", () => {
@@ -283,7 +376,7 @@ describe("candidate backend runtime identity", () => {
           [CANDIDATE_BACKEND_HOST_ROOT_ENV]: missing.hostRoot,
         },
       }),
-    ).toThrow(/missing_bytes.*expected=8.*matched=7.*missing=1.*stale=0/);
+    ).toThrow(/missing_bytes.*expected=17.*matched=16.*missing=1.*stale=0/);
 
     const stale = backendRuntimeFixture();
     writeFileSync(
@@ -297,7 +390,7 @@ describe("candidate backend runtime identity", () => {
           [CANDIDATE_BACKEND_HOST_ROOT_ENV]: stale.hostRoot,
         },
       }),
-    ).toThrow(/stale_bytes.*expected=8.*matched=7.*missing=0.*stale=1/);
+    ).toThrow(/stale_bytes.*expected=17.*matched=16.*missing=0.*stale=1/);
   });
 
   it("rejects packaged font symlinks", (context) => {

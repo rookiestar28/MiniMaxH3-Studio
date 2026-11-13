@@ -361,6 +361,7 @@ class _ReceiptEntry:
     source_path: Path = field(repr=False)
     source_fingerprint: str
     expires_at: float
+    locator_parts: tuple[str, ...] = field(repr=False)
 
 
 class InputGeometryRegistry:
@@ -453,13 +454,15 @@ class InputGeometryRegistry:
                     source_path=source,
                     source_fingerprint=source_fingerprint,
                     expires_at=now + self._ttl_seconds,
+                    locator_parts=_locator_parts(request.locator),
                 )
             return receipt
         finally:
             self._slots.release()
 
-    def claim(self, value: object) -> InputGeometryReceipt:
+    def claim(self, value: object, *, locator: object | None = None) -> InputGeometryReceipt:
         receipt = InputGeometryReceipt.from_wire(value)
+        locator_parts = None if locator is None else _locator_parts(locator)
         now = self._clock()
         with self._lock:
             self._prune(now)
@@ -467,6 +470,10 @@ class InputGeometryRegistry:
         if entry is None:
             raise GeometryPreflightError("geometry_receipt_stale", 409)
         if entry.receipt != receipt:
+            raise GeometryPreflightError("geometry_receipt_mismatch", 422)
+        # CRITICAL: a sequence reuses the locator after Start. A receipt for another file must
+        # not authorize that retained locator, even when both files have identical dimensions.
+        if locator_parts is not None and locator_parts != entry.locator_parts:
             raise GeometryPreflightError("geometry_receipt_mismatch", 422)
         try:
             probe = _probe_file(
@@ -541,6 +548,11 @@ _registry = component(INPUT_GEOMETRY, InputGeometryRegistry)
 
 def claim_input_geometry_receipt(value: object) -> InputGeometryReceipt:
     return _registry().claim(value)
+
+
+def claim_input_geometry_source(value: object, *, locator: str) -> InputGeometryReceipt:
+    """Claim a one-shot receipt for the exact private sequence locator, without pool growth."""
+    return _registry().claim(value, locator=locator)
 
 
 def _error_body(category: str) -> dict[str, str]:

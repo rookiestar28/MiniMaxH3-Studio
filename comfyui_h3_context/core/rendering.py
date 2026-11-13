@@ -48,6 +48,7 @@ from .intent_graph import (
 from .production_semantics import (
     ProductionLocalShotV1,
     ProductionSemanticSliceV1,
+    ReferenceDefinitionV1,
 )
 from .profiles import DurationAlignment, PromptProfileRegistry, default_profile_registry
 
@@ -609,6 +610,13 @@ _ROLE_PROSE: dict[AssetRole, str] = {
     AssetRole.AUDIO_SOURCE: "the supplied audio track",
 }
 
+# A non-owner clip can retain plan-level frame context without claiming that frame locally.
+# These whole-video phrases must not reuse the clip-scoped descriptions in `_ROLE_PROSE`.
+_WHOLE_VIDEO_FRAME_PROSE = {
+    AssetRole.FIRST_FRAME: "the opening frame of the full video",
+    AssetRole.LAST_FRAME: "the closing frame of the full video",
+}
+
 _GENERIC_REFERENCE_PROSE: dict[MediaKind, str] = {
     MediaKind.IMAGE: "a supplied visual reference",
     MediaKind.VIDEO: "a supplied video reference",
@@ -1096,6 +1104,7 @@ def render_production_segment_prompt(
     section_heading: str,
     clip_duration_seconds: Decimal,
     hard_constraints: tuple[str, ...] = (),
+    source_reference_definitions: tuple[ReferenceDefinitionV1, ...] = (),
 ) -> ProductionSegmentPromptV1:
     """Render one sliced proposal using only canonical headings and shot notation.
 
@@ -1129,6 +1138,10 @@ def render_production_segment_prompt(
         isinstance(value, str) and value and "\x00" not in value for value in hard_constraints
     ):
         raise PromptRenderingError("Production hard constraints must be exact bounded text")
+    if not isinstance(source_reference_definitions, tuple) or not all(
+        isinstance(value, ReferenceDefinitionV1) for value in source_reference_definitions
+    ):
+        raise PromptRenderingError("Production source references must be typed definitions")
     if (
         not isinstance(clip_duration_seconds, Decimal)
         or not clip_duration_seconds.is_finite()
@@ -1242,9 +1255,9 @@ def render_production_segment_prompt(
     )
     if not sections:
         raise PromptRenderingError("Production rendering produced no canonical sections")
-    # CRITICAL: a local clip has its own ordered asset registry. A last-frame asset that was
-    # global Picture 2 becomes local Picture 1; substitute exact tokens once, never substring
-    # replacements that cascade or alter protected dialogue/visible text.
+    # CRITICAL: local renumbering and absent-frame projection share one token pass. A second
+    # pass can project an already-renumbered ordinary image as a missing frame. Projection is
+    # global-field-only and whole-video-scoped; shot/timed text keeps strict local obligations.
     local_counts = {kind: 0 for kind in MediaKind}
     names = {MediaKind.IMAGE: "Picture", MediaKind.VIDEO: "Video", MediaKind.AUDIO: "Audio"}
     local_labels: dict[str, str] = {}
@@ -1253,15 +1266,35 @@ def render_production_segment_prompt(
         local_labels[reference.backend_label] = (
             f"<{names[reference.kind]} {local_counts[reference.kind]}>"
         )
-    if local_labels:
-        token_pattern = re.compile("|".join(re.escape(value) for value in local_labels))
-        sections = tuple(
-            replace(
-                section,
-                body=token_pattern.sub(lambda match: local_labels[match.group()], section.body),
-            )
-            for section in sections
+    global_labels = dict(local_labels)
+    for reference in source_reference_definitions:
+        if (
+            reference.role in _WHOLE_VIDEO_FRAME_PROSE
+            and reference.asset_id not in semantic_slice.asset_ids
+        ):
+            global_labels[reference.backend_label] = _WHOLE_VIDEO_FRAME_PROSE[reference.role]
+    patterns = {
+        False: re.compile("|".join(re.escape(value) for value in local_labels))
+        if local_labels
+        else None,
+        True: re.compile("|".join(re.escape(value) for value in global_labels))
+        if global_labels
+        else None,
+    }
+
+    def substitute_labels(value: str, *, global_field: bool = False) -> str:
+        pattern = patterns[global_field]
+        labels = global_labels if global_field else local_labels
+        return pattern.sub(lambda match: labels[match.group()], value) if pattern else value
+
+    global_headings = {field.heading for field in semantic_slice.global_fields}
+    sections = tuple(
+        replace(
+            section,
+            body=substitute_labels(section.body, global_field=section.heading in global_headings),
         )
+        for section in sections
+    )
     # The preamble is written with the clip's own labels already, so it takes no part in the
     # substitution above: a second pass would renumber a local label as if it were a source one.
     preamble = _production_alignment(
@@ -1270,7 +1303,9 @@ def render_production_segment_prompt(
     text = render_prompt_sections(sections, preamble=preamble)
     for shot in shots:
         for exact in (*shot.exact_dialogue, *shot.visible_text):
-            if exact not in text:
+            # CRITICAL: only canonical label tokens may change. Always check the same one-pass
+            # local substitution, even without source references; all other bytes stay exact.
+            if substitute_labels(exact) not in text:
                 raise PromptRenderingError("Production rendering lost exact text")
     return ProductionSegmentPromptV1(text=text, sections=sections)
 

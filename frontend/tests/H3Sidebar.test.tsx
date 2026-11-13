@@ -59,6 +59,73 @@ const appMode = {
 };
 
 describe("H3Sidebar", () => {
+  describe.each(["native_preference", "canvas_ready"] as const)(
+    "existing-canvas Execute in %s",
+    (reason) => {
+      it.each(["t2va", "i2va", "l2va", "fl2va"] as const)(
+        "explicitly adopts the current %s graph",
+        (taskMode) => {
+          const onStart = vi.fn();
+          render(
+            <H3Sidebar
+              state={{ status: "interactive", reason, existingGraph: true }}
+              appMode={{ ...appMode, onStart }}
+              appModeDraft={{
+                ...initialAppModeDraft,
+                activeStage: "execute",
+                taskMode,
+                lastFrameSource: taskMode === "l2va" ? "18" : "",
+              }}
+            />,
+          );
+          const action = screen.getByRole("button", {
+            name: sidebarCopy("en").stageActionExecute,
+          }) as HTMLButtonElement;
+          expect(action.disabled).toBe(false);
+          fireEvent.click(action);
+          expect(onStart).toHaveBeenCalledExactlyOnceWith(
+            expect.objectContaining({
+              task_mode: taskMode,
+              ...(taskMode === "l2va" ? { last_frame_source: "18" } : {}),
+            }),
+            { useExisting: true },
+          );
+          expect(onStart.mock.calls[0]![0]).not.toHaveProperty(
+            "first_frame_source",
+          );
+          if (taskMode !== "l2va")
+            expect(onStart.mock.calls[0]![0]).not.toHaveProperty(
+              "last_frame_source",
+            );
+        },
+      );
+    },
+  );
+
+  it("does not adopt an existing graph that still needs a canvas decision", () => {
+    const onStart = vi.fn();
+    render(
+      <H3Sidebar
+        state={{
+          status: "interactive",
+          reason: "incompatible_graph",
+          existingGraph: true,
+        }}
+        appMode={{ ...appMode, onStart }}
+        appModeDraft={{ ...initialAppModeDraft, activeStage: "execute" }}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: sidebarCopy("en").stageActionExecute,
+      }),
+    );
+    expect(onStart).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ task_mode: "t2va" }),
+      undefined,
+    );
+  });
+
   describe.each(SUPPORTED_LOCALES)(
     "managed Execute frame requirements in %s",
     (locale) => {

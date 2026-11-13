@@ -48,6 +48,163 @@ const ownedGraph = Object.freeze({
   fingerprint: `sha256:${"b".repeat(64)}`,
 });
 
+describe("private sequence role observation preparation", () => {
+  const sequenceMedia = {
+    media_binding_fingerprint: "sha256:" + "c".repeat(64),
+    source_identities: [
+      {
+        asset_id: "first_frame_1",
+        role: "first_frame" as const,
+        receipt_handle: "ig_" + "n".repeat(40),
+        source_fingerprint: "sha256:" + "d".repeat(64),
+      },
+    ],
+  };
+  it.each([
+    "missing_asset",
+    "number_asset",
+    "missing_fingerprint",
+    "null_row",
+    "foreign_row",
+    "unknown_role",
+  ])("refuses a non-closed V5 source observation: %s", (defect) => {
+    const invalid: {
+      source_identities: (Record<string, unknown> | null)[];
+      media_binding_fingerprint?: string;
+      foreign?: unknown;
+    } = structuredClone(sequenceMedia);
+    const row = invalid.source_identities[0]!;
+    if (defect === "missing_asset") {
+      delete row.asset_id;
+      row.foreign = "first_frame_1";
+    }
+    if (defect === "number_asset") row.asset_id = 123;
+    if (defect === "missing_fingerprint") {
+      delete invalid.media_binding_fingerprint;
+      invalid.foreign = null;
+      invalid.source_identities = [];
+    }
+    if (defect === "null_row") invalid.source_identities[0] = null;
+    if (defect === "foreign_row") row.foreign = 1;
+    if (defect === "unknown_role") row.role = "reference_image";
+    const compiled = {
+      output: withOfficialLinkedDimensions(createQualifiedBasePrompt(inputs)),
+      workflow: {},
+    };
+    expect(() =>
+      buildManagedAppModePreparation(
+        compiled,
+        inputs,
+        "replace",
+        "sha256:" + "a".repeat(64),
+        ownedGraph,
+        undefined,
+        undefined,
+        undefined,
+        invalid as never,
+      ),
+    ).toThrowError(expect.objectContaining({ code: "invalid_request" }));
+  });
+  it.each([false, true])(
+    "emits V5 without legacy source_identity for a retained I2VA crop=%s",
+    (cropped) => {
+      const frameInputs: AppModeInputs = {
+        ...inputs,
+        task_mode: "i2va",
+        first_frame_source: "17",
+      };
+      const output = createQualifiedBasePrompt(frameInputs, {
+        first_frame: {
+          class_type: "LoadImage",
+          inputs: { image: "synthetic/source.png" },
+        },
+      }) as Record<
+        string,
+        { class_type: string; inputs: Record<string, unknown> }
+      >;
+      if (cropped) {
+        for (const node of Object.values(output))
+          for (const [name, value] of Object.entries(node.inputs))
+            if (
+              Array.isArray(value) &&
+              String(value[0]) === "9" &&
+              value[1] === 0
+            )
+              node.inputs[name] = ["60", 0];
+        output["60"] = {
+          class_type: "ImageCropV2",
+          inputs: {
+            image: ["9", 0],
+            crop_region: { x: 0, y: 0, width: 64, height: 96 },
+          },
+        };
+      }
+      const prepared = buildManagedAppModePreparation(
+        { output, workflow: {} },
+        frameInputs,
+        "replace",
+        "sha256:" + "a".repeat(64),
+        ownedGraph,
+        undefined,
+        undefined,
+        undefined,
+        sequenceMedia,
+      );
+      expect(prepared.observation.schema).toBe(
+        "h3.context.prepared_graph_observation.v5",
+      );
+      expect(Object.hasOwn(prepared.observation, "source_identity")).toBe(
+        false,
+      );
+      expect(prepared.observation.source_identities).toEqual(
+        sequenceMedia.source_identities,
+      );
+      expect(prepared.observation.media_binding_fingerprint).toBe(
+        sequenceMedia.media_binding_fingerprint,
+      );
+      expect(JSON.stringify(prepared.observation)).not.toMatch(
+        /synthetic\/|crop_region|locator/,
+      );
+      if (cropped)
+        expect(
+          (prepared.bootstrap.output["60"] as { class_type: string })
+            .class_type,
+        ).toBe("ImageCropV2");
+    },
+  );
+  it("emits an empty V5 for a frame-parent middle child without widening ordinary T2VA", () => {
+    const compiled = {
+      output: withOfficialLinkedDimensions(createQualifiedBasePrompt(inputs)),
+      workflow: {},
+    };
+    const prepared = buildManagedAppModePreparation(
+      compiled,
+      inputs,
+      "replace",
+      "sha256:" + "a".repeat(64),
+      ownedGraph,
+      undefined,
+      undefined,
+      undefined,
+      { source_identities: [], media_binding_fingerprint: null },
+    );
+    expect(prepared.observation.schema).toBe(
+      "h3.context.prepared_graph_observation.v5",
+    );
+    expect(Object.hasOwn(prepared.observation, "source_identity")).toBe(false);
+    expect(prepared.observation.source_identities).toEqual([]);
+    expect(
+      buildManagedAppModePreparation(
+        compiled,
+        inputs,
+        "replace",
+        "sha256:" + "a".repeat(64),
+        ownedGraph,
+      ).observation.schema,
+    ).toBe("h3.context.prepared_graph_observation.v4");
+  });
+});
+
 function links(value: unknown): string[] {
   if (Array.isArray(value)) {
     if (

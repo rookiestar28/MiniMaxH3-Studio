@@ -16,7 +16,7 @@ from typing import NoReturn, SupportsIndex
 from ..core.authoring_render_jobs import render_plan_fingerprint
 from ..core.composition_contract import TextStyle
 from ..core.render_planner import RenderPlanV1
-from ..core.safe_paths import UnsafePathError, validate_regular_file
+from ..core.safe_paths import UnsafePathError, _native_io_path, validate_regular_file
 from .authoring_fonts import AuthoringFontError, PackagedFontManifest, require_text_coverage
 from .authoring_image_source import IMAGE_SOURCE_PROFILE
 from .authoring_render_leases import AuthoringRenderJobSources
@@ -72,8 +72,10 @@ def _pin_stage_inputs(
                 # CRITICAL: read-only sharing denies writes and replacement until encoding
                 # ends; a size/mtime recheck cannot detect same-stat content substitution.
                 kernel = _kernel()
+                # IMPORTANT: validators retain logical paths; convert at each native pin and
+                # metadata boundary or long staged inputs fail even after validation.
                 handle = kernel.CreateFileW(
-                    str(admitted), 0x80000000, 0x1, None, 3, 0x00200080, None
+                    str(_native_io_path(admitted)), 0x80000000, 0x1, None, 3, 0x00200080, None
                 )
                 if not handle or handle == ctypes.c_void_p(-1).value:
                     raise RenderPreparationError("source_invalid")
@@ -86,7 +88,7 @@ def _pin_stage_inputs(
                     raise
                 scope.callback(os.close, descriptor)
                 metadata = os.fstat(descriptor)
-                expected = admitted.lstat()
+                expected = _native_io_path(admitted).lstat()
                 if metadata.st_nlink != 1 or (
                     metadata.st_dev,
                     metadata.st_ino,
@@ -379,7 +381,8 @@ def run_prepared_render(
         raise RenderPreparationError("plan_mismatch")
     program = build_render_graph(plan=plan, prepared=prepared)
     stage = prepared._stage
-    if stage.output_path.exists():
+    # IMPORTANT: stage locators stay logical; their filesystem checks need native spelling.
+    if _native_io_path(stage.output_path).exists():
         raise RenderProcessError("process_failed")
     graph_bytes = program.filter_graph.encode("utf-8")
     graph_path = stage.write_input(graph_bytes, suffix=".ffgraph")
@@ -413,7 +416,8 @@ def run_prepared_render(
             output = validate_regular_file(
                 stage.output_path, maximum_bytes=stage._store._limits.max_output_bytes
             )
-            if output.stat().st_size == 0 or output.stat().st_nlink != 1:
+            metadata = _native_io_path(output).stat()
+            if metadata.st_size == 0 or metadata.st_nlink != 1:
                 raise RenderProcessError("process_failed")
         except (OSError, UnsafePathError):
             raise RenderProcessError("process_failed") from None

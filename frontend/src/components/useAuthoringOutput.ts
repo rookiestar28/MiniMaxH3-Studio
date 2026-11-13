@@ -25,6 +25,7 @@ export function useAuthoringOutput(
   const [job, setJob] = useState<OutputStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [pathTooDeep, setPathTooDeep] = useState(false);
   const [autoRead, setAutoRead] = useState(true);
   const mayPoll = useRef(true),
     activePolling = useRef(false);
@@ -51,6 +52,7 @@ export function useAuthoringOutput(
     setJob(null);
     setUrl(null);
     setError(false);
+    setPathTooDeep(false);
     setAutoRead(true);
     mayPoll.current = true;
     activePolling.current = false;
@@ -105,6 +107,7 @@ export function useAuthoringOutput(
     if (!polling) {
       setBusy(true);
       setError(false);
+      setPathTooDeep(false);
     }
     try {
       const value = await operation(controller.signal);
@@ -115,6 +118,7 @@ export function useAuthoringOutput(
       ) {
         accept(value);
         setError(false);
+        setPathTooDeep(false);
         mayPoll.current = true;
         setAutoRead(true);
       }
@@ -130,6 +134,12 @@ export function useAuthoringOutput(
           polling
         )) {
           setError(true);
+          // IMPORTANT: only the closed server reason identifies this capability refusal;
+          // a generic runtime/transport failure must not tell users to move their installation.
+          setPathTooDeep(
+            cause instanceof OutputClientError &&
+              cause.code === "path_too_deep",
+          );
           closePreview();
           if (
             cause instanceof OutputClientError &&
@@ -246,6 +256,7 @@ export function useAuthoringOutput(
     job,
     busy,
     error,
+    pathTooDeep,
     previewBusy,
     previewError,
     url,

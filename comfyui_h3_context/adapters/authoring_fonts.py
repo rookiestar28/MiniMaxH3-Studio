@@ -9,10 +9,12 @@ from __future__ import annotations
 import hashlib
 import json
 import struct
+import sys
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path, PurePosixPath
-from typing import Final
+from threading import Lock
+from typing import Final, Literal
 
 from ..core.canonical import canonical_fingerprint
 
@@ -27,11 +29,16 @@ _PUBLIC_STYLE_KEYS: Final = frozenset(
 )
 _LAYOUT_CODEPOINTS: Final = frozenset({0x09, 0x0A})
 _MAX_MANIFEST_BYTES: Final = 512 * 1024
-_MAX_FONT_BYTES: Final = 8 * 1024 * 1024
+_MAX_FONT_BYTES: Final = 12 * 1024 * 1024  # Largest pinned face: SC Bold, 8,543,168 bytes.
 _MAX_LICENSE_BYTES: Final = 64 * 1024
 _MAX_CODEPOINTS: Final = 65_536
-_MAX_RANGES: Final = 4_096
+_MAX_RANGES: Final = 8_192  # TC 2.004 has 5,055 disjoint coverage ranges.
+_MAX_CMAP_SEGMENTS: Final = 8_192  # KR 2.004 uses 4,656 format-4 segments.
 _HEX_SHA256_LENGTH: Final = 64
+_MAX_CACHED_FACES: Final = 12
+_MAX_CACHED_READS: Final = 19
+_MAX_CACHED_BYTES: Final = 32 * 1024 * 1024
+_MAX_CACHED_RECIPE_BYTES: Final = 64 * 1024
 
 _ERROR_CODES: Final = frozenset(
     {
@@ -43,6 +50,7 @@ _ERROR_CODES: Final = frozenset(
         "font_asset_unsupported",
         "font_style_unsupported",
         "font_glyph_unsupported",
+        "font_italic_unsupported",
     }
 )
 
@@ -229,7 +237,9 @@ def _format4_codepoints(table: bytes) -> set[int]:
         struct.unpack_from(">H", table, 6)[0],
     )
     segment_count = segment_count_x2 // 2
-    if segment_count_x2 % 2 or not 1 <= segment_count <= 4_096 or length > len(table):
+    # IMPORTANT: valid regional CJK cmaps exceed 4,096 segments; retain the directory/byte
+    # bounds as well as this measured cap, or either valid faces fail or malformed offsets escape.
+    if segment_count_x2 % 2 or not 1 <= segment_count <= _MAX_CMAP_SEGMENTS or length > len(table):
         raise _fail("font_manifest_invalid", "a packaged font cmap format 4 is malformed")
     end_codes_offset = 14
     start_codes_offset = end_codes_offset + 2 * segment_count + 2
@@ -401,14 +411,156 @@ class PackagedFontManifest:
         }
 
 
-def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontManifest:
-    _relative_manifest_path, manifest_path = _safe_package_file(
-        package_root,
-        f"fonts/{FONT_MANIFEST_FILENAME}",
-        missing_code="font_artifact_missing",
+_FontInputKind = Literal["manifest", "license", "font"]
+
+
+@dataclass(frozen=True, slots=True)
+class _FontInputRead:
+    package_path: str
+    kind: _FontInputKind
+    size_bytes: int
+    fingerprint: str
+    filesystem_path: Path = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class _FontDerivationEntry:
+    package_root: Path = field(repr=False)
+    reads: tuple[_FontInputRead, ...]
+    manifest: PackagedFontManifest
+
+
+_FONT_DERIVATION_LOCK: Final = Lock()
+_font_derivation_entry: _FontDerivationEntry | None = None
+
+
+def _read_font_input(
+    package_root: Path,
+    package_path: object,
+    kind: _FontInputKind,
+) -> tuple[_FontInputRead, bytes]:
+    missing = "font_license_missing" if kind == "license" else "font_artifact_missing"
+    relative, path = _safe_package_file(package_root, package_path, missing_code=missing)
+    # Limits are live policy, not authority captured by an earlier successful cache fill.
+    if kind == "manifest":
+        maximum = _MAX_MANIFEST_BYTES
+    elif kind == "license":
+        maximum = _MAX_LICENSE_BYTES
+        if not relative.endswith(".txt"):
+            raise _fail("font_manifest_invalid", "the packaged font license artifact is invalid")
+    else:
+        maximum = _MAX_FONT_BYTES
+        if not relative.endswith((".ttf", ".otf")):
+            raise _fail("font_manifest_invalid", "only static packaged TTF/OTF faces are admitted")
+    payload = _read_bounded(path, maximum, missing)
+    return _FontInputRead(relative, kind, len(payload), _sha256(payload), path), payload
+
+
+def _retained_font_bytes(value: object, seen: set[int] | None = None) -> int:
+    """Account the known immutable cache graph, including Path's retained storage."""
+    if seen is None:
+        seen = set()
+    identity = id(value)
+    if identity in seen:
+        return 0
+    seen.add(identity)
+    children: list[object] = []
+    if isinstance(value, Path):
+        # Materialize the lazy string/parts/hash caches before accounting their slot storage.
+        str(value)
+        hash(value)
+        # CRITICAL: materialize lazy parts before slot accounting; removing this undercounts.
+        _ = value.parts
+        for cls in type(value).__mro__:
+            for slot in getattr(cls, "__slots__", ()):
+                if slot not in {"__weakref__", "__dict__"} and hasattr(value, slot):
+                    children.append(getattr(value, slot))
+    elif is_dataclass(value) and not isinstance(value, type):
+        children.extend(getattr(value, item.name) for item in fields(value))
+    elif isinstance(value, (tuple, list, frozenset)):
+        children.extend(value)
+    return sys.getsizeof(value) + sum(_retained_font_bytes(child, seen) for child in children)
+
+
+def _font_entry_is_cacheable(entry: _FontDerivationEntry) -> bool:
+    return (
+        len(entry.manifest.faces) <= _MAX_CACHED_FACES
+        and len(entry.reads) <= _MAX_CACHED_READS
+        and _retained_font_bytes(entry.reads) <= _MAX_CACHED_RECIPE_BYTES
+        and _retained_font_bytes(entry) <= _MAX_CACHED_BYTES
     )
+
+
+def packaged_manifest_fingerprint(decoded: object) -> str:
+    """Hash the closed font wire after its own resource validation.
+
+    Coverage has thousands of ranges; the general 256-item canonicalizer is not this format's
+    resource authority. Keep deterministic JSON without widening any general canonical bounds.
+    """
+    return _sha256(
+        json.dumps(
+            decoded, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(",", ":")
+        ).encode("utf-8")
+    )
+
+
+def _verified_license(
+    package_root: Path,
+    raw: object,
+    revision: str,
+    copyright_line: bytes,
+    reads: list[_FontInputRead],
+) -> str:
+    wire = _mapping(raw, ("spdx_id", "package_path", "file_sha256", "upstream_revision"), "license")
+    if (
+        wire["spdx_id"] != "OFL-1.1"
+        or _git_oid(wire["upstream_revision"], "license revision") != revision
+    ):
+        raise _fail("font_manifest_invalid", "the font build and license revisions differ")
+    observed, payload = _read_font_input(package_root, wire["package_path"], "license")
+    reads.append(observed)
+    expected = _sha256_value(wire["file_sha256"], "license.file_sha256")
+    # CRITICAL: accept only Git's CRLF -> LF text conversion; broader cleanup conceals tampering.
+    if _sha256(payload.replace(b"\r\n", b"\n")) != expected:
+        raise _fail("font_license_hash_mismatch", "the packaged font license hash differs")
+    if b"SIL OPEN FONT LICENSE Version 1.1" not in payload or copyright_line not in payload:
+        raise _fail("font_manifest_invalid", "the packaged font license content is unsupported")
+    return expected
+
+
+def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontManifest:
+    global _font_derivation_entry
+    manifest_read, payload = _read_font_input(
+        package_root, f"fonts/{FONT_MANIFEST_FILENAME}", "manifest"
+    )
+    # The fixed manifest location is exactly fonts/<filename> under the guarded resolved root.
+    resolved_root = manifest_read.filesystem_path.parent.parent
+    with _FONT_DERIVATION_LOCK:
+        entry = _font_derivation_entry
+    if (
+        entry is not None
+        and entry.package_root == resolved_root
+        and entry.reads[0] == manifest_read
+    ):
+        try:
+            matches = True
+            for previous in entry.reads[1:]:
+                current, _payload = _read_font_input(
+                    package_root, previous.package_path, previous.kind
+                )
+                if current != previous:
+                    matches = False
+                    break
+        except AuthoringFontError:
+            matches = False
+        if matches:
+            # CRITICAL: reuse only after fresh guarded reads and actual SHA256 of EVERY input
+            # on the same resolved root; stat-only checks accept same-stat tampering. Git OIDs
+            # reuse only the derivation verified on those same SHA256 bytes. This shared result
+            # must stay deeply immutable, or one caller can change every later admission's fonts.
+            return entry.manifest
+    reads = [manifest_read]
     try:
-        payload = _read_bounded(manifest_path, _MAX_MANIFEST_BYTES, "font_artifact_missing")
         decoded = json.loads(payload)
     except AuthoringFontError:
         raise
@@ -439,18 +591,16 @@ def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontMa
     )
     if license_wire["spdx_id"] != "OFL-1.1":
         raise _fail("font_manifest_invalid", "the packaged font license is unsupported")
-    license_path_value, license_path = _safe_package_file(
-        package_root, license_wire["package_path"], missing_code="font_license_missing"
+    license_read, license_payload = _read_font_input(
+        package_root, license_wire["package_path"], "license"
     )
-    if not license_path_value.endswith(".txt"):
-        raise _fail("font_manifest_invalid", "the packaged font license artifact is invalid")
-    license_payload = _read_bounded(license_path, _MAX_LICENSE_BYTES, "font_license_missing")
+    reads.append(license_read)
     license_hash = _sha256_value(license_wire["file_sha256"], "license.file_sha256")
     # CRITICAL: Git for Windows can check these bounded text bytes out as CRLF. Hash only
     # CRLF -> LF equivalence; raw hashes reject valid installs, broader cleanup hides tampering.
     if _sha256(license_payload.replace(b"\r\n", b"\n")) != license_hash:
         raise _fail("font_license_hash_mismatch", "the packaged font license hash differs")
-    license_revision = _git_oid(license_wire["upstream_revision"], "license.upstream_revision")
+    _git_oid(license_wire["upstream_revision"], "license.upstream_revision")
     if (
         b"SIL OPEN FONT LICENSE Version 1.1" not in license_payload
         or b"Copyright 2022 The Noto Project Authors" not in license_payload
@@ -502,8 +652,8 @@ def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontMa
     face_ids_seen: set[str] = set()
     style_keys_seen: set[tuple[str, int, str]] = set()
     raw_assets = _array(root["font_assets"], "font_assets", maximum=16)
-    if len(raw_assets) != 1:
-        raise _fail("font_manifest_invalid", "the v1 font profile requires exactly one font asset")
+    declared_styles: dict[str, set[tuple[int, str]]] = {}
+    license_hashes: list[str] = []
     for asset_index, raw_asset in enumerate(raw_assets):
         asset = _mapping(
             raw_asset,
@@ -514,6 +664,9 @@ def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontMa
                 "build_revision",
                 "distribution_revision",
                 "faces",
+                "supported_styles",
+                "license",
+                "source_repository",
             ),
             f"font_assets[{asset_index}]",
         )
@@ -525,8 +678,32 @@ def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontMa
         _string(asset["release_id"], "release_id")
         build_revision = _git_oid(asset["build_revision"], "build_revision")
         _git_oid(asset["distribution_revision"], "distribution_revision")
-        if build_revision != license_revision:
-            raise _fail("font_manifest_invalid", "the font build and license revisions differ")
+        # Keep the legacy top-level license bound to the primary family as before.
+        if asset_index == 0 and asset["license"] != license_wire:
+            raise _fail("font_manifest_invalid", "the primary and legacy licenses differ")
+        repository = _string(asset["source_repository"], "source_repository")
+        copyright_line = {
+            "notofonts/latin-greek-cyrillic": b"Copyright 2022 The Noto Project Authors",
+            "notofonts/noto-cjk": "© 2014-2021 Adobe (http://www.adobe.com/).".encode(),
+        }.get(repository)
+        if copyright_line is None:
+            raise _fail("font_manifest_invalid", "the packaged font source is unsupported")
+        license_hashes.append(
+            _verified_license(package_root, asset["license"], build_revision, copyright_line, reads)
+        )
+        styles: set[tuple[int, str]] = set()
+        for raw_style in _array(asset["supported_styles"], "supported_styles", maximum=4):
+            declared_style = _mapping(raw_style, ("weight", "style"), "supported style")
+            key = (
+                _integer(declared_style["weight"], "weight", 400, 700),
+                _string(declared_style["style"], "style"),
+            )
+            if key not in _PUBLIC_STYLE_KEYS or key in styles:
+                raise _fail(
+                    "font_manifest_invalid", "supported styles must be unique public styles"
+                )
+            styles.add(key)
+        declared_styles[asset_id] = styles
         for face_index, raw_face in enumerate(_array(asset["faces"], "faces", maximum=16)):
             face = _mapping(
                 raw_face,
@@ -560,15 +737,12 @@ def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontMa
             if style_key in style_keys_seen:
                 raise _fail("font_manifest_invalid", "font face styles must be unique per asset")
             style_keys_seen.add(style_key)
-            package_path_value, font_path = _safe_package_file(
-                package_root, face["package_path"], missing_code="font_artifact_missing"
-            )
-            if not package_path_value.endswith(".ttf"):
-                raise _fail("font_manifest_invalid", "only static packaged TTF faces are admitted")
-            font_payload = _read_bounded(font_path, _MAX_FONT_BYTES, "font_artifact_missing")
+            font_read, font_payload = _read_font_input(package_root, face["package_path"], "font")
+            reads.append(font_read)
+            package_path_value, font_path = font_read.package_path, font_read.filesystem_path
             expected_size = _integer(face["size_bytes"], "size_bytes", 1, _MAX_FONT_BYTES)
             expected_hash = _sha256_value(face["file_sha256"], "file_sha256")
-            if len(font_payload) != expected_size or _sha256(font_payload) != expected_hash:
+            if len(font_payload) != expected_size or font_read.fingerprint != expected_hash:
                 raise _fail(
                     "font_artifact_hash_mismatch", "a packaged font differs from its manifest"
                 )
@@ -625,10 +799,10 @@ def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontMa
         actual_styles = {
             (face.weight, face.style) for face in faces if face.font_asset_id == asset_id
         }
-        if actual_styles != _PUBLIC_STYLE_KEYS:
+        if actual_styles != declared_styles[asset_id]:
             raise _fail(
                 "font_manifest_invalid",
-                "each v1 font asset must cover the exact public weight/style vocabulary",
+                "each font asset must cover exactly its declared public styles",
             )
 
     fallback_raw = _array(root["fallback_order"], "fallback_order", maximum=16)
@@ -647,6 +821,7 @@ def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontMa
             # Keep the package identity stable across Git's text checkout conversion, as above.
             "manifest_sha256": _sha256(payload.replace(b"\r\n", b"\n")),
             "license_sha256": license_hash,
+            "asset_license_sha256": license_hashes,
             "font_files": [
                 {
                     "artifact_id": face.artifact_id,
@@ -658,16 +833,21 @@ def _load_packaged_font_manifest_from_root(package_root: Path) -> PackagedFontMa
             ],
         }
     )
-    return PackagedFontManifest(
+    manifest = PackagedFontManifest(
         schema_version=FONT_MANIFEST_SCHEMA,
         profile_id=FONT_MANIFEST_PROFILE_ID,
         fallback_order=fallback_order,
         faces=tuple(faces),
         license_spdx_id="OFL-1.1",
         license_file_fingerprint=license_hash,
-        manifest_fingerprint=canonical_fingerprint(decoded),
+        manifest_fingerprint=packaged_manifest_fingerprint(decoded),
         package_fingerprint=package_fingerprint,
     )
+    candidate = _FontDerivationEntry(resolved_root, tuple(reads), manifest)
+    if _font_entry_is_cacheable(candidate):
+        with _FONT_DERIVATION_LOCK:
+            _font_derivation_entry = candidate
+    return manifest
 
 
 def load_packaged_font_manifest() -> PackagedFontManifest:
@@ -704,11 +884,38 @@ def require_text_coverage(
 
     if not isinstance(text, str) or not text:
         raise _fail("font_glyph_unsupported", "text must be a non-empty string")
-    primary = resolve_packaged_font(manifest, font_asset_id, weight, style)
-    candidates = [primary]
-    for fallback_id in manifest.fallback_order:
-        if fallback_id == font_asset_id:
-            continue
+    if font_asset_id not in manifest.fallback_order:
+        raise _fail("font_asset_unsupported", "the requested font asset is not packaged")
+    if weight not in _PUBLIC_WEIGHTS or style not in _PUBLIC_STYLES:
+        raise _fail("font_style_unsupported", "the requested font style is not packaged")
+    # IMPORTANT: regional faces share kana/Hangul coverage but have different default glyph
+    # forms. Coverage alone chooses TC for Japanese/Korean; match this order in the browser.
+    preferred = (
+        "h3.font.noto_sans_jp.v1"
+        if any(
+            0x3040 <= ord(ch) <= 0x30FF
+            or 0x31F0 <= ord(ch) <= 0x31FF
+            or 0xFF66 <= ord(ch) <= 0xFF9D
+            for ch in text
+        )
+        else "h3.font.noto_sans_kr.v1"
+        if any(
+            0x1100 <= ord(ch) <= 0x11FF
+            or 0x3130 <= ord(ch) <= 0x318F
+            or 0xA960 <= ord(ch) <= 0xA97F
+            or 0xAC00 <= ord(ch) <= 0xD7FF
+            or 0xFFA0 <= ord(ch) <= 0xFFDC
+            for ch in text
+        )
+        else None
+    )
+    order = list(
+        dict.fromkeys(
+            [font_asset_id, *([preferred] if preferred else []), *manifest.fallback_order]
+        )
+    )
+    candidates = []
+    for fallback_id in order:
         try:
             candidates.append(resolve_packaged_font(manifest, fallback_id, weight, style))
         except AuthoringFontError as exc:
@@ -717,6 +924,15 @@ def require_text_coverage(
     for candidate in candidates:
         if candidate.covers(text):
             return candidate
+    if style == "italic":
+        try:
+            require_text_coverage(manifest, font_asset_id, weight, "normal", text)
+        except AuthoringFontError:
+            pass
+        else:
+            raise _fail(
+                "font_italic_unsupported", "this text is covered only by upright packaged faces"
+            )
     missing = sorted(
         {
             ord(character)

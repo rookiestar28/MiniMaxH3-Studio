@@ -4,11 +4,11 @@
     "contract_inventory",
     "supply_chain_manifest"
   ],
-  "measured_on": "2026-09-09; nle_hardening_manifest measured 2026-09-12",
+  "measured_on": "2026-09-09; nle_hardening_manifest measured 2026-09-12; packaged_font_manifest output/self-read and five new consumer edges measured 2026-10-25",
   "method": {
-    "edges": "sys.addaudithook on the 'open' event, recording every tracked file opened for reading. A generator that merely names a path in a constant does not appear here.",
+    "edges": "sys.addaudithook on the 'open' event, recording every tracked file opened for reading. A generator that merely names a path in a constant does not appear here. The font-generator delta was measured in fresh processes for the generator and each of its five consumers; historical unrelated edges are retained.",
     "locus": "build_provenance, closeout_matrix and m19_closeout cannot run in a tree without git, so their read sets were measured in the repository with --check instead of --write.",
-    "outputs": "Delete each generator's predicted outputs in a tree seeded from the tracked files, run --write, diff the whole tree. Recorded only if nothing outside the prediction was written."
+    "outputs": "Delete each generator's predicted outputs in a tree seeded from the tracked files, run --write, diff the whole tree. Recorded only if nothing outside the prediction was written. The self-reading font generator retains its manifest input; its only observed write is the same manifest, with byte-identical --write output."
   },
   "outputs": {
     "architecture_fitness": [
@@ -79,6 +79,9 @@
     "packaged_artifact_readership": [
       "governance/contracts/packaged_artifact_readership_v1.json"
     ],
+    "packaged_font_manifest": [
+      "comfyui_h3_context/fonts/font_manifest_v1.json"
+    ],
     "public_surface": [
       "governance/contracts/public_surface_v1.json"
     ],
@@ -111,6 +114,7 @@
       "cross_language_surface",
       "duration_resolution_contract",
       "localized_identity_registry",
+      "packaged_font_manifest",
       "public_surface"
     ],
     "canonical_cross_language_vectors": [],
@@ -133,6 +137,7 @@
       "managed_run_stategraph",
       "node_surface",
       "packaged_artifact_readership",
+      "packaged_font_manifest",
       "public_surface",
       "supply_chain_manifest"
     ],
@@ -158,7 +163,10 @@
       "core_public_surface"
     ],
     "node_surface": [],
-    "packaged_artifact_readership": [],
+    "packaged_artifact_readership": [
+      "packaged_font_manifest"
+    ],
+    "packaged_font_manifest": [],
     "public_surface": [
       "core_public_surface"
     ],
@@ -185,6 +193,7 @@
       "nle_semantic_conformance_manifest",
       "node_surface",
       "packaged_artifact_readership",
+      "packaged_font_manifest",
       "public_surface",
       "supply_chain_manifest"
     ],
@@ -192,7 +201,8 @@
       "build_provenance",
       "cross_language_surface",
       "duration_resolution_contract",
-      "localized_identity_registry"
+      "localized_identity_registry",
+      "packaged_font_manifest"
     ]
   },
   "schema": "h3.context.derived_artifact_graph.v1",
@@ -203,6 +213,7 @@
     "m16_01_source_requalification",
     "m16_02_reconstruction_regression",
     "m19_closeout",
+    "packaged_font_manifest",
     "supply_chain_manifest"
   ]
 }

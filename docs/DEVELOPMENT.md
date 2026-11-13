@@ -9,6 +9,21 @@ maintainer records, dependency installations and generated test results are excl
 Run commands from the package root. Use Python 3.10 or newer, a project-local virtual environment,
 Node.js 24 and pnpm 11.3.0, as declared in `frontend/package.json`.
 
+Use LF line endings for text files; `.gitattributes` enforces checkout policy on every platform.
+
+A Windows clone made before release 1.4.5, which introduced this policy, may keep Windows line
+endings in files the update did not touch, causing build-provenance tests to reject the source
+digest. Make a fresh clone, or
+commit or stash uncommitted changes, confirm `git status` is clean, and run these commands once
+before running tests:
+
+```powershell
+git rm --cached -r -q .
+git reset --hard
+```
+
+`git reset --hard` discards uncommitted changes.
+
 Windows PowerShell:
 
 ```powershell
@@ -183,7 +198,7 @@ Build a Python source distribution from a Git checkout whose reviewed public inp
 
 ```powershell
 & .\.venv\Scripts\python.exe -m build --sdist
-& .\.venv\Scripts\python.exe scripts/sdist_payload.py --archive dist/minimax_h3_studio-1.4.1.tar.gz
+& .\.venv\Scripts\python.exe scripts/sdist_payload.py --archive dist/minimax_h3_studio-1.4.5.tar.gz
 ```
 
 The standard build backend copies public tracked files into a fresh temporary tree and respects

@@ -482,7 +482,14 @@ export type {
   H3InferenceRecognition,
 } from "./graphRecognition";
 
-export { H3_NODE_TYPES, H3_SHELL_MANIFEST } from "./graphSerialization";
+// The frame-sequence and compiled-prompt tests read the last two through this door;
+// importing graphSerialization directly from outside src/host is refused by the layering guard.
+export {
+  H3_NODE_TYPES,
+  H3_SHELL_MANIFEST,
+  readQueueMetadataCompatibleGraph,
+  validateSerializedLinks,
+} from "./graphSerialization";
 
 export type { GraphAnchor, GraphInspection } from "./graphSerialization";
 

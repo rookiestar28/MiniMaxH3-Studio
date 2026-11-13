@@ -992,15 +992,26 @@ class ProductionStoryboardAdmissionService:
                 )
                 if isinstance(context, ProductionPlanningContextV2):
                     _assert_canonical_cut_evidence(context, shots)
+                    parsed_semantics = clip_derived_semantics_removed(
+                        parse_canonical_semantics(candidate_text),
+                        typed_definitions=bool(
+                            semantic_authority.subject_definitions
+                            or semantic_authority.reference_definitions
+                        ),
+                    )
+                    # CRITICAL: retained globals bind every reference and subject label. Bind
+                    # the re-parsed copy by the same rule before the strict equal-ID join;
+                    # normalizing only frame labels wrongly refuses other authored labels.
+                    bound = bind_canonical_semantic_references(
+                        replace(
+                            parsed_semantics,
+                            reference_definitions=semantic_authority.reference_definitions,
+                            subject_definitions=semantic_authority.subject_definitions,
+                        )
+                    )
                     semantic_authority = merge_semantic_authorities(
                         semantic_authority,
-                        clip_derived_semantics_removed(
-                            parse_canonical_semantics(candidate_text),
-                            typed_definitions=bool(
-                                semantic_authority.subject_definitions
-                                or semantic_authority.reference_definitions
-                            ),
-                        ),
+                        bound,
                     )
             except ValueError:
                 return StoryboardAdmissionRefusalV1(
@@ -1515,7 +1526,15 @@ def _task_assets(
         return (
             (TaskMode.L2VA, last, len(last) == 1) if ordinal == count else (TaskMode.T2VA, (), True)
         )
-    return TaskMode.REF2VA, references, bool(references)
+    # CRITICAL: frame roles anchor the whole video, not every cut. Keep ordinary references in
+    # registry order; repeating a frame here makes later clips claim the same opening/closing.
+    local_references = tuple(
+        item.asset_id
+        for item in context.assets
+        if (item.role is not AssetRole.FIRST_FRAME or ordinal == 1)
+        and (item.role is not AssetRole.LAST_FRAME or ordinal == count)
+    )
+    return TaskMode.REF2VA, local_references, bool(local_references)
 
 
 def _clip_duration_seconds(allocation: SegmentDurationAllocationV1) -> Decimal:
@@ -1706,6 +1725,22 @@ def _build_segmentation_proposal(
         )
     if type(duration_plan) is not SegmentDurationPlanV1:  # pragma: no cover
         raise ProductionStoryboardError("proposal_duration_result")
+    # CRITICAL: V1 has no canonical label-ownership authority. After frame filtering its labels
+    # cannot be checked or safely renumbered; removing this guard silently misbinds the public
+    # core route. Preserve stored admissions and single-clip identities instead of inventing binds.
+    if (
+        type(context) is ProductionPlanningContextV1
+        and context.global_task_mode is TaskMode.REF2VA
+        and len(duration_plan.allocations) > 1
+        and any(
+            item.role in {AssetRole.FIRST_FRAME, AssetRole.LAST_FRAME} for item in context.assets
+        )
+    ):
+        return SegmentationProposalRefusalV1(
+            context.fingerprint,
+            admission.fingerprint,
+            SegmentationProposalRefusalCodeV1.SEMANTIC_PRESERVATION_UNAVAILABLE,
+        )
     if native_modes is None:
         native_modes = frozenset(
             item.task_mode for item in build_default_native_mode_matrix().modes
@@ -1743,6 +1778,17 @@ def _build_segmentation_proposal(
         referenced_assets = {asset for shot in assigned for asset in shot.asset_ids}
         if isinstance(admission, ProductionStoryboardAdmissionV2):
             referenced_subjects = {subject for shot in assigned for subject in shot.subject_ids}
+            # CRITICAL: independent exact tuples are rendered even when absent from shot prose.
+            # Derive their reference obligations here, not in admission: changing admission
+            # bindings would invalidate stored single-segment identities.
+            for shot in assigned:
+                for text in (*shot.exact_dialogue, *shot.visible_text):
+                    referenced_assets.update(
+                        canonical_text_asset_ids(text, admission.semantic_authority)
+                    )
+                    referenced_subjects.update(
+                        canonical_text_subject_ids(text, admission.semantic_authority)
+                    )
             referenced_assets.update(
                 asset
                 for subject in admission.semantic_authority.subject_definitions
@@ -1814,6 +1860,7 @@ def _build_segmentation_proposal(
                 ),
                 clip_duration_seconds=_clip_duration_seconds(allocation),
                 hard_constraints=context.hard_constraints,
+                source_reference_definitions=admission.semantic_authority.reference_definitions,
             ).text
         else:
             local_prompt, mappings = _render_local_prompt(context, allocation, assigned)
@@ -2132,6 +2179,7 @@ class SegmentationProposalV2(SegmentationProposalV1):
                 ),
                 clip_duration_seconds=_clip_duration_seconds(segment.duration),
                 hard_constraints=self.hard_constraints,
+                source_reference_definitions=self.semantic_authority.reference_definitions,
             )
             if rendered.text != segment.local_prompt:
                 raise ProductionStoryboardError("proposal_semantic_render_mismatch")

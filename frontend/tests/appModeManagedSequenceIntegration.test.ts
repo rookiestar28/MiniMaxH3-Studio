@@ -14,6 +14,8 @@ import type {
 import type { SequenceCoordinatorResult } from "../src/host/sequenceCoordinator";
 import { createAppModeMachine } from "../src/lifecycle/appModeMachine";
 import { createAppModeSession } from "../src/lifecycle/appModeSession";
+import { AppModeError } from "../src/host/appModeContract";
+import { managedJournal } from "../src/state/managedJournal";
 import { createAppModeCorrelation } from "../src/lifecycle/appModeCorrelation";
 import { createAppModeInterpreter } from "../src/lifecycle/interpreter";
 import {
@@ -117,6 +119,62 @@ function preflight(): ManagedAppModePreflight {
 }
 
 describe("App Mode managed serial integration", () => {
+  it.each(["sequence_media_changed", "sequence_media_unavailable"] as const)(
+    "keeps %s transient while recording queue_failed in the journal",
+    async (code) => {
+      const session = createShellSession();
+      session.appModeAdmissions.set("i2va", { status: "admitted" });
+      const lifecycle = createAppModeInterpreter({
+        machine: createAppModeMachine(),
+        onInvalidate: () => {},
+      });
+      const actions = {
+        serializeGraphForDiagnostics: vi.fn(() => ({})),
+        releaseProjectionQuarantineIfGraphChanged: vi.fn(),
+        clearDeferredAppModeProjections: vi.fn(),
+        clearDeferredAppModeTerminals: vi.fn(),
+        clearDeferredManagedArtifacts: vi.fn(),
+        clearActiveAppModeExecution: vi.fn(),
+        currentProjection: vi.fn(() => undefined),
+        renderCurrent: vi.fn(),
+        recordManagedStage: vi.fn(),
+        recordSurroundingsEvidence: vi.fn(),
+      } as unknown as ShellActions;
+      const deps = {
+        appModeLifecycle: lifecycle,
+        appModeController: {
+          capability: () => ({ status: "ready" as const }),
+          admission: vi.fn(),
+          start: async () => {
+            throw new AppModeError(code, "bounded media refusal");
+          },
+        },
+      } as unknown as ShellDeps;
+      Object.assign(actions, createAppModeSession({ session, deps, actions }));
+      managedJournal.reset();
+      managedJournal.beginRun(1);
+      await expect(
+        actions.startAppMode(
+          {
+            task_mode: "i2va",
+            first_frame_source: "9",
+            user_intent: "synthetic",
+            duration_milliseconds: 8_000,
+            frame_count: 192,
+          },
+          { replaceExisting: true, prepareManaged: vi.fn() },
+        ),
+      ).rejects.toMatchObject({ code });
+      const entries = managedJournal
+        .snapshot()
+        .filter((entry) => entry.kind === "error" && entry.name === "app_mode");
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ code: "queue_failed" });
+      expect(JSON.stringify(managedJournal.snapshot())).not.toContain(code);
+      managedJournal.reset();
+    },
+  );
+
   it.each(["error", "completed child", "superseded binding"] as const)(
     "routes %s through the real child lifecycle without duplicating queue ownership",
     async (outcome) => {

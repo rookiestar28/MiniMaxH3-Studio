@@ -15,6 +15,7 @@ import pytest
 
 from scripts import public_build_backend as backend
 from scripts import sdist_payload
+from scripts.public_source_policy import allowed as public_source_allowed
 
 ROOT = Path(__file__).resolve().parents[1]
 REVIEWED_INPUTS = (
@@ -301,6 +302,26 @@ def test_source_aggregate_bounds_fail_closed(
     monkeypatch.setattr(backend, bound, 1)
     with pytest.raises(backend.PublicBuildError, match=message):
         backend.public_sources(source)
+
+
+def test_current_public_source_fits_the_build_bounds() -> None:
+    # CRITICAL: no gate builds a real sdist or wheel; only the release's packaging step does.
+    # Sum the tracked public source here, with the backend's own predicate, so that a tree that
+    # outgrows a build bound fails before the release freeze instead of at packaging.
+    listing = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, check=True, capture_output=True
+    ).stdout
+    paths = [
+        name
+        for name in (item.decode("utf-8") for item in listing.split(b"\0") if item)
+        if public_source_allowed(name)
+    ]
+    sizes = [(ROOT / name).stat().st_size for name in paths]
+    assert 0 < len(paths) <= backend.MAX_FILES
+    assert max(sizes) <= backend.MAX_FILE_BYTES
+    assert sum(sizes) <= backend.MAX_TOTAL_BYTES, (
+        f"public source is {sum(sizes)} bytes; the build bound is {backend.MAX_TOTAL_BYTES}"
+    )
 
 
 @pytest.mark.parametrize(

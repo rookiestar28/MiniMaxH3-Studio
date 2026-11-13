@@ -1,5 +1,5 @@
 {
-  "artifact_count": 19,
+  "artifact_count": 28,
   "artifacts": [
     {
       "disposition": "movable: no runtime or bundle reader",
@@ -34,12 +34,14 @@
         "scripts/change_lane.py",
         "scripts/derived_artifacts.py",
         "scripts/frontend_build_report.py",
+        "scripts/repair_prefreeze_check.py",
         "scripts/supply_chain_manifest.py",
         "tests/fixtures/m23_48_derived_artifact_graph_v1.json",
         "tests/test_architecture_fitness.py",
         "tests/test_build_provenance.py",
         "tests/test_m23_48_derived_artifacts.py",
         "tests/test_m23_48_packaged_readership.py",
+        "tests/test_repair_prefreeze_check.py",
         "tests/test_tooling_contract.py"
       ],
       "readership": "runtime_read"
@@ -213,6 +215,14 @@
     },
     {
       "disposition": "retain: the installed package opens it at run time",
+      "path": "comfyui_h3_context/fonts/LICENSE-NotoSansCJK-OFL-1.1.txt",
+      "readers": [
+        "comfyui_h3_context/adapters/authoring_fonts.py"
+      ],
+      "readership": "runtime_read"
+    },
+    {
+      "disposition": "retain: the installed package opens it at run time",
       "path": "comfyui_h3_context/fonts/LICENSE-OFL-1.1.txt",
       "readers": [
         "comfyui_h3_context/adapters/authoring_fonts.py"
@@ -253,6 +263,70 @@
     },
     {
       "disposition": "retain: the installed package opens it at run time",
+      "path": "comfyui_h3_context/fonts/NotoSansJP-Bold.otf",
+      "readers": [
+        "comfyui_h3_context/adapters/authoring_fonts.py"
+      ],
+      "readership": "runtime_read"
+    },
+    {
+      "disposition": "retain: the installed package opens it at run time",
+      "path": "comfyui_h3_context/fonts/NotoSansJP-Regular.otf",
+      "readers": [
+        "comfyui_h3_context/adapters/authoring_fonts.py"
+      ],
+      "readership": "runtime_read"
+    },
+    {
+      "disposition": "retain: the installed package opens it at run time",
+      "path": "comfyui_h3_context/fonts/NotoSansKR-Bold.otf",
+      "readers": [
+        "comfyui_h3_context/adapters/authoring_fonts.py"
+      ],
+      "readership": "runtime_read"
+    },
+    {
+      "disposition": "retain: the installed package opens it at run time",
+      "path": "comfyui_h3_context/fonts/NotoSansKR-Regular.otf",
+      "readers": [
+        "comfyui_h3_context/adapters/authoring_fonts.py"
+      ],
+      "readership": "runtime_read"
+    },
+    {
+      "disposition": "retain: the installed package opens it at run time",
+      "path": "comfyui_h3_context/fonts/NotoSansSC-Bold.otf",
+      "readers": [
+        "comfyui_h3_context/adapters/authoring_fonts.py"
+      ],
+      "readership": "runtime_read"
+    },
+    {
+      "disposition": "retain: the installed package opens it at run time",
+      "path": "comfyui_h3_context/fonts/NotoSansSC-Regular.otf",
+      "readers": [
+        "comfyui_h3_context/adapters/authoring_fonts.py"
+      ],
+      "readership": "runtime_read"
+    },
+    {
+      "disposition": "retain: the installed package opens it at run time",
+      "path": "comfyui_h3_context/fonts/NotoSansTC-Bold.otf",
+      "readers": [
+        "comfyui_h3_context/adapters/authoring_fonts.py"
+      ],
+      "readership": "runtime_read"
+    },
+    {
+      "disposition": "retain: the installed package opens it at run time",
+      "path": "comfyui_h3_context/fonts/NotoSansTC-Regular.otf",
+      "readers": [
+        "comfyui_h3_context/adapters/authoring_fonts.py"
+      ],
+      "readership": "runtime_read"
+    },
+    {
+      "disposition": "retain: the installed package opens it at run time",
       "path": "comfyui_h3_context/fonts/font_manifest_v1.json",
       "readers": [
         "comfyui_h3_context/adapters/authoring_fonts.py"
@@ -262,7 +336,7 @@
   ],
   "counts": {
     "frontend_source_read": 4,
-    "runtime_read": 14,
+    "runtime_read": 23,
     "tooling_or_evidence_only": 1
   },
   "dispositions": {

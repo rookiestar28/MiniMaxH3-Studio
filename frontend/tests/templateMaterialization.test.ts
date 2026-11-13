@@ -1197,7 +1197,7 @@ describe("M17-20 template materialization", () => {
     const size = workflowNodes.find((node) => node.type === "GetImageSize")!;
     const selector = workflowNodes.find(
       (node) => node.type === "ResolutionSelector",
-    )!;
+    );
 
     expect(origin(anchor, "first_frame")).toEqual(["LoadImage", 0]);
     expect(origin(scale, "image")).toEqual(["LoadImage", 0]);
@@ -1205,10 +1205,219 @@ describe("M17-20 template materialization", () => {
     expect(origin(anchor, "width")).toEqual(["GetImageSize", 0]);
     expect(origin(anchor, "height")).toEqual(["GetImageSize", 1]);
     expect(scale.widgets_values).toEqual([...I2VA_SCALE_WIDGET_VALUES]);
-    expect((selector.outputs as Json[]).map((output) => output.links)).toEqual([
-      [],
-      [],
+    expect(selector).toBeUndefined();
+  });
+});
+
+describe("prepared I2VA orphan selector", () => {
+  function identifiedTemplate(): Json {
+    const template = i2vaTemplateWithVisibleSizeBranch();
+    const identities = new Map([
+      [11, 115],
+      [12, 119],
+      [13, 120],
     ]);
+    for (const node of nodes(template))
+      node.id = identities.get(Number(node.id)) ?? node.id;
+    for (const edge of links(template)) {
+      edge[1] = identities.get(Number(edge[1])) ?? edge[1];
+      edge[3] = identities.get(Number(edge[3])) ?? edge[3];
+    }
+    template.last_node_id = 120;
+    return template;
+  }
+  const media = {
+    firstFrame: {
+      type: "LoadImage",
+      widgetValues: ["synthetic-first.png", "image"],
+    },
+  };
+
+  it("removes selector 115 only from prepared I2VA while preserving source geometry and identities", () => {
+    const template = identifiedTemplate();
+    const original = structuredClone(template);
+    const result = spliceContextPipeline(template, {
+      ...OPTIONS,
+      taskMode: "i2va",
+      media,
+    });
+    const graph = nodes(result.workflow);
+    expect(graph.some((node) => Number(node.id) === 115)).toBe(false);
+    expect(
+      links(result.workflow).some((edge) => edge[1] === 115 || edge[3] === 115),
+    ).toBe(false);
+    const anchor = graph.find(
+      (node) => Number(node.id) === result.anchorNodeId,
+    )!;
+    const origin = (name: string) => {
+      const input = (anchor.inputs as Json[]).find(
+        (input) => input.name === name,
+      )!;
+      return links(result.workflow)
+        .find((edge) => edge[0] === input.link)!
+        .slice(1, 3);
+    };
+    expect(origin("width")).toEqual([120, 0]);
+    expect(origin("height")).toEqual([120, 1]);
+    expect(
+      graph.find((node) => Number(node.id) === 119)?.widgets_values,
+    ).toEqual([...I2VA_SCALE_WIDGET_VALUES]);
+    // Existing media cleanup drops unused LoadImage nodes independently of geometry cleanup.
+    for (const node of nodes(original).filter(
+      (node) => Number(node.id) !== 115 && node.type !== "LoadImage",
+    ))
+      expect(
+        graph.some(
+          (current) => current.id === node.id && current.type === node.type,
+        ),
+      ).toBe(true);
+    expect(template).toEqual(original);
+  });
+
+  it("keeps selector 115 output 0 and 1 as FL2VA dimension sources", () => {
+    const template = identifiedTemplate();
+    const result = spliceContextPipeline(template, {
+      ...OPTIONS,
+      taskMode: "fl2va",
+      media: {
+        ...media,
+        lastFrame: {
+          type: "LoadImage",
+          widgetValues: ["synthetic-last.png", "image"],
+        },
+      },
+    });
+    expect(
+      nodes(result.workflow).find((node) => Number(node.id) === 115),
+    ).toEqual(nodes(template).find((node) => Number(node.id) === 115));
+    const anchor = nodes(result.workflow).find(
+      (node) => Number(node.id) === result.anchorNodeId,
+    )!;
+    expect(
+      ["width", "height"].map((name) => {
+        const input = (anchor.inputs as Json[]).find(
+          (input) => input.name === name,
+        )!;
+        return links(result.workflow)
+          .find((edge) => edge[0] === input.link)!
+          .slice(1, 3);
+      }),
+    ).toEqual([
+      [115, 0],
+      [115, 1],
+    ]);
+    expect(
+      nodes(result.workflow).find((node) => Number(node.id) === 119)
+        ?.widgets_values,
+    ).toEqual(["bilinear", 0.4, 16]);
+  });
+
+  it("refuses selector 115 with a foreign consumer without changing the input", () => {
+    const template = identifiedTemplate();
+    nodes(template).push({
+      id: 900,
+      type: "SyntheticIntConsumer",
+      inputs: [{ name: "value", type: "INT", link: 901 }],
+      outputs: [],
+    });
+    links(template).push([901, 115, 0, 900, 0, "INT"]);
+    const selector = nodes(template).find((node) => node.id === 115)!;
+    ((selector.outputs as Json[])[0].links as number[]).push(901);
+    template.last_node_id = 900;
+    template.last_link_id = 901;
+    const original = structuredClone(template);
+    expect(() =>
+      spliceContextPipeline(template, { ...OPTIONS, taskMode: "i2va", media }),
+    ).toThrow(/dimension selector still has connected branches/);
+    expect(template).toEqual(original);
+  });
+
+  it("refuses split selector dimension sources and preserves unrelated orphan selectors", () => {
+    const template = identifiedTemplate();
+    const another = structuredClone(
+      nodes(template).find((node) => node.id === 115)!,
+    );
+    another.id = 901;
+    (another.outputs as Json[])[0].links = [];
+    (another.outputs as Json[])[1].links = [23];
+    (
+      nodes(template).find((node) => node.id === 115)!.outputs as Json[]
+    )[1].links = [];
+    nodes(template).push(another);
+    links(template).find((edge) => edge[0] === 23)![1] = 901;
+    template.last_node_id = 901;
+    expect(() =>
+      spliceContextPipeline(template, { ...OPTIONS, taskMode: "i2va", media }),
+    ).toThrow(/inconsistent dimension selector sources/);
+    const clean = identifiedTemplate();
+    const orphan = {
+      id: 902,
+      type: "ResolutionSelector",
+      inputs: [],
+      outputs: [],
+      widgets_values: ["1:1 (Square)", 1.2, 32],
+    };
+    nodes(clean).push(orphan);
+    clean.last_node_id = 902;
+    const result = spliceContextPipeline(clean, {
+      ...OPTIONS,
+      taskMode: "i2va",
+      media,
+    });
+    expect(nodes(result.workflow).find((node) => node.id === 902)).toEqual(
+      orphan,
+    );
+  });
+
+  it("changes only the two recognized I2VA note lines and keeps named text aligned", () => {
+    const template = identifiedTemplate();
+    const geometry =
+      "Keep this heading.\n- **width / height**: set via Resolution Selector. Original size description.\nKeep this footer.";
+    const table =
+      "| megapixels | Aspect | Output (multiple=32) |\n| 0.4 | square | synthetic |";
+    for (const [id, text] of [
+      [116, geometry],
+      [118, table],
+    ] as const)
+      nodes(template).push({
+        id,
+        type: "MarkdownNote",
+        inputs: [],
+        outputs: [],
+        widgets_values: [text],
+        widgets_values_named: { text },
+      });
+    const i2va = spliceContextPipeline(template, {
+      ...OPTIONS,
+      taskMode: "i2va",
+      media,
+    });
+    const note116 = nodes(i2va.workflow).find((node) => node.id === 116)!;
+    const note118 = nodes(i2va.workflow).find((node) => node.id === 118)!;
+    const expected116 =
+      "Keep this heading.\n- **width / height**: Output dimensions follow the source aspect ratio, scaled to 0.8 MP and rounded in 32-pixel steps.\nKeep this footer.";
+    const expected118 =
+      "FL2VA uses this Resolution Selector size reference. I2VA output dimensions follow source-image scaling.\n\n" +
+      table;
+    expect(note116.widgets_values).toEqual([expected116]);
+    expect(note116.widgets_values_named).toEqual({ text: expected116 });
+    expect(note118.widgets_values).toEqual([expected118]);
+    expect(note118.widgets_values_named).toEqual({ text: expected118 });
+    const fl2va = spliceContextPipeline(template, {
+      ...OPTIONS,
+      taskMode: "fl2va",
+      media: {
+        ...media,
+        lastFrame: {
+          type: "LoadImage",
+          widgetValues: ["synthetic-last.png", "image"],
+        },
+      },
+    });
+    for (const id of [116, 118])
+      expect(nodes(fl2va.workflow).find((node) => node.id === id)).toEqual(
+        nodes(template).find((node) => node.id === id),
+      );
   });
 });
 

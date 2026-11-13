@@ -86,12 +86,27 @@ function projectedOwnedNode(
   const widgets = Array.isArray(node?.widgets_values)
     ? node.widgets_values
     : [];
+  // CRITICAL: native ImageCropV2 persists four numeric helper widgets in the
+  // workflow even though options.serialize=false excludes them from the API.
+  // Hash the authored region, or an unchanged native load fails as stale_graph.
+  // Unknown suffix shapes remain identity-bearing; never drop actual region data.
+  const authoredWidgets =
+    node?.type === "ImageCropV2" &&
+    widgets.length === 5 &&
+    [1, 2, 3, 4].every(
+      (index) =>
+        Object.hasOwn(widgets, index) && Number.isFinite(widgets[index]),
+    )
+      ? widgets.slice(0, 1)
+      : widgets;
   return {
     id,
     type: typeof node?.type === "string" ? node.type : null,
     mode: typeof node?.mode === "number" ? node.mode : null,
     authored_widgets:
-      authoredWidgetNodes.has(id) && widgets.length > 0 ? widgets : null,
+      authoredWidgetNodes.has(id) && authoredWidgets.length > 0
+        ? authoredWidgets
+        : null,
   };
 }
 

@@ -76,7 +76,7 @@ const BYTE_LIMITS = Object.freeze({
   filmstrip: 512 * 1024,
   audio_peaks: 64 * 1024,
   image_proxy: 16 * 1024 * 1024,
-  packaged_font_face: 1024 * 1024,
+  packaged_font_face: 12 * 1024 * 1024, // Largest bundled OTF: 8,543,168 bytes.
 });
 
 export type AuthoringMediaLeaseState = Readonly<{

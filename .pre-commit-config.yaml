@@ -6,10 +6,13 @@ repos:
     hooks:
       - id: check-merge-conflict
       - id: check-added-large-files
-        # These four packaged font artifacts are size/hash checked by their runtime reader.
-        exclude: ^comfyui_h3_context/fonts/NotoSans-(?:Regular|Italic|Bold|BoldItalic)\.ttf$
+        # These twelve packaged font artifacts are size/hash checked by their runtime reader.
+        exclude: ^comfyui_h3_context/fonts/(?:NotoSans-(?:Regular|Italic|Bold|BoldItalic)\.ttf|NotoSans(?:TC|SC|JP|KR)-(?:Regular|Bold)\.otf)$
       - id: check-toml
       - id: check-yaml
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+        args: [--fix=lf]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: 39d9ac5938dadb73df0564a45f163e25ff9fa6e2  # v0.16.1  # pragma: allowlist secret
@@ -54,6 +57,10 @@ repos:
     rev: 68e8b45440415753fff70a312ece8da92ba85b4a  # v1.5.0  # pragma: allowlist secret
     hooks:
       - id: detect-secrets
-        args: ["--baseline", "requirements/secret-scan-baseline.json"]
+        # CRITICAL: --no-verify keeps the result independent of any network service and sends
+        # no candidate to one. Without it, AWS key candidates go to a verification service,
+        # refused ones are dropped, and on Linux the hook then trims the approved baseline rows
+        # and fails.
+        args: ["--no-verify", "--baseline", "requirements/secret-scan-baseline.json"]
         # The hash-only baseline is scanner metadata, not a credential-bearing source file.
-        exclude: ^(?:\.secrets\.baseline|requirements/secret-scan-baseline\.json)$
+        exclude: ^(?:\.secrets\.baseline|requirements/secret-scan-baseline\.json|comfyui_h3_context/fonts/NotoSans(?:TC|SC|JP|KR)-(?:Regular|Bold)\.otf)$

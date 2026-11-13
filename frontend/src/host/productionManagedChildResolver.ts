@@ -10,7 +10,25 @@ import {
   graphFingerprint,
 } from "./appMode";
 import { readActiveWorkflow } from "./canvasOwnedWrite";
+import {
+  PRODUCTION_FRAME_CANONICAL_LOWERING_SCHEMA,
+  type ProductionCanonicalLoweringRecipe,
+} from "./appModeContract";
 import { serializeGraph } from "./hostSeams";
+import {
+  MAX_SEQUENCE_MEDIA_BINDINGS,
+  MAX_SEQUENCE_MEDIA_BINDING_BYTES,
+  decodeSequenceMediaBindingSet,
+} from "./sequenceMediaBindings";
+import {
+  resolvePreparedSequenceSpliceMedia,
+  type PreparedSequenceMedia,
+} from "./preparedSequenceMedia";
+import { isBoundedPrivateCanonicalPrompt } from "./privateCanonicalPrompt";
+export {
+  MAX_SEQUENCE_MEDIA_BINDINGS,
+  MAX_SEQUENCE_MEDIA_BINDING_BYTES,
+} from "./sequenceMediaBindings";
 import {
   MANAGED_SEQUENCE_ROUTE,
   ManagedSequenceClientError,
@@ -29,6 +47,14 @@ export const MANAGED_PREPARED_CONTEXT_ACTION_SCHEMA =
   "h3.context.managed_prepared_context_action.v1" as const;
 export const MANAGED_PREPARED_CONTEXT_SCHEMA =
   "h3.context.managed_prepared_context.v1" as const;
+export const MANAGED_PREPARED_CONTEXT_V2_SCHEMA =
+  "h3.context.managed_prepared_context.v2" as const;
+// IMPORTANT: 3*4096 binding bytes + 4096*4 Unicode prompt bytes + 4096 fixed-envelope
+// bytes. Keep this derivation aligned with the backend; control messages remain at 8 KiB.
+export const MAX_PREPARED_CONTEXT_RESPONSE_BYTES =
+  MAX_SEQUENCE_MEDIA_BINDINGS * MAX_SEQUENCE_MEDIA_BINDING_BYTES +
+  4_096 * 4 +
+  4_096;
 
 const identifier = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const fingerprint = /^sha256:[0-9a-f]{64}$/;
@@ -81,8 +107,7 @@ export type ProductionPreparedReference = Readonly<{
   paired_video_id: string | null;
 }>;
 
-export type ProductionManagedPreparedContext = Readonly<{
-  schema: typeof MANAGED_PREPARED_CONTEXT_SCHEMA;
+type PreparedContextFields = Readonly<{
   parent_sequence_id: string;
   parent_revision: number;
   authorization_fingerprint: string;
@@ -103,11 +128,20 @@ export type ProductionManagedPreparedContext = Readonly<{
   ordered_references: readonly ProductionPreparedReference[];
   reference_registry_fingerprint: string;
   native_binding_fingerprint: string;
-  canonical_lowering: Omit<
-    ProductionCanonicalLowering,
-    "canonicalPrompt"
-  > | null;
+  canonical_lowering: ProductionCanonicalLoweringRecipe | null;
 }>;
+
+export type ProductionManagedPreparedContext = PreparedContextFields &
+  (
+    | Readonly<{ schema: typeof MANAGED_PREPARED_CONTEXT_SCHEMA }>
+    | Readonly<{
+        schema: typeof MANAGED_PREPARED_CONTEXT_V2_SCHEMA;
+        sequence_task_mode: "i2va" | "l2va" | "fl2va";
+        media_bindings:
+          import("./sequenceMediaBindings").SequenceMediaBindingSet | null;
+        geometry_donor_asset_id: string | null;
+      }>
+  );
 
 type FetchResponse = Readonly<{
   ok: boolean;
@@ -291,23 +325,48 @@ function orderedReferences(
 
 function canonicalLowering(
   value: unknown,
+  mode: string,
+  frameParent: boolean,
 ): ProductionManagedPreparedContext["canonical_lowering"] {
   if (value === null) return null;
   const wire = object(value);
+  const frame = wire.schema === PRODUCTION_FRAME_CANONICAL_LOWERING_SCHEMA;
   closed(wire, [
     "schema",
     "base_report_fingerprint",
     "base_report_revision",
     "override_revision",
     "reason",
+    ...(frame ? ["task_mode", "binding_roles"] : []),
   ]);
   if (
-    wire.schema !== PRODUCTION_CANONICAL_LOWERING_SCHEMA ||
+    (!frame && wire.schema !== PRODUCTION_CANONICAL_LOWERING_SCHEMA) ||
     wire.reason !== "Materialize approved Production segment prompt"
   )
     reject();
+  if (
+    frame &&
+    (!frameParent ||
+      wire.task_mode !== mode ||
+      !["i2va", "l2va", "fl2va"].includes(mode) ||
+      JSON.stringify(wire.binding_roles) !==
+        JSON.stringify(
+          mode === "fl2va"
+            ? ["first_frame", "last_frame"]
+            : [mode === "i2va" ? "first_frame" : "last_frame"],
+        ))
+  )
+    reject();
   return Object.freeze({
-    schema: PRODUCTION_CANONICAL_LOWERING_SCHEMA,
+    ...(frame
+      ? {
+          schema: PRODUCTION_FRAME_CANONICAL_LOWERING_SCHEMA,
+          taskMode: mode as "i2va" | "l2va" | "fl2va",
+          bindingRoles: Object.freeze([
+            ...(wire.binding_roles as ("first_frame" | "last_frame")[]),
+          ]),
+        }
+      : { schema: PRODUCTION_CANONICAL_LOWERING_SCHEMA }),
     baseReportFingerprint: requiredText(
       wire.base_report_fingerprint,
       fingerprint,
@@ -327,8 +386,16 @@ export function decodeProductionManagedPreparedContext(
   } catch {
     return reject();
   }
-  if (serialized === undefined || serialized.length > 262_144) return reject();
+  // IMPORTANT: match the backend's dedicated UTF-8 byte budget, not JS UTF-16 length;
+  // character counting admits oversized CJK payloads and drifts from prepared-child reads.
+  if (
+    serialized === undefined ||
+    new TextEncoder().encode(serialized).byteLength >
+      MAX_PREPARED_CONTEXT_RESPONSE_BYTES
+  )
+    return reject();
   const wire = object(value);
+  const isV2 = wire.schema === MANAGED_PREPARED_CONTEXT_V2_SCHEMA;
   closed(wire, [
     "schema",
     "parent_sequence_id",
@@ -352,8 +419,11 @@ export function decodeProductionManagedPreparedContext(
     "reference_registry_fingerprint",
     "native_binding_fingerprint",
     "canonical_lowering",
+    ...(isV2
+      ? ["sequence_task_mode", "media_bindings", "geometry_donor_asset_id"]
+      : []),
   ]);
-  if (wire.schema !== MANAGED_PREPARED_CONTEXT_SCHEMA) reject();
+  if (!isV2 && wire.schema !== MANAGED_PREPARED_CONTEXT_SCHEMA) reject();
   const prompt = wire.canonical_prompt;
   if (
     typeof prompt !== "string" ||
@@ -391,8 +461,8 @@ export function decodeProductionManagedPreparedContext(
     fingerprint,
   );
   if (sha256Text(JSON.stringify(profile)) !== profileFingerprint) reject();
-  return Object.freeze({
-    schema: MANAGED_PREPARED_CONTEXT_SCHEMA,
+  const references = orderedReferences(wire.ordered_references);
+  const base = {
     parent_sequence_id: requiredText(wire.parent_sequence_id),
     parent_revision: integer(wire.parent_revision, 0, 1_000_000),
     authorization_fingerprint: requiredText(
@@ -429,7 +499,7 @@ export function decodeProductionManagedPreparedContext(
     frame_count: integer(wire.frame_count, 1, 512),
     profile,
     profile_fingerprint: profileFingerprint,
-    ordered_references: orderedReferences(wire.ordered_references),
+    ordered_references: references,
     reference_registry_fingerprint: requiredText(
       wire.reference_registry_fingerprint,
       fingerprint,
@@ -438,18 +508,83 @@ export function decodeProductionManagedPreparedContext(
       wire.native_binding_fingerprint,
       fingerprint,
     ),
-    canonical_lowering: canonicalLowering(wire.canonical_lowering),
+    canonical_lowering: canonicalLowering(wire.canonical_lowering, mode, isV2),
+  };
+  if (!isV2)
+    return Object.freeze({ ...base, schema: MANAGED_PREPARED_CONTEXT_SCHEMA });
+  const sequenceMode = wire.sequence_task_mode;
+  if (
+    sequenceMode !== "i2va" &&
+    sequenceMode !== "l2va" &&
+    sequenceMode !== "fl2va"
+  )
+    reject();
+  const donor =
+    wire.geometry_donor_asset_id === null
+      ? null
+      : requiredText(wire.geometry_donor_asset_id);
+  if (
+    (sequenceMode === "i2va") !== (donor !== null) ||
+    profile.name !== "h3_base"
+  )
+    reject();
+  const expectedRoles =
+    mode === "i2va"
+      ? ["first_frame"]
+      : mode === "l2va"
+        ? ["last_frame"]
+        : mode === "fl2va"
+          ? ["first_frame", "last_frame"]
+          : mode === "t2va"
+            ? []
+            : reject();
+  if (
+    references.length !== expectedRoles.length ||
+    references.some(
+      (ref) => ref.kind !== "image" || !expectedRoles.includes(ref.role),
+    )
+  )
+    reject();
+  let bindings:
+    import("./sequenceMediaBindings").SequenceMediaBindingSet | null = null;
+  try {
+    bindings =
+      wire.media_bindings === null
+        ? null
+        : decodeSequenceMediaBindingSet(wire.media_bindings);
+  } catch {
+    return reject();
+  }
+  const required = new Set(references.map((row) => row.asset_id));
+  if (donor !== null) required.add(donor);
+  if (
+    (bindings?.entries.length ?? 0) !== required.size ||
+    (bindings?.entries ?? []).some((row) => !required.has(row.asset_id)) ||
+    references.some(
+      (ref) =>
+        !bindings?.entries.some(
+          (row) => row.asset_id === ref.asset_id && row.role === ref.role,
+        ),
+    ) ||
+    (donor !== null &&
+      !bindings?.entries.some(
+        (row) => row.asset_id === donor && row.role === "first_frame",
+      ))
+  )
+    reject();
+  return Object.freeze({
+    ...base,
+    schema: MANAGED_PREPARED_CONTEXT_V2_SCHEMA,
+    sequence_task_mode: sequenceMode,
+    media_bindings: bindings,
+    geometry_donor_asset_id: donor,
   });
 }
 
 function inputsFromPreparedContext(
   prepared: ProductionManagedPreparedContext,
 ): AppModeInputs {
-  if (
-    prepared.canonical_prompt.trim().length === 0 ||
-    prepared.canonical_prompt.length > 4_096 ||
-    prepared.frame_count < 5
-  )
+  if (prepared.canonical_prompt.trim().length === 0 || prepared.frame_count < 5)
     return reject("unsupported_prepared_context", 422);
   const base = {
     task_mode: prepared.task_mode,
@@ -457,19 +592,58 @@ function inputsFromPreparedContext(
     duration_milliseconds: prepared.duration_milliseconds,
     frame_count: prepared.frame_count,
   };
-  // ReferenceRegistry asset IDs are semantic identities, not ComfyUI loader
-  // node IDs. Media modes stay closed until the retained binding maps
-  // each exact asset to a repository-owned host source.
   if (
-    prepared.task_mode !== "t2va" ||
     prepared.profile.name !== "h3_base" ||
-    prepared.ordered_references.length !== 0 ||
     prepared.canonical_lowering === null ||
     prepared.canonical_lowering.baseReportRevision !== 0 ||
     prepared.canonical_lowering.overrideRevision !== 1
   )
     return reject("unsupported_prepared_context", 422);
+  if (prepared.schema === MANAGED_PREPARED_CONTEXT_V2_SCHEMA) {
+    const media = privateMediaFromPrepared(prepared);
+    const entries = prepared.media_bindings?.entries ?? [];
+    const source = (role: string) =>
+      entries.find((row) => row.role === role)?.loader_node_id;
+    const inputs = Object.freeze({
+      ...base,
+      ...(prepared.task_mode === "i2va" || prepared.task_mode === "fl2va"
+        ? { first_frame_source: source("first_frame") }
+        : {}),
+      ...(prepared.task_mode === "l2va" || prepared.task_mode === "fl2va"
+        ? { last_frame_source: source("last_frame") }
+        : {}),
+    });
+    // CRITICAL: asset IDs are semantic. Only the joined private held context supplies
+    // original loader selectors; neither a schema flag nor the previous child canvas does.
+    try {
+      resolvePreparedSequenceSpliceMedia(inputs, media);
+    } catch {
+      return reject("unsupported_prepared_context", 422);
+    }
+    if (!isBoundedPrivateCanonicalPrompt(prepared.canonical_prompt))
+      return reject("unsupported_prepared_context", 422);
+    return inputs;
+  }
+  if (
+    prepared.task_mode !== "t2va" ||
+    prepared.ordered_references.length !== 0 ||
+    prepared.canonical_prompt.length > 4_096
+  )
+    return reject("unsupported_prepared_context", 422);
   return Object.freeze(base);
+}
+
+function privateMediaFromPrepared(
+  prepared: Extract<
+    ProductionManagedPreparedContext,
+    { schema: typeof MANAGED_PREPARED_CONTEXT_V2_SCHEMA }
+  >,
+): PreparedSequenceMedia {
+  return Object.freeze({
+    sequenceTaskMode: prepared.sequence_task_mode,
+    bindings: prepared.media_bindings,
+    geometryDonorAssetId: prepared.geometry_donor_asset_id,
+  });
 }
 
 type CapturedWorkflowIdentity = Readonly<{
@@ -716,6 +890,9 @@ export function createProductionManagedChildResolver({
 
     return Object.freeze({
       inputs,
+      ...(prepared.schema === MANAGED_PREPARED_CONTEXT_V2_SCHEMA
+        ? { preparedSequenceMedia: privateMediaFromPrepared(prepared) }
+        : {}),
       canonicalLowering: Object.freeze({
         ...lowering,
         canonicalPrompt: prepared.canonical_prompt,

@@ -177,7 +177,7 @@ def derivative_byte_limit(kind: DerivativeKind) -> int:
         "filmstrip": 512 * 1024,
         "audio_peaks": 64 * 1024,
         "image_proxy": 16 * 1024 * 1024,
-        "packaged_font_face": 1024 * 1024,
+        "packaged_font_face": 12 * 1024 * 1024,  # SC Bold 2.004: 8,543,168 bytes.
     }[kind]
 
 
@@ -610,6 +610,7 @@ class VerifiedDerivative:
     byte_count: int
     audio_disposition: AudioDisposition
     geometry: MediaGeometry | None = None
+    media_type: str | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -626,6 +627,10 @@ class VerifiedDerivative:
             or self.derivative.generator_profile_id != DERIVATIVE_PROFILE_ID
         ):
             raise MediaLeaseError("stale")
+        if self.media_type is not None and not (
+            self.kind == "packaged_font_face" and self.media_type in {"font/ttf", "font/otf"}
+        ):
+            raise MediaLeaseError("unsupported")
         require_fingerprint(self.asset_fingerprint)
         require_fingerprint(self.generator_fingerprint)
         # IMPORTANT: a body that simply does not fit the profile is a resource limit, at

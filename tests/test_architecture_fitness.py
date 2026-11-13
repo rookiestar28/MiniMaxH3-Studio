@@ -113,7 +113,7 @@ def test_inventory_covers_both_stacks_and_the_shipped_entrypoint() -> None:
     # adapter plus the two seam instruments; inactive product routes do not remove their modules.
     # The shared native audio capacity adds one dependency-free policy owner.
     # Validation and assisted proposals share one pure literal-content predicate owner.
-    assert len([row for row in document["modules"] if row["language"] == "python"]) == 349
+    assert len([row for row in document["modules"] if row["language"] == "python"]) == 355
     # /48 add the toolbar/decisions and Media/Text; adds filmstrip ownership;
     #  replaces one legacy Inspector module with separate tabs and timeline-menu owners;
     #  adds the monitor transform overlay and its pure gesture mapper; adds the
@@ -146,7 +146,13 @@ def test_inventory_covers_both_stacks_and_the_shipped_entrypoint() -> None:
     # Reference cropping adds two UI owners and six bounded host geometry/contract owners.
     # Title admission shares the exact packaged coverage between insertion and Inspector.
     # Compiled metadata admission and host theme detection each add one frontend owner.
-    assert len([row for row in document["modules"] if row["language"] == "typescript"]) == 293
+    # The title preset catalogue, lazy font owner and shared grid add three source owners.
+    # The App Mode error contract is one pure owner extracted from the shared facade.
+    # Sequence diagnostics adds one recorder owner, and sequence UI mapping one lifecycle helper.
+    # The closing-guide namespace allocator is one pure host owner.
+    # The sequence-template canvas selector is one pure host owner.
+    # Compiled prompt proxy isolation adds one pure data-copy owner.
+    assert len([row for row in document["modules"] if row["language"] == "typescript"]) == 316
     assert document["entrypoints"] == [
         {
             "kind": "shipped_frontend_runtime",

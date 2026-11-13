@@ -19,9 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 # IMPORTANT: move this pin only with the rebuilt bundle and supply-chain manifest; otherwise HEAD
 # fails its own deterministic runtime-parity contract.
 RUNTIME_BUNDLE_SHA256 = (
-    "e437955793c7eb29f2c32af62ff00c1bbc74915d7d99f80a988a0506d5f1630c"  # pragma: allowlist secret
+    "eb9a7de0179525f6d5fbe2229f5135d4c365b6da2898a3fb6ea8557cda655460"  # pragma: allowlist secret
 )
-RUNTIME_BUNDLE_SIZE = 1974807
+RUNTIME_BUNDLE_SIZE = 3932886
 
 
 def supply_chain() -> ModuleType:
@@ -29,6 +29,22 @@ def supply_chain() -> ModuleType:
 
 
 class SupplyChainManifestTests(unittest.TestCase):
+    def test_font_wire_resource_caps_do_not_widen_ordinary_json(self) -> None:
+        module = supply_chain()
+        real = module.FONT_MANIFEST_PATH.read_bytes()
+        self.assertEqual(
+            module._decode_json(real, maximum=512 * 1024, maximum_items=65_536),
+            json.loads(real),
+        )
+        with self.assertRaises(module.SupplyChainError):
+            module._decode_json(real, maximum=module.MAX_SUPPLY_CHAIN_WIRE_BYTES)
+        for wire in (b" " * (512 * 1024 + 1), b"[" + b"0," * 65_535 + b"0]"):
+            with self.assertRaises(module.SupplyChainError):
+                module._decode_json(wire, maximum=512 * 1024, maximum_items=65_536)
+        # A small-byte, large-node wire still hits the ordinary 8,192-node limit.
+        with self.assertRaises(module.SupplyChainError):
+            module._decode_json(b"[" + b"0," * 8_191 + b"0]", maximum=262_144)
+
     @staticmethod
     def _make_directory_link(link: Path, target: Path) -> None:
         try:
@@ -200,6 +216,22 @@ class SupplyChainManifestTests(unittest.TestCase):
             font["downloadLocation"],
             "https://github.com/notofonts/latin-greek-cyrillic",
         )
+
+    def test_regional_spdx_identity_is_unique_and_pinned(self) -> None:
+        document = supply_chain().build_spdx_sbom()
+        packages = document["packages"]
+        self.assertEqual(len({row["SPDXID"] for row in packages}), len(packages))
+        fonts = [row for row in packages if row["name"].startswith("Noto Sans ")]
+        self.assertEqual(
+            {row["name"] for row in fonts}, {f"Noto Sans {r}" for r in ("TC", "SC", "JP", "KR")}
+        )
+        for row in fonts:
+            self.assertEqual(row["versionInfo"], "NotoSansCJK-v2.004")
+            self.assertEqual(row["licenseDeclared"], "OFL-1.1")
+            self.assertEqual(
+                row["externalRefs"][0]["referenceLocator"],
+                "pkg:github/notofonts/noto-cjk@523d033d6cb47f4a80c58a35753646f5c3608a78",
+            )
 
     def test_font_verification_failure_blocks_the_spdx_inventory(self) -> None:
         module = supply_chain()

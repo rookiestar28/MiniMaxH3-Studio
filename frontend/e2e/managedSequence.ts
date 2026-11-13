@@ -14,6 +14,10 @@ import {
   type ManagedSerialSequenceStartIntent,
 } from "../src/host/managedSequence";
 import type { SequenceCoordinatorResult } from "../src/host/sequenceCoordinator";
+import type {
+  ManagedSerialAppModeStart,
+  ManagedSerialResolveChild,
+} from "../src/host/managedSequenceRunnerContract";
 import {
   ManagedSequenceClientError,
   decodeManagedSequenceProjection,
@@ -60,6 +64,9 @@ export function createManagedSequenceHarnessEngine(
   options: {
     /** The owned projection each child writes, as the page observes it on its own canvas. */
     ownedProjectionFingerprint?: string;
+    workflowAuthority?: object;
+    startChild?: ManagedSerialAppModeStart;
+    resolveChild?: ManagedSerialResolveChild;
   } = {},
 ) {
   const ownedProjection =
@@ -107,6 +114,10 @@ export function createManagedSequenceHarnessEngine(
       if (action === "start_sequence") {
         revision = 1;
         return mutation("active");
+      }
+      if (action === "fail_prepared_child") {
+        revision += 1;
+        return mutation("paused_failure");
       }
       if (action === "prepare_sequence_child") {
         activeSegment = payload.segment_id as string;
@@ -299,7 +310,7 @@ export function createManagedSequenceHarnessEngine(
     },
   };
 
-  const workflowAuthority = {};
+  const workflowAuthority = options.workflowAuthority ?? {};
   const reattachStore = createManagedSequenceReattachStore(
     memoryStorage(),
     () => 1_000,
@@ -393,6 +404,12 @@ export function createManagedSequenceHarnessEngine(
             index === 0 ? fingerprint("0") : ownedProjection,
         };
       },
+      ...(options.startChild === undefined
+        ? {}
+        : { startChild: options.startChild }),
+      ...(options.resolveChild === undefined
+        ? {}
+        : { resolveChild: options.resolveChild }),
     });
 
   let runner = createRunner();

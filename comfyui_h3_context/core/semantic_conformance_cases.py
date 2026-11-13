@@ -681,13 +681,13 @@ _TEXT_FONT: Final = (
         "fallback",
         "Åß",
         "coverage is resolved by walking the packaged fallback order and never from a system "
-        "font; the packaged manifest declares exactly one family, so this row cannot observe a "
-        "second-family substitution and does not claim to",
+        "font; this Latin witness retains its primary-family face and does not claim a "
+        "regional substitution",
     ),
     (
         "unsupported_glyph",
-        "A中",
-        "U+4E2D is outside every packaged coverage profile, so the accepted behaviour is the "
+        "Aሀ",
+        "U+1200 is outside every packaged coverage profile, so the accepted behaviour is the "
         "explicit font_glyph_unsupported refusal when the plan is bound, never a silent "
         "substitution",
     ),

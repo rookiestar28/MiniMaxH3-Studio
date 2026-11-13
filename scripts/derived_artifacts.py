@@ -109,12 +109,19 @@ _SCANS_EVERYTHING = (
     "nle_semantic_conformance_manifest",
     "node_surface",
     "packaged_artifact_readership",
+    "packaged_font_manifest",
     "public_surface",
     "supply_chain_manifest",
 )
 
 
 GENERATORS: tuple[Generator, ...] = (
+    Generator(
+        name="packaged_font_manifest",
+        outputs=("comfyui_h3_context/fonts/font_manifest_v1.json",),
+        self_reading=True,
+        notes="Generates face facts and exact cmap ranges from the unmodified pinned fonts.",
+    ),
     Generator(
         name="authoring_output_schemas",
         outputs=(GOVERNANCE + "authoring_output_v1.schema.json",),
@@ -173,8 +180,10 @@ GENERATORS: tuple[Generator, ...] = (
     Generator(
         name="packaged_artifact_readership",
         outputs=(GOVERNANCE + "packaged_artifact_readership_v1.json",),
+        reads=("packaged_font_manifest",),
         notes=(
-            "Classifies every packaged JSON by who opens it. It declares no read edge because it "
+            "Classifies every packaged JSON and the font payload by who opens it. It reads the "
+            "font manifest; otherwise it "
             "asks `git grep` rather than opening the artifacts, so its dependency is on which "
             "files exist rather than on what any of them contains -- but its own output is a "
             "packaged JSON, so the two generators that scan the directory read it."
@@ -290,6 +299,7 @@ GENERATORS: tuple[Generator, ...] = (
             "managed_run_stategraph",
             "node_surface",
             "packaged_artifact_readership",
+            "packaged_font_manifest",
             "public_surface",
             "supply_chain_manifest",
         ),
@@ -299,6 +309,7 @@ GENERATORS: tuple[Generator, ...] = (
         name="build_provenance",
         outputs=(CONTRACTS + "build_provenance_v1.json",),
         reads=(
+            "packaged_font_manifest",
             "contract_inventory",
             "cross_language_surface",
             "duration_resolution_contract",
@@ -319,6 +330,7 @@ GENERATORS: tuple[Generator, ...] = (
         name="supply_chain_manifest",
         outputs=(GOVERNANCE + "sbom.spdx.json", GOVERNANCE + "supply_chain_v1.json"),
         reads=(
+            "packaged_font_manifest",
             "build_provenance",
             "cross_language_surface",
             "duration_resolution_contract",

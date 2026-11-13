@@ -4,6 +4,10 @@
 // accepted action; mount, remount and polling never plan, qualify, queue or assemble.
 
 import { useState } from "react";
+import {
+  emptySequenceDiagnostics,
+  sequenceDiagnosticFailure,
+} from "../../host/managedSequenceDiagnostics";
 
 import type { ProductionViewState } from "../ProductionWorkbench";
 import type { AssemblyOutputProfileId } from "../../contracts/productionWorkbenchCodec";
@@ -118,8 +122,42 @@ function SequenceSection({
   const text = nleCopy(locale);
   const ui = sequence.ui;
   const pointer = actions.recoveryPointerPresent();
+  const diagnostic = sequence.diagnostics ?? emptySequenceDiagnostics();
   return (
-    <section aria-label={text.sequence.state[ui]} data-h3-nle-sequence-ui={ui}>
+    <section
+      aria-label={text.sequence.state[ui]}
+      data-h3-nle-sequence-ui={ui}
+      data-h3-nle-parent-state={diagnostic.parentState ?? "null"}
+      data-h3-nle-active-child-ordinal={diagnostic.activeChildOrdinal ?? "null"}
+      data-h3-nle-gate-child-ordinal={diagnostic.gate.childOrdinal ?? "null"}
+      data-h3-nle-gate-artifact-recorded={String(
+        diagnostic.gate.artifactRecorded,
+      )}
+      data-h3-nle-gate-terminal-kind-known={String(
+        diagnostic.gate.terminalKindKnown,
+      )}
+      data-h3-nle-gate-terminal-fingerprint-present={String(
+        diagnostic.gate.terminalFingerprintPresent,
+      )}
+      data-h3-nle-gate-released={String(diagnostic.gate.released)}
+      data-h3-nle-gate-parent-terminal-recorded={String(
+        diagnostic.gate.parentTerminalRecorded,
+      )}
+      data-h3-nle-successor-ordinal={diagnostic.successor.ordinal ?? "null"}
+      data-h3-nle-successor-prepared={String(diagnostic.successor.prepared)}
+      data-h3-nle-failure-code={
+        sequenceDiagnosticFailure(sequence.failure) ?? "null"
+      }
+      data-h3-nle-ui-state={ui}
+      data-h3-nle-failure-origin={diagnostic.failureAttribution.origin}
+      data-h3-nle-failure-boundary={diagnostic.failureAttribution.boundary}
+      data-h3-nle-failure-managed-action={
+        diagnostic.failureAttribution.managedAction
+      }
+      data-h3-nle-failure-http-status-class={
+        diagnostic.failureAttribution.httpStatusClass
+      }
+    >
       <div className="h3-nle-form">
         <div className="h3-nle-actions">
           <span

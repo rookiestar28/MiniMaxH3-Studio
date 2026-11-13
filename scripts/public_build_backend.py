@@ -27,7 +27,9 @@ INVENTORY = "public-source-inventory.json"
 SCHEMA = "h3-public-source-inventory/1"
 MAX_FILES = 4096
 MAX_FILE_BYTES = 16 * 1024 * 1024
-MAX_TOTAL_BYTES = 64 * 1024 * 1024
+# Equal to the Registry payload bound (registry_payload.MAX_TOTAL_BYTES). The bundled CJK title
+# fonts (47,048,112 bytes) put the 1.4.5 public source at 100,552,316 bytes, over the former 64 MiB.
+MAX_TOTAL_BYTES = 128 * 1024 * 1024
 RESERVED = {"aux", "clock$", "con", "nul", "prn"} | {
     f"{prefix}{index}" for prefix in ("com", "lpt") for index in range(1, 10)
 }

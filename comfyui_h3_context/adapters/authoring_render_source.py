@@ -488,6 +488,38 @@ class BoundAuthoringRenderPlan(_OpaqueClaim):
         return confirmation
 
 
+def _require_resolved_font_bindings(
+    snapshot: PublicCompositionSnapshot,
+    fonts: PackagedFontManifest,
+    facts: PackagedFontFacts,
+) -> None:
+    # CRITICAL: package membership alone admits wrong regional glyphs. Check the exact
+    # deterministic resolved face before planning; requested and resolved ids may differ.
+    clips = {clip.clip_id: clip for clip in snapshot.clips}
+    identity_fields = (
+        "font_asset_id",
+        "artifact_id",
+        "weight",
+        "style",
+        "file_fingerprint",
+        "cmap_fingerprint",
+        "build_version",
+    )
+    for binding in facts.title_bindings:
+        clip = clips.get(binding.clip_id)
+        if clip is None or clip.text is None:
+            raise AuthoringSourceBindingError("font_glyph_unsupported")
+        text = clip.text
+        try:
+            expected = require_text_coverage(
+                fonts, text.font_asset_id, text.weight, text.style, text.content
+            )
+        except AuthoringFontError as exc:
+            raise AuthoringSourceBindingError(exc.code) from None
+        if any(getattr(binding, field) != getattr(expected, field) for field in identity_fields):
+            raise AuthoringSourceBindingError("font_glyph_unsupported")
+
+
 def prepare_bound_render_plan(
     history: PreparedAuthoringHistory,
     snapshot: PublicCompositionSnapshot,
@@ -610,6 +642,7 @@ def prepare_bound_render_plan(
         facts_fingerprint="sha256:" + "0" * 64,
     )
     font_facts = replace(font_facts, facts_fingerprint=packaged_font_facts_fingerprint(font_facts))
+    _require_resolved_font_bindings(snapshot, fonts, font_facts)
     plan = plan_render(
         snapshot=snapshot, source_manifest=manifest, currentness=confirmation, font_facts=font_facts
     )

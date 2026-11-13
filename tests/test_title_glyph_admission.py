@@ -117,7 +117,9 @@ def edit(harness: Any, handle: str, kind: str, content: str) -> dict[str, Any]:
 
 @pytest.mark.parametrize("version", [1, 2])
 @pytest.mark.parametrize("kind", ["insert_title_clip", "set_text_content"])
-@pytest.mark.parametrize("content", ["中文", "한국어", "😀"], ids=["cjk", "hangul", "emoji"])
+@pytest.mark.parametrize(
+    "content", ["中文😀", "한국어😀", "😀"], ids=["mixed_cjk", "mixed_hangul", "emoji"]
+)
 def test_unsupported_title_is_refused_atomically(version: int, kind: str, content: str) -> None:
     harness, handle = workspace(version)
     before = read(harness, handle)
@@ -145,14 +147,23 @@ def test_style_change_losing_packaged_coverage_is_refused(version: int, content:
         )
     )
     assert result.status == 409
-    assert rejection_code(result.body) == "font_glyph_unsupported"
+    assert rejection_code(result.body) == "font_italic_unsupported"
     assert read(harness, handle) == before
 
 
 @pytest.mark.parametrize("version", [1, 2])
 @pytest.mark.parametrize("kind", ["insert_title_clip", "set_text_content"])
 @pytest.mark.parametrize(
-    "content", ["Café — Ελληνικά, Кириллица!\nNext", "A" * 2048, "A\n" * 31 + "A"]
+    "content",
+    [
+        "Café — Ελληνικά, Кириллица!\nNext",
+        "繁體中文",
+        "汉语",
+        "日本語かな",
+        "한국어",
+        "A" * 2048,
+        "A\n" * 31 + "A",
+    ],
 )
 def test_supported_title_receipt_matches_existing_core_bytes(
     version: int, kind: str, content: str
@@ -173,7 +184,7 @@ def test_supported_title_receipt_matches_existing_core_bytes(
 
 @pytest.mark.parametrize("version", [1, 2])
 def test_existing_unsupported_title_opens_and_allows_unrelated_edits(version: int) -> None:
-    harness, handle = workspace(version, "中文")
+    harness, handle = workspace(version, "中文😀")
     before = read(harness, handle)
     for command in [
         {
@@ -201,9 +212,9 @@ def test_existing_unsupported_title_opens_and_allows_unrelated_edits(version: in
 
 @pytest.mark.parametrize("version", [1, 2])
 def test_existing_unsupported_noop_and_historical_navigation_stay_usable(version: int) -> None:
-    harness, handle = workspace(version, "中文")
+    harness, handle = workspace(version, "中文😀")
     noop = harness.registry.dispatch(
-        action(harness, handle, [edit(harness, handle, "set_text_content", "中文")])
+        action(harness, handle, [edit(harness, handle, "set_text_content", "中文😀")])
     )
     assert noop.status == 200
     result = harness.registry.dispatch(
@@ -217,7 +228,7 @@ def test_existing_unsupported_noop_and_historical_navigation_stay_usable(version
     assert undone.status == 200
     projection = read(harness, handle)
     state = cast(dict[str, Any], projection.get("snapshot", projection.get("authoring")))
-    assert next(clip for clip in state["clips"] if clip["text"])["text"]["content"] == "中文"
+    assert next(clip for clip in state["clips"] if clip["text"])["text"]["content"] == "中文😀"
     redone = harness.registry.dispatch(
         action(
             harness,

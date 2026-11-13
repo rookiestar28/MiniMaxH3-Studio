@@ -197,7 +197,7 @@ describe.runIf(
           ],
           "sourcePolicy": "chosen",
           "taskMode": "i2va",
-          "workflowSha256": "4d855886ff12c30ebbc2573de22f2b1b63b1d48c5c8f9c5cbdb1c5a34c9226d8",
+          "workflowSha256": "cedb0dbb6d25a8ca1e4ca4d5f52e33828802d9ea58af0c8641f83c2fce2b8eac",
         },
         {
           "mediaNodeIds": {
@@ -233,7 +233,7 @@ describe.runIf(
           ],
           "sourcePolicy": "template_defaults",
           "taskMode": "i2va",
-          "workflowSha256": "5f9382c55cec98f76ca2896ebf291d1f708f00a3e1561fb22239ea23089f3d3d",
+          "workflowSha256": "44a5beed9b8a631f2dc92b653742380b7384f480018ff8c5e1658994b1e99441",
         },
         {
           "mediaNodeIds": {

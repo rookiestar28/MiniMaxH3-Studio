@@ -187,7 +187,15 @@ def test_exact_image_initialization_retains_unplaced_library_and_retry_keeps_edi
     authoring = cast(dict[str, Any], initialized.body["authoring"])
     assert initialized.body["render_snapshot"] is None
     assert authoring["clips"] == []
-    assert {a["asset_id"] for a in authoring["assets"]} == {"image_1", "h3.font.noto_sans.v1"}
+    # The four regional CJK title faces joined the bundled library with /.
+    assert {a["asset_id"] for a in authoring["assets"]} == {
+        "image_1",
+        "h3.font.noto_sans.v1",
+        "h3.font.noto_sans_sc.v1",
+        "h3.font.noto_sans_tc.v1",
+        "h3.font.noto_sans_jp.v1",
+        "h3.font.noto_sans_kr.v1",
+    }
     commands = [
         {
             "kind": "create_track",

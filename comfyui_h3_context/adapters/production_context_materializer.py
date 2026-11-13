@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from hashlib import sha256
+from typing import ClassVar, cast
 
 from ..core.audit_override import MAX_OVERRIDE_REVISION, stage_audit_override
 from ..core.canonical import canonical_fingerprint, fingerprint_context_report
@@ -31,7 +32,14 @@ from ..core.constraints import (
     TimingConstraint,
 )
 from ..core.context_reporting import ContextPlan, ContextReport
-from ..core.contracts import CURRENT_PROFILE_VERSION, ProfileIdentity, PromptProfile, TaskMode
+from ..core.contracts import (
+    CURRENT_PROFILE_VERSION,
+    AssetRole,
+    MediaKind,
+    ProfileIdentity,
+    PromptProfile,
+    TaskMode,
+)
 from ..core.dialogue_speakers import render_dialogue_line
 from ..core.evidence import EvidenceSet
 from ..core.intent_graph import build_intent_graph
@@ -72,6 +80,12 @@ from .production_planning_source import (
 )
 
 PRODUCTION_CANONICAL_LOWERING_SCHEMA = "h3.context.production_canonical_lowering.v1"
+PRODUCTION_FRAME_CANONICAL_LOWERING_SCHEMA = "h3.context.production_canonical_lowering.v2"
+_FRAME_LOWERING_ROLES: dict[str, tuple[AssetRole, ...]] = {
+    TaskMode.I2VA: (AssetRole.FIRST_FRAME,),
+    TaskMode.L2VA: (AssetRole.LAST_FRAME,),
+    TaskMode.FL2VA: (AssetRole.FIRST_FRAME, AssetRole.LAST_FRAME),
+}
 PRODUCTION_CANONICAL_LOWERING_REASON = "Materialize approved Production segment prompt"
 MAX_PRODUCTION_CANONICAL_LOWERING_PROMPT_LENGTH = 4_096
 _FINGERPRINT = re.compile(r"sha256:[0-9a-f]{64}\Z")
@@ -86,9 +100,10 @@ class ProductionCanonicalLoweringV1:
     override_revision: int
     reason: str = PRODUCTION_CANONICAL_LOWERING_REASON
     schema: str = PRODUCTION_CANONICAL_LOWERING_SCHEMA
+    expected_schema: ClassVar[str] = PRODUCTION_CANONICAL_LOWERING_SCHEMA
 
     def __post_init__(self) -> None:
-        if self.schema != PRODUCTION_CANONICAL_LOWERING_SCHEMA:
+        if self.schema != self.expected_schema:
             raise ProductionImportError("canonical_lowering_schema")
         if self.reason != PRODUCTION_CANONICAL_LOWERING_REASON:
             raise ProductionImportError("canonical_lowering_reason")
@@ -113,6 +128,33 @@ class ProductionCanonicalLoweringV1:
             "base_report_revision": self.base_report_revision,
             "override_revision": self.override_revision,
             "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ProductionCanonicalLoweringV2(ProductionCanonicalLoweringV1):
+    """Exact public Request/Registry/Plan recipe, with no host source content."""
+
+    task_mode: TaskMode = field(kw_only=True)
+    binding_roles: tuple[AssetRole, ...] = field(kw_only=True)
+    schema: str = PRODUCTION_FRAME_CANONICAL_LOWERING_SCHEMA
+    expected_schema: ClassVar[str] = PRODUCTION_FRAME_CANONICAL_LOWERING_SCHEMA
+
+    def __post_init__(self) -> None:
+        ProductionCanonicalLoweringV1.__post_init__(self)
+        if (
+            type(self.task_mode) is not TaskMode
+            or self.task_mode not in _FRAME_LOWERING_ROLES
+            or type(self.binding_roles) is not tuple
+            or self.binding_roles != _FRAME_LOWERING_ROLES[self.task_mode]
+        ):
+            raise ProductionImportError("canonical_lowering_frame_roles")
+
+    def to_wire(self) -> dict[str, object]:
+        return {
+            **ProductionCanonicalLoweringV1.to_wire(self),
+            "task_mode": self.task_mode.value,
+            "binding_roles": [role.value for role in self.binding_roles],
         }
 
 
@@ -166,14 +208,12 @@ def _derive_canonical_lowering(
     plan: ContextPlan,
     compiled_report: ContextReport,
     segment: ProposalSegmentV1,
-) -> ProductionCanonicalLoweringV1 | None:
+) -> ProductionCanonicalLoweringV1 | ProductionCanonicalLoweringV2 | None:
     """Certify only a graph recipe the public Request node can reproduce exactly."""
 
     default_profile = ProfileIdentity(PromptProfile.BASE, CURRENT_PROFILE_VERSION)
     if (
-        request.mode is not TaskMode.T2VA
-        or request.assets != ()
-        or request.reference_registry != ReferenceRegistry.empty()
+        request.mode not in {TaskMode.T2VA, *_FRAME_LOWERING_ROLES}
         or request.hard_constraints != HardConstraintSet.empty()
         or request.evidence != EvidenceSet.empty()
         or plan.request.profile != default_profile
@@ -183,12 +223,27 @@ def _derive_canonical_lowering(
         return None
     duration_milliseconds = segment.duration.requested_seconds * 1_000
     try:
+        roles = _FRAME_LOWERING_ROLES.get(request.mode, ())
+        # CRITICAL: reconstruct the public Registry's metadata-free role slots, never
+        # copy arbitrary source assets into the certificate. Whole-plan equality below
+        # then refuses unrepresentable IDs, metadata, constraints and evidence.
+        registry = build_reference_registry(
+            tuple(
+                ReferenceAsset(f"{role.value}_1", MediaKind.IMAGE, role, ordinal)
+                for ordinal, role in enumerate(roles, start=1)
+            )
+        )
+        if (
+            request.reference_registry != registry
+            or request.assets != registry.to_asset_descriptors()
+        ):
+            return None
         rebuilt_request = build_canonical_context_request(
-            TaskMode.T2VA,
+            request.mode,
             segment.local_prompt,
             duration_milliseconds / 1_000,
         )
-        rebuilt_plan = build_canonical_context_plan(rebuilt_request)[0]
+        rebuilt_plan = build_canonical_context_plan(rebuilt_request, registry)[0]
         # CRITICAL: prompt equality alone misses absent forbidden constraints and evidence. The
         # whole typed plan and Compiler report identity must match before exposing this recipe.
         if rebuilt_plan != plan:
@@ -197,6 +252,14 @@ def _derive_canonical_lowering(
         compiled_fingerprint = fingerprint_context_report(compiled_report)
         if fingerprint_context_report(rebuilt_report) != compiled_fingerprint:
             return None
+        if roles:
+            return ProductionCanonicalLoweringV2(
+                base_report_fingerprint=compiled_fingerprint,
+                base_report_revision=compiled_report.revision,
+                override_revision=compiled_report.revision + 1,
+                task_mode=cast(TaskMode, request.mode),
+                binding_roles=roles,
+            )
         return ProductionCanonicalLoweringV1(
             base_report_fingerprint=compiled_fingerprint,
             base_report_revision=compiled_report.revision,
@@ -227,7 +290,9 @@ def _project_dialogue_bindings(source: ContextPlan, local: ContextPlan, prompt: 
         for row in local.hard_constraints.exact_texts
         if row.kind in (ExactTextKind.DIALOGUE, ExactTextKind.LYRICS)
     )
-    if not lines:
+    # CRITICAL: retained Subject labels need the ordered source subjects even without dialogue;
+    # returning the empty local graph makes the real Validator reject their definitions.
+    if not lines and not source.intent_graph.subjects:
         return local
     source_lines = {row.constraint_id: row for row in source.hard_constraints.exact_texts}
     subject_ids: set[str] = set()

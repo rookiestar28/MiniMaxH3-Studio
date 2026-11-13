@@ -36,7 +36,12 @@ from pathlib import Path, PureWindowsPath
 from typing import Protocol
 
 from ..core.av_reconstruction import qualified_ffmpeg_capability
-from ..core.safe_paths import UnsafePathError, ensure_directory, read_regular_file_bytes
+from ..core.safe_paths import (
+    UnsafePathError,
+    _native_io_path,
+    ensure_directory,
+    read_regular_file_bytes,
+)
 from .composition_root import MEDIA_RUNTIME_RESOLVER, component
 from .media_runtime_discovery_worker import (
     FFMPEG_NAME,
@@ -615,7 +620,8 @@ def _link_free_existing_prefix(path: Path) -> bool:
     for part in path.parts[1:]:
         current = current / part
         try:
-            metadata = current.lstat()
+            # CRITICAL: a plain stat misclassifies an existing long prefix as a missing tail.
+            metadata = _native_io_path(current).lstat()
         except FileNotFoundError:
             return True
         except OSError:
@@ -623,7 +629,7 @@ def _link_free_existing_prefix(path: Path) -> bool:
         attributes = getattr(metadata, "st_file_attributes", 0)
         reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
         if (
-            current.is_symlink()
+            _native_io_path(current).is_symlink()
             or stat.S_ISLNK(metadata.st_mode)
             or attributes & reparse
             or not stat.S_ISDIR(metadata.st_mode)

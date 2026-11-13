@@ -39,7 +39,7 @@ from scripts.product_completeness import (  # noqa: E402
 
 MAX_FILES = 4_096
 MAX_FILE_BYTES = 16 * 1024 * 1024
-MAX_TOTAL_BYTES = 64 * 1024 * 1024
+MAX_TOTAL_BYTES = 128 * 1024 * 1024  # Eight unmodified CJK faces add 47,048,112 bytes.
 MAX_ARCHIVE_BYTES = 80 * 1024 * 1024
 MAX_MEMBER_NAME_CHARS = 1_024
 MAX_PATH_COMPONENT_CHARS = 255

@@ -95,7 +95,14 @@ function OutputBody({
       <h3>{text.title}</h3>
       <p role="status">{job ? text.phases[job.phase] : text.empty}</p>
       {old && <p className="h3a-output-warning">{text.old}</p>}
-      {state.error && <p role="alert">{text.error}</p>}
+      {state.error && (
+        <p role="alert">{state.pathTooDeep ? text.pathTooDeep : text.error}</p>
+      )}
+      {!state.error &&
+        job?.phase === "failed" &&
+        job.failure === "path_too_deep" && (
+          <p role="alert">{text.pathTooDeep}</p>
+        )}
       {job?.phase === "failed" && job.failure === "font_changed" && (
         <p role="alert">{text.fontUnavailable}</p>
       )}

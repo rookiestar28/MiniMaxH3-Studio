@@ -6,12 +6,18 @@ import { defineConfig } from "vitest/config";
 
 import { resolveH3ContextBuildMetadata } from "./buildMetadata.js";
 import { resolveH3ContextBuildIdentity } from "./buildProvenance.js";
+import { presetFontAllow } from "./packagedPresetFontPaths.js";
 
 const h3BuildMetadata = resolveH3ContextBuildMetadata();
 const h3BuildProvenance = resolveH3ContextBuildIdentity();
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    fs: {
+      allow: presetFontAllow(fileURLToPath(new URL(".", import.meta.url))),
+    },
+  },
   resolve: {
     alias: {
       "../../scripts/app.js": fileURLToPath(

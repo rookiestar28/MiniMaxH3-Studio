@@ -1,9 +1,15 @@
 import { sha256Text } from "../contracts/canonicalFingerprint";
+import { withSequenceFailureAttribution } from "./managedSequenceDiagnostics";
 
 export const MANAGED_SEQUENCE_ACTION_SCHEMA =
   "h3.context.managed_sequence_action.v1" as const;
 export const MANAGED_SEQUENCE_RESULT_SCHEMA =
   "h3.context.managed_sequence_result.v1" as const;
+export const MANAGED_SEQUENCE_RESULT_V2_SCHEMA =
+  "h3.context.managed_sequence_result.v2" as const;
+export type FrameSequenceMode = "i2va" | "l2va" | "fl2va";
+export type SequenceMediaFailureCode =
+  "sequence_media_changed" | "sequence_media_unavailable";
 export const MANAGED_SEQUENCE_PROJECTION_SCHEMA =
   "h3.context.managed_sequence_projection.v1" as const;
 export const MANAGED_SEQUENCE_REATTACH_POINTER_SCHEMA =
@@ -124,7 +130,9 @@ export type EligibleSegmentExecution = Readonly<{
 }>;
 
 export type ManagedSequenceMutationResult = Readonly<{
-  schema: typeof MANAGED_SEQUENCE_RESULT_SCHEMA;
+  schema:
+    | typeof MANAGED_SEQUENCE_RESULT_SCHEMA
+    | typeof MANAGED_SEQUENCE_RESULT_V2_SCHEMA;
   parentSequenceId: string;
   authorizationFingerprint: string;
   readAuthorityFingerprint: string;
@@ -135,6 +143,8 @@ export type ManagedSequenceMutationResult = Readonly<{
   contextWorkspaceHandle: string | null;
   parentExpiresAtEpochMs: number | null;
   replayed: boolean;
+  sequenceTaskMode?: FrameSequenceMode;
+  failureCode?: SequenceMediaFailureCode | null;
 }>;
 
 export type ManagedSequenceChildAuthority = Readonly<{
@@ -163,11 +173,12 @@ export class ManagedSequenceClientError extends Error {
   readonly code: string;
   readonly status: number;
 
-  constructor(code: string, status: number) {
+  constructor(code: string, status: number, attribution?: unknown) {
     super(code);
     this.name = "ManagedSequenceClientError";
     this.code = code;
     this.status = status;
+    withSequenceFailureAttribution(this, attribution);
   }
 }
 
@@ -351,8 +362,11 @@ function decodeChildAuthority(
 
 export function decodeManagedSequenceMutationResult(
   value: unknown,
+  expectedSequenceMode?: "t2va" | FrameSequenceMode,
+  attribution?: unknown,
 ): ManagedSequenceMutationResult {
   const wire = object(value);
+  const isV2 = wire.schema === MANAGED_SEQUENCE_RESULT_V2_SCHEMA;
   closed(wire, [
     "schema",
     "parent_sequence_id",
@@ -366,9 +380,10 @@ export function decodeManagedSequenceMutationResult(
     "context_workspace_handle",
     "parent_expires_at_epoch_ms",
     "replayed",
+    ...(isV2 ? ["sequence_task_mode", "failure_code"] : []),
   ]);
   if (
-    wire.schema !== MANAGED_SEQUENCE_RESULT_SCHEMA ||
+    (!isV2 && wire.schema !== MANAGED_SEQUENCE_RESULT_SCHEMA) ||
     typeof wire.replayed !== "boolean" ||
     (wire.context_workspace_handle !== null &&
       (typeof wire.context_workspace_handle !== "string" ||
@@ -378,23 +393,54 @@ export function decodeManagedSequenceMutationResult(
         (wire.parent_expires_at_epoch_ms as number) < 0))
   )
     throw new ManagedSequenceClientError("invalid_response", 500);
-  return Object.freeze({
-    schema: MANAGED_SEQUENCE_RESULT_SCHEMA,
-    parentSequenceId: requiredIdentifier(wire.parent_sequence_id),
-    authorizationFingerprint: requiredFingerprint(
-      wire.authorization_fingerprint,
+  if (
+    isV2 &&
+    (!["i2va", "l2va", "fl2va"].includes(String(wire.sequence_task_mode)) ||
+      (wire.failure_code !== null &&
+        (!["sequence_media_changed", "sequence_media_unavailable"].includes(
+          String(wire.failure_code),
+        ) ||
+          wire.state !== "paused_failure")))
+  )
+    throw new ManagedSequenceClientError("invalid_response", 500);
+  if (
+    expectedSequenceMode !== undefined &&
+    (isV2
+      ? wire.sequence_task_mode !== expectedSequenceMode
+      : expectedSequenceMode !== "t2va")
+  )
+    throw new ManagedSequenceClientError("invalid_response", 500);
+  return Object.freeze(
+    withSequenceFailureAttribution<ManagedSequenceMutationResult>(
+      {
+        schema: isV2
+          ? MANAGED_SEQUENCE_RESULT_V2_SCHEMA
+          : MANAGED_SEQUENCE_RESULT_SCHEMA,
+        parentSequenceId: requiredIdentifier(wire.parent_sequence_id),
+        authorizationFingerprint: requiredFingerprint(
+          wire.authorization_fingerprint,
+        ),
+        readAuthorityFingerprint: requiredFingerprint(
+          wire.read_authority_fingerprint,
+        ),
+        state: decodeState(wire.state),
+        revision: boundedRevision(wire.revision),
+        execution: decodeExecution(wire.execution, wire.execution_fingerprint),
+        childAuthority: decodeChildAuthority(wire.child_authority),
+        contextWorkspaceHandle: wire.context_workspace_handle as string | null,
+        parentExpiresAtEpochMs: wire.parent_expires_at_epoch_ms as
+          number | null,
+        replayed: wire.replayed,
+        ...(isV2
+          ? {
+              sequenceTaskMode: wire.sequence_task_mode as FrameSequenceMode,
+              failureCode: wire.failure_code as SequenceMediaFailureCode | null,
+            }
+          : {}),
+      },
+      isV2 && wire.failure_code !== null ? attribution : undefined,
     ),
-    readAuthorityFingerprint: requiredFingerprint(
-      wire.read_authority_fingerprint,
-    ),
-    state: decodeState(wire.state),
-    revision: boundedRevision(wire.revision),
-    execution: decodeExecution(wire.execution, wire.execution_fingerprint),
-    childAuthority: decodeChildAuthority(wire.child_authority),
-    contextWorkspaceHandle: wire.context_workspace_handle as string | null,
-    parentExpiresAtEpochMs: wire.parent_expires_at_epoch_ms as number | null,
-    replayed: wire.replayed,
-  });
+  );
 }
 
 export function decodeManagedSequenceProjection(
@@ -487,6 +533,8 @@ export function createManagedSequenceClient({
     ): Promise<ManagedSequenceMutationResult> {
       if (!identifier.test(requestId))
         throw new ManagedSequenceClientError("invalid_request_id", 400);
+      if (action === "fail_prepared_child")
+        validatePreparedMediaFailurePayload(payload);
       const body = JSON.stringify({
         schema: MANAGED_SEQUENCE_ACTION_SCHEMA,
         request_id: requestId,
@@ -502,17 +550,67 @@ export function createManagedSequenceClient({
         body,
         signal,
       });
-      if (!response.ok)
+      const attribution = {
+        origin: "backend-comparison",
+        boundary:
+          action === "bind_prepared_child"
+            ? "managed-bind"
+            : action === "start_sequence"
+              ? "source-observe"
+              : action === "prepare_sequence_child"
+                ? "materialize"
+                : "unattributed",
+        managedAction:
+          action === "bind_prepared_child" ||
+          action === "start_sequence" ||
+          action === "prepare_sequence_child"
+            ? action
+            : "unattributed",
+        httpStatusClass:
+          response.status >= 200 && response.status < 300
+            ? "2xx"
+            : response.status >= 400 && response.status < 500
+              ? "4xx"
+              : response.status >= 500 && response.status < 600
+                ? "5xx"
+                : "unattributed",
+      };
+      if (!response.ok) {
+        let code = "managed_sequence_rejected";
+        if (
+          action === "start_sequence" &&
+          Object.hasOwn(payload, "media_bindings")
+        ) {
+          try {
+            const refusal = object(await response.json());
+            // CRITICAL: only these closed Start reasons may cross into product state.
+            // Never reflect arbitrary backend error text or additional response members.
+            if (
+              Object.keys(refusal).length === 1 &&
+              (refusal.error === "sequence_media_changed" ||
+                refusal.error === "sequence_media_unavailable")
+            )
+              code = refusal.error;
+          } catch {
+            /* A malformed refusal remains the existing generic failure. */
+          }
+        }
         throw new ManagedSequenceClientError(
-          "managed_sequence_rejected",
+          code,
           response.status,
+          attribution,
         );
+      }
       if (response.status !== 200)
         throw new ManagedSequenceClientError(
           "unexpected_status",
           response.status,
         );
-      return decodeManagedSequenceMutationResult(await response.json());
+      return decodeManagedSequenceMutationResult(
+        await response.json(),
+        undefined,
+        attribution,
+      );
     },
 
     async read(
@@ -569,6 +667,37 @@ export function createManagedSequenceClient({
       return Object.freeze({ status: 200, etag, projection });
     },
   });
+}
+
+/** A media reason is display-only and cannot turn a failure into child authority. */
+export function validatePreparedMediaFailurePayload(
+  payload: Record<string, unknown>,
+  sequenceMode?: string,
+): void {
+  const hasCode = Object.hasOwn(payload, "failure_code");
+  closed(payload, [
+    "parent_sequence_id",
+    "expected_revision",
+    "authorization_fingerprint",
+    "segment_id",
+    "eligible_execution_fingerprint",
+    "failure_fingerprint",
+    ...(hasCode ? ["failure_code"] : []),
+  ]);
+  requiredIdentifier(payload.parent_sequence_id);
+  requiredIdentifier(payload.segment_id);
+  boundedRevision(payload.expected_revision);
+  requiredFingerprint(payload.authorization_fingerprint);
+  requiredFingerprint(payload.eligible_execution_fingerprint);
+  requiredFingerprint(payload.failure_fingerprint);
+  if (
+    hasCode &&
+    ((payload.failure_code !== "sequence_media_changed" &&
+      payload.failure_code !== "sequence_media_unavailable") ||
+      (sequenceMode !== undefined &&
+        !["i2va", "l2va", "fl2va"].includes(sequenceMode)))
+  )
+    throw new ManagedSequenceClientError("invalid_prepared_failure_code", 400);
 }
 
 function decodePointer(value: unknown): ManagedSequenceReattachPointerV1 {

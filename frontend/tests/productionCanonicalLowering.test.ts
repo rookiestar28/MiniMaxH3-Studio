@@ -17,6 +17,8 @@ import { fixtureBackedAppModeHost } from "./support/hostSeamTestDouble";
 import { createQualifiedBasePrompt } from "./support/qualifiedBasePrompt";
 import { acceptedQueueResponse } from "./support/queuePromptTestDouble";
 import { loadSyntheticTemplate } from "./support/templateFixture";
+import { ManagedSerialSequenceRunnerError } from "../src/host/managedSequenceRunnerContract";
+import { validateProductionCanonicalLowering } from "../src/host/appModeContract";
 
 const inputs: AppModeInputs = Object.freeze({
   task_mode: "t2va",
@@ -125,6 +127,63 @@ function environment(
 }
 
 describe("M26-03 Production canonical graph lowering", () => {
+  it.each(["i2va", "l2va", "fl2va"] as const)(
+    "admits the closed V2 %s canonical recipe",
+    (task_mode) => {
+      const frameInputs: AppModeInputs = {
+        ...inputs,
+        task_mode,
+        ...(task_mode !== "l2va" ? { first_frame_source: "frame.first" } : {}),
+        ...(task_mode !== "i2va" ? { last_frame_source: "frame.last" } : {}),
+      };
+      const authority = {
+        ...lowering,
+        schema: "h3.context.production_canonical_lowering.v2",
+        taskMode: task_mode,
+        bindingRoles:
+          task_mode === "fl2va"
+            ? ["first_frame", "last_frame"]
+            : [task_mode === "i2va" ? "first_frame" : "last_frame"],
+      };
+      expect(() =>
+        validateProductionCanonicalLowering(
+          authority as ProductionCanonicalLowering,
+          frameInputs,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        validateProductionCanonicalLowering(
+          {
+            ...authority,
+            bindingRoles: [],
+          } as unknown as ProductionCanonicalLowering,
+          frameInputs,
+        ),
+      ).toThrow();
+      expect(() =>
+        validateProductionCanonicalLowering(lowering, frameInputs),
+      ).toThrow();
+    },
+  );
+  it.each(["sequence_media_changed", "sequence_media_unavailable"] as const)(
+    "preserves typed pre-queue %s through AppMode",
+    async (code) => {
+      const subject = environment();
+      await expect(
+        createAppModeController(subject.app, subject.api, {
+          loadProfile: loadAvailableProfile,
+          loadTemplate: loadSyntheticTemplate,
+        }).start(inputs, {
+          replaceExisting: true,
+          preparedCanonicalPrompt: lowering,
+          prepareManaged: async () => {
+            throw new ManagedSerialSequenceRunnerError(code);
+          },
+        }),
+      ).rejects.toMatchObject({ name: "AppModeError", code });
+      expect(subject.queuePrompt).not.toHaveBeenCalled();
+    },
+  );
   it("materializes, compiles and queues the one certified AuditOverride graph", async () => {
     const compiled = withCompiledPackIdentity(compiledPreparedPrompt());
     const expectedCompiled = structuredClone(compiled);
@@ -145,6 +204,9 @@ describe("M26-03 Production canonical graph lowering", () => {
       nodes: Array<Record<string, unknown>>;
       links: Array<[number, number, number, number, number, string]>;
     };
+    await expect(JSON.stringify(candidate, null, 2)).toMatchFileSnapshot(
+      "./fixtures/managedT2vaGraph.json",
+    );
     const compiler = candidate.nodes.find(
       (node) => node.type === "comfyui_h3_context.H3Context.Compiler",
     )!;

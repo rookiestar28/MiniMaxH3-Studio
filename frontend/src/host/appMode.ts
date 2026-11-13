@@ -11,18 +11,20 @@ import {
 } from "./appModeCanvasPreparation";
 export { qualifyAppMode } from "./appModeQualification";
 
-import type { GenerationProfile } from "../contracts/generationProfileCodec";
-import { createGenerationProfileClient } from "./generationProfileClient";
+import { createAppModeProfileAdmission } from "./appModeProfileAdmission";
 import { H3_SHELL_MANIFEST, inspectH3GraphAdmission } from "./graphAdapter";
 import { readQueueMetadataCompatibleGraph } from "./graphSerialization";
-import type { InputGeometryReceipt } from "./inputGeometry";
+import { createPreparedSequenceGraphGuard } from "./preparedSequenceGraph";
+import { observeManagedAppModeSources } from "./appModeSourceObservation";
+import { ManagedSerialSequenceRunnerError } from "./managedSequenceRunnerContract";
+import { SequenceMediaBindingError } from "./sequenceMediaBindings";
+import { sequenceMediaAppModeError } from "./appModeError";
 import {
   observeOwnedGraph,
   type OwnedGraphObservation,
   type OwnedGraphReference,
 } from "./ownedGraphIdentity";
 import {
-  probeFetchApi,
   probeGraphToPrompt,
   readNodeDefinitionRegistry,
   readVisibleGraph,
@@ -48,7 +50,6 @@ import {
   ADMISSION_MESSAGES,
   admissionBlocksQueue,
   admissionBlocksRoute,
-  admitGenerationProfile,
   ADMITTED,
   candidateRequiresHostLoadBeforeCompile,
   generationAdmissionRefusalReason,
@@ -95,7 +96,7 @@ import {
   throwIfCancelled,
   validateConnectInputs,
   validateExistingInputs,
-  validateInputs,
+  validatePreparedMaterializationInputs,
   validatePreparedCanonicalStart,
 } from "./appModeContract";
 import {
@@ -106,7 +107,6 @@ import {
 } from "./appModeExistingRoute";
 import {
   buildManagedAppModePreparation,
-  buildManagedSourceIdentityRequest,
   projectManagedExecutionPrompt,
 } from "./appModeManagedPreparation";
 import {
@@ -245,48 +245,10 @@ export function createAppModeController(
   // Keep present-but-unready distinct from absent during extension setup.
   const nodeDefinitionReadinessReached =
     options.nodeDefinitionReadinessReached ?? (() => true);
-  // Bind fetchApi: its route resolver requires the host's this value.
-  const fetchApiSeam = probeFetchApi(api);
-  const profileClient = createGenerationProfileClient({
-    fetchApi: fetchApiSeam.status === "ready" ? fetchApiSeam.value : undefined,
-  });
-  const loadProfile =
-    options.loadProfile ??
-    ((signal?: AbortSignal) => profileClient.load(signal));
-  // Reuse successful host observations; do not cache a transient refusal.
-  let pendingProfile: Promise<GenerationProfile> | undefined;
   // The exact workflow object is the only durable in-session owner. Retaining
   // the write-time IDs here avoids rediscovering ownership from user topology.
   const ownedByWorkflow = new WeakMap<object, OwnedGraphReference>();
-  const profile = (signal?: AbortSignal): Promise<GenerationProfile> => {
-    if (pendingProfile === undefined)
-      pendingProfile = Promise.resolve(loadProfile(signal)).catch(
-        (error: unknown) => {
-          pendingProfile = undefined;
-          throw error;
-        },
-      );
-    return pendingProfile;
-  };
-  const admission = async (
-    taskMode: string,
-    settings: { signal?: AbortSignal; refresh?: boolean } = {},
-  ): Promise<AppModeAdmission> => {
-    if (settings.refresh === true) pendingProfile = undefined;
-    try {
-      return admitGenerationProfile(await profile(settings.signal), taskMode);
-    } catch {
-      // CRITICAL: fail closed. A host that cannot say whether generation is
-      // possible has not qualified it, and guessing here is how a shell queues a
-      // graph the host cannot run.
-      return {
-        status: "refused",
-        reason: "profile_unavailable",
-        remediation: "upgrade_host",
-        unsatisfiedSlots: [],
-      };
-    }
-  };
+  const admission = createAppModeProfileAdmission(api, options);
   const preparedCanvases = new WeakSet<object>();
   const cropSources = createImageCropSources({
     api,
@@ -492,7 +454,7 @@ export function createAppModeController(
     if (connecting) validateConnectInputs(inputs);
     else if (options.useExisting === true) validateExistingInputs(inputs);
     else if (canvasOnly) validateCanvasPreparationInputs(inputs);
-    else validateInputs(inputs);
+    else validatePreparedMaterializationInputs(inputs, options);
     validatePreparedCanonicalStart(inputs, options);
     if (connecting && prepareManaged !== undefined)
       throw new AppModeError(
@@ -562,6 +524,7 @@ export function createAppModeController(
     // on canvasOnly, never materialize: managed starts on that route still queue.
     if (
       !adopting &&
+      options.preparedSequenceMedia === undefined &&
       inputs.task_mode !== "t2va" &&
       (!canvasOnly || hasChosenCanvasMedia(inputs))
     ) {
@@ -620,6 +583,7 @@ export function createAppModeController(
         admitted,
         preparedCanonicalPrompt: options.preparedCanonicalPrompt,
         canvasOnly,
+        preparedSequenceMedia: options.preparedSequenceMedia,
       });
       ownedReference = resolved.ownedReference;
       materializedMedia = resolved.materializedMedia;
@@ -659,6 +623,17 @@ export function createAppModeController(
     // write. Restoring an adopting/detached exception here
     // reintroduces stale Request intent/duration and can overwrite live edits.
     let hostLoad: OwnedGraphWriteAuthority | undefined;
+    const readCandidateGraph = () =>
+      hostLoad === undefined ? candidateWorkflow : readVisibleGraph(app);
+    const assertSequenceGraph =
+      options.preparedSequenceMedia === undefined
+        ? undefined
+        : createPreparedSequenceGraphGuard(
+            candidateWorkflow,
+            Number(ownedReference.anchorNodeId),
+            materializedMedia!,
+            inputs,
+          );
     if (candidateRequiresHostLoadBeforeCompile(candidateWorkflow)) {
       try {
         throwIfCancelled(signal);
@@ -688,6 +663,7 @@ export function createAppModeController(
         const written = readQueueMetadataCompatibleGraph(
           readVisibleGraph(app),
         ).graph;
+        assertSequenceGraph?.(written, "root-write");
         if (
           observeOwnedGraph(written, ownedReference).fingerprint !==
           expectedOwnedGraph.fingerprint
@@ -715,6 +691,8 @@ export function createAppModeController(
         throw new AppModeError(
           "compile_failed",
           "the host rejected the validated graph transaction",
+          undefined,
+          "root_write",
         );
       }
     }
@@ -730,6 +708,7 @@ export function createAppModeController(
               candidateWorkflow,
             );
       throwIfCancelled(signal);
+      assertSequenceGraph?.(readCandidateGraph(), "post-compile");
     } catch (error) {
       await restoreOwnedGraph();
       if (signal?.aborted)
@@ -741,6 +720,8 @@ export function createAppModeController(
       throw new AppModeError(
         "compile_failed",
         "the host could not compile the H3 graph candidate",
+        undefined,
+        "post_compile_check",
       );
     }
     const compiledRoute: CompiledPromptRoute = connecting
@@ -749,23 +730,38 @@ export function createAppModeController(
         ? "existing"
         : options.preparedCanonicalPrompt === undefined
           ? "materialize"
-          : "prepared";
-    if (
-      !isSafeCompiledPromptEnvelope(compiled) ||
-      !isCompatibleExistingPrompt(compiled, compiledRoute, existingSubject) ||
-      !compiledPromptMatchesRequestedRoute(
-        compiled,
-        inputs,
-        compiledRoute,
-        materializedMedia,
-        existingSubject,
-        options.preparedCanonicalPrompt,
-        canvasOnly,
-      )
-    ) {
+          : "prepared"; // IMPORTANT: first false wins; rechecking after rollback changes host reads.
+    const compileAdmission = !isSafeCompiledPromptEnvelope(compiled)
+      ? "envelope"
+      : !isCompatibleExistingPrompt(
+            compiled,
+            compiledRoute,
+            existingSubject,
+            options.preparedSequenceMedia,
+          )
+        ? "compatibility"
+        : !compiledPromptMatchesRequestedRoute(
+              compiled,
+              inputs,
+              compiledRoute,
+              materializedMedia,
+              existingSubject,
+              options.preparedCanonicalPrompt,
+              canvasOnly,
+              options.preparedSequenceMedia,
+            )
+          ? "requested_route"
+          : undefined;
+    if (compileAdmission !== undefined) {
       await restoreOwnedGraph();
       const failure = compiledPromptAdmissionFailure(compiled, adopting);
-      throw new AppModeError(failure.code, failure.message);
+      throw new AppModeError(
+        failure.code,
+        failure.message,
+        undefined,
+        failure.code === "compile_failed" ? "compiled_admission" : undefined,
+        compileAdmission,
+      );
     }
     if (
       options.useExisting === true &&
@@ -810,6 +806,8 @@ export function createAppModeController(
       throw new AppModeError(
         "compile_failed",
         "host compilation returned no stable prompt identity",
+        undefined,
+        "compiled_fingerprint",
       );
     }
     // CRITICAL: compiled loader names are host-owned. Keep graph/prompt binding
@@ -831,38 +829,19 @@ export function createAppModeController(
           : options.replaceExisting
             ? "replace"
             : "new";
-        let sourceIdentity: InputGeometryReceipt | undefined;
-        if (inputs.task_mode === "i2va" && managedRoute !== "existing") {
-          try {
-            if (
-              options.observeSourceIdentity === undefined ||
-              inputs.first_frame_source === undefined
-            )
-              throw new AppModeError(
-                "incompatible_seam",
-                "source identity observation is unavailable; keep the canvas and use native nodes",
-              );
-            sourceIdentity = await options.observeSourceIdentity(
-              buildManagedSourceIdentityRequest(
-                serialized,
-                inputs.first_frame_source,
-              ),
-              signal,
-            );
-            throwIfCancelled(signal);
-          } catch (error) {
-            if (signal?.aborted)
-              throw new AppModeError(
-                "cancelled",
-                "App Mode was cancelled before source identity was accepted",
-              );
-            if (error instanceof AppModeError) throw error;
-            throw new AppModeError(
-              "incompatible_seam",
-              "source identity could not be observed safely; reselect the image or use native nodes",
-            );
-          }
-        }
+        assertSequenceGraph?.(readCandidateGraph(), "source-observe");
+        const { sourceIdentity, sequenceSources } =
+          await observeManagedAppModeSources(
+            inputs,
+            options,
+            managedRoute,
+            serialized,
+            completeManagedCompiled ?? compiled,
+            materializedMedia,
+            Number(ownedReference.anchorNodeId),
+            readCandidateGraph,
+          );
+        assertSequenceGraph?.(readCandidateGraph(), "source-observe");
         const preparation = buildManagedAppModePreparation(
           completeManagedCompiled ?? compiled,
           inputs,
@@ -872,6 +851,7 @@ export function createAppModeController(
           sourceIdentity,
           existingSubject,
           options.projectManagedExecution,
+          sequenceSources,
         );
         recordManagedExecutionIdentity(
           "preflight_projection",
@@ -879,6 +859,7 @@ export function createAppModeController(
         );
         managedAuthority = await prepareManaged(preparation);
         throwIfCancelled(signal);
+        assertSequenceGraph?.(readCandidateGraph(), "managed-bind");
       } catch (error) {
         try {
           await managedAuthority?.onQueueFailed("not_invoked");
@@ -892,6 +873,19 @@ export function createAppModeController(
             "App Mode was cancelled before managed preparation completed",
           );
         if (error instanceof AppModeError) throw error;
+        // IMPORTANT: a committed media pause already owns the parent revision. Preserve
+        // its bounded reason across AppMode, or the UI loses the corrective action.
+        const mediaCode =
+          error instanceof ManagedSerialSequenceRunnerError
+            ? error.code
+            : error instanceof SequenceMediaBindingError
+              ? error.category
+              : null;
+        if (
+          mediaCode === "sequence_media_changed" ||
+          mediaCode === "sequence_media_unavailable"
+        )
+          throw sequenceMediaAppModeError(mediaCode, error);
         throw new AppModeError(
           "queue_failed",
           "the managed Context preparation could not be completed",
@@ -945,6 +939,7 @@ export function createAppModeController(
       const written = readQueueMetadataCompatibleGraph(
         readVisibleGraph(app),
       ).graph;
+      assertSequenceGraph?.(written, "root-write");
       const writtenOwned = observeOwnedGraph(written, ownedReference);
       if (writtenOwned.fingerprint !== expectedOwnedGraph.fingerprint)
         throw new AppModeError(
@@ -1001,6 +996,7 @@ export function createAppModeController(
       | undefined;
     try {
       throwIfCancelled(signal);
+      assertSequenceGraph?.(readVisibleGraph(app), "pre-queue");
       const beforeQueueCompiled = fingerprint(compiled);
       if (beforeQueueCompiled !== compiledPromptFingerprint) {
         throw new AppModeError(
@@ -1187,6 +1183,11 @@ export function createAppModeController(
       if (error instanceof AppModeError) {
         if (error.code === "rollback_failed") throw error;
         if (error.code === "stale_graph") throw error;
+        if (
+          error.code === "sequence_media_changed" ||
+          error.code === "sequence_media_unavailable"
+        )
+          throw error;
       }
       throw new AppModeError(
         "queue_failed",

@@ -216,7 +216,8 @@
             "receipt_invalid",
             "store_unavailable",
             "service_closed",
-            "runtime_unavailable"
+            "runtime_unavailable",
+            "path_too_deep"
           ]
         },
         "currency": {
@@ -319,7 +320,8 @@
                   "receipt_invalid",
                   "store_unavailable",
                   "service_closed",
-                  "runtime_unavailable"
+                  "runtime_unavailable",
+                  "path_too_deep"
                 ]
               }
             }
@@ -520,6 +522,7 @@
             "not_ready",
             "resource_limit",
             "runtime_unavailable",
+            "path_too_deep",
             "preview_unavailable",
             "internal_error"
           ]

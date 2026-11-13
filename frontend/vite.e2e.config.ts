@@ -9,6 +9,7 @@ import { resolveH3ContextBuildIdentity } from "./buildProvenance.js";
 import { authoringOutputFixture } from "./e2e/authoringOutputServer.js";
 import { serviceLoopbackFixture } from "./e2e/serviceLoopback.js";
 import { presentationStagePlugin } from "./e2e/presentationStagePlugin.js";
+import { presetFontAllow } from "./packagedPresetFontPaths.js";
 
 const tokensCssPath = fileURLToPath(
   new URL("./src/styles/tokens.css", import.meta.url),
@@ -75,5 +76,10 @@ export default defineConfig({
     }),
     __H3_CONTEXT_BUILD_PROVENANCE__: JSON.stringify(h3BuildProvenance),
   },
-  server: { strictPort: true },
+  server: {
+    strictPort: true,
+    fs: {
+      allow: presetFontAllow(fileURLToPath(new URL("./e2e", import.meta.url))),
+    },
+  },
 });

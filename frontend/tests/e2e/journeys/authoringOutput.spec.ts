@@ -130,6 +130,43 @@ async function blobCounts(page: Page) {
   );
 }
 
+test("a deep-folder refusal explains the remedy and permits a deliberate retry", async ({
+  page,
+}) => {
+  const counts = await install(page);
+  let refused = false;
+  await page.route("**/h3-context/v1/authoring/**", async (route) => {
+    if (!refused && route.request().method() === "POST") {
+      refused = true;
+      await route.fulfill({
+        status: 503,
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schema: "h3.authoring.output_error.v1",
+          code: "path_too_deep",
+        }),
+      });
+    } else await route.fallback();
+  });
+  await page.getByRole("button", { name: "Toggle capability" }).click();
+  const render = page.getByRole("button", { name: "Render final video" });
+  await render.click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "The ComfyUI folder path is too deep for rendering on Windows. Move ComfyUI to a shorter folder.",
+  );
+  await expect(
+    page.getByRole("link", { name: "Download original" }),
+  ).toHaveCount(0);
+  expect(counts.preview).toBe(0);
+  await expect(render).toBeEnabled();
+  await render.click();
+  await expect(
+    page.getByRole("link", { name: "Download original" }),
+  ).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(counts.create).toBe(1);
+});
+
 test("explicit native download and bounded preview lifecycle at responsive widths", async ({
   page,
 }) => {

@@ -62,6 +62,10 @@ def _declared_font_artifacts() -> frozenset[str]:
             readership.FONT_MANIFEST_PATH,
             f"{readership.PACKAGE}/{manifest['license']['package_path']}",
             *face_paths,
+            *(
+                f"{readership.PACKAGE}/{asset['license']['package_path']}"
+                for asset in manifest["font_assets"]
+            ),
         }
     )
 
@@ -107,7 +111,8 @@ class TheCoverageIsTotalTests(unittest.TestCase):
             set(declared),
         )
         self.assertEqual(sum(path.endswith(".ttf") for path in declared), 4)
-        self.assertEqual(sum(path.endswith(".txt") for path in declared), 1)
+        self.assertEqual(sum(path.endswith(".txt") for path in declared), 2)
+        self.assertEqual(sum(path.endswith(".otf") for path in declared), 8)
         self.assertIn(readership.FONT_MANIFEST_PATH, declared)
 
     def test_every_row_carries_a_known_disposition(self) -> None:
@@ -171,22 +176,22 @@ class TheClassComesFromTheReadersTests(unittest.TestCase):
         def write_fixture(root: Path, *, omit: str | None = None, extra: bool = False) -> None:
             fonts = root / readership.FONTS
             fonts.mkdir(parents=True)
-            face_paths = [f"fonts/face-{index}.ttf" for index in range(4)]
-            manifest = {
-                "font_assets": [{"faces": [{"package_path": path} for path in face_paths]}],
-                "license": {"package_path": "fonts/license.txt"},
-            }
+            manifest = json.loads((REPO_ROOT / readership.FONT_MANIFEST_PATH).read_bytes())
+            face_paths = [
+                face["package_path"] for asset in manifest["font_assets"] for face in asset["faces"]
+            ]
+            license_paths = {asset["license"]["package_path"] for asset in manifest["font_assets"]}
             (root / readership.FONT_MANIFEST_PATH).write_text(
                 json.dumps(manifest), encoding="utf-8"
             )
-            for package_path in (*face_paths, "fonts/license.txt"):
+            for package_path in (*face_paths, *license_paths):
                 if package_path != omit:
                     (root / readership.PACKAGE / package_path).write_bytes(b"fixture")
             if extra:
                 (fonts / "undeclared.ttf").write_bytes(b"fixture")
 
         for label, omitted, extra in (
-            ("missing", "fonts/face-3.ttf", False),
+            ("missing", "fonts/NotoSansTC-Regular.otf", False),
             ("invented", None, True),
         ):
             with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
@@ -201,19 +206,8 @@ class TheClassComesFromTheReadersTests(unittest.TestCase):
             root = Path(directory)
             fonts = root / readership.FONTS
             fonts.mkdir(parents=True)
-            manifest = {
-                "font_assets": [
-                    {
-                        "faces": [
-                            {"package_path": "fonts/a.ttf"},
-                            {"package_path": "fonts/b.ttf"},
-                            {"package_path": "fonts/c.ttf"},
-                            {"package_path": "fonts/../outside.ttf"},
-                        ]
-                    }
-                ],
-                "license": {"package_path": "fonts/license.txt"},
-            }
+            manifest = json.loads((REPO_ROOT / readership.FONT_MANIFEST_PATH).read_bytes())
+            manifest["font_assets"][1]["faces"][0]["package_path"] = "fonts/../outside.otf"
             (root / readership.FONT_MANIFEST_PATH).write_text(
                 json.dumps(manifest), encoding="utf-8"
             )
@@ -319,6 +313,110 @@ class TheArtifactIsRegeneratedNotEditedTests(unittest.TestCase):
                     row.startswith(f"{readership.CONTRACTS}/")
                     or row.startswith(f"{readership.FONTS}/")
                 )
+
+
+class FontReadPrimitiveTests(unittest.TestCase):
+    @staticmethod
+    def _program(helper_body: str, loader_body: str | None = None) -> str:
+        loader_body = loader_body or (
+            '    _read_font_input(root, f"fonts/{FONT_MANIFEST_FILENAME}", "manifest")\n'
+            '    _read_font_input(root, license_wire["package_path"], "license")\n'
+            '    _read_font_input(root, face["package_path"], "font")\n'
+        )
+        return (
+            "def _read_font_input(root, package_path, kind):\n"
+            + helper_body
+            + "\ndef _load_packaged_font_manifest_from_root(root):\n"
+            + loader_body
+        )
+
+    @staticmethod
+    def _valid_helper() -> str:
+        return (
+            "    relative, resolved = _safe_package_file(root, package_path)\n"
+            "    payload = _read_bounded(resolved, maximum, missing)\n"
+            "    return payload\n"
+        )
+
+    def _assert_program(self, program: str, *, credited: bool) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reader = root / readership.FONT_RUNTIME_READER
+            reader.parent.mkdir(parents=True)
+            reader.write_text(program, encoding="utf-8")
+            with patch.object(readership, "ROOT", root):
+                if credited:
+                    self.assertEqual(
+                        readership._font_runtime_reader(),
+                        readership.FONT_RUNTIME_READER,  # noqa: SLF001
+                    )
+                else:
+                    with self.assertRaisesRegex(
+                        readership.ReadershipError, "lacks executable dynamic reads"
+                    ):
+                        readership._font_runtime_reader()  # noqa: SLF001
+
+    def test_live_loader_and_legacy_direct_reads_are_credited(self) -> None:
+        self.assertEqual(readership._font_runtime_reader(), readership.FONT_RUNTIME_READER)  # noqa: SLF001
+        self._assert_program(
+            "def _load_packaged_font_manifest_from_root(root):\n"
+            '    _, manifest = _safe_package_file(root, f"fonts/{FONT_MANIFEST_FILENAME}")\n'
+            '    _, license_path = _safe_package_file(root, license_wire["package_path"])\n'
+            '    _, font_path = _safe_package_file(root, face["package_path"])\n'
+            "    _read_bounded(manifest, maximum, missing)\n"
+            "    _read_bounded(license_path, maximum, missing)\n"
+            "    _read_bounded(font_path, maximum, missing)\n",
+            credited=True,
+        )
+        self._assert_program(self._program(self._valid_helper()), credited=True)
+
+    def test_resolving_without_reading_does_not_credit_the_helper(self) -> None:
+        self._assert_program(
+            self._program("    relative, resolved = _safe_package_file(root, package_path)\n"),
+            credited=False,
+        )
+
+    def test_reading_a_different_path_does_not_credit_the_helper(self) -> None:
+        self._assert_program(
+            self._program(
+                self._valid_helper().replace("_read_bounded(resolved,", "_read_bounded(other_path,")
+            ),
+            credited=False,
+        )
+
+    def test_uncalled_and_string_only_helpers_are_not_reader_evidence(self) -> None:
+        for loader in (
+            "    return None\n",
+            '    "_read_font_input(root, face[\\"package_path\\"], kind)"\n',
+        ):
+            with self.subTest(loader=loader):
+                self._assert_program(self._program(self._valid_helper(), loader), credited=False)
+
+    def test_one_path_owner_is_refused_despite_three_distinct_reads(self) -> None:
+        loader = (
+            '    _read_font_input(root, f"fonts/{FONT_MANIFEST_FILENAME}", "manifest")\n'
+            '    _read_font_input(root, face["other_path"], "license")\n'
+            '    _read_font_input(root, face["package_path"], "font")\n'
+        )
+        self._assert_program(self._program(self._valid_helper(), loader), credited=False)
+
+    def test_a_qualifying_loader_cannot_credit_an_unqualified_helper(self) -> None:
+        for helper in (
+            self._valid_helper().replace(
+                "_safe_package_file(root,", "_safe_package_file(other_root,"
+            ),
+            self._valid_helper().replace("root, package_path)", "root, other_path)"),
+            "    def uncalled():\n"
+            "        relative, resolved = _safe_package_file(root, package_path)\n"
+            "        return _read_bounded(resolved, maximum, missing)\n"
+            "    return None\n",
+            "    relative, resolved = _safe_package_file(root, package_path)\n"
+            "    def uncalled():\n"
+            "        return _read_bounded(resolved, maximum, missing)\n"
+            "    return None\n",
+        ):
+            with self.subTest(helper=helper):
+                self._assert_program(self._program(helper), credited=False)
 
 
 if __name__ == "__main__":

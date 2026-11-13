@@ -48,6 +48,7 @@ function nativeHarness(
     rvfc?: boolean;
     play?: () => Promise<void>;
     microsecondFloor?: boolean;
+    readyState?: number;
   } = {},
 ) {
   const listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
@@ -78,6 +79,7 @@ function nativeHarness(
     return id;
   });
   const video = {
+    readyState: options.readyState ?? 1,
     get currentTime() {
       return currentTime;
     },
@@ -237,6 +239,95 @@ async function openExactTransport(
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("native metadata handover", () => {
+  it.each(["request_video_frame_callback", "event_fallback"] as const)(
+    "refuses HAVE_NOTHING before observing a frame with %s",
+    async (frameObserver) => {
+      vi.useFakeTimers();
+      const started = Date.now();
+      const native = nativeHarness({ readyState: 0 });
+      const release = vi.fn(async () => undefined);
+      const factory = createHtmlMediaElementTransportFactory(
+        async () => ({ element: native.video, release }),
+        { frameObserver },
+      );
+
+      await expect(factory(request())).rejects.toMatchObject({
+        code: "metadata_unavailable",
+        message: "metadata_unavailable",
+      });
+
+      expect(Date.now()).toBe(started);
+      expect(release).toHaveBeenCalledOnce();
+      expect(native.pause).toHaveBeenCalledOnce();
+      expect(native.removeAttribute).toHaveBeenCalledExactlyOnceWith("src");
+      expect(native.load).toHaveBeenCalledOnce();
+      expect(native.requestVideoFrameCallback).not.toHaveBeenCalled();
+      expect(native.pendingCallbacks()).toBe(0);
+      for (const event of [
+        "loadedmetadata",
+        "seeked",
+        "timeupdate",
+        "error",
+        "ended",
+      ])
+        expect(native.listenerCount(event)).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each([1, 2, 3, 4])(
+    "accepts metadata-ready native state %i without resetting its source",
+    async (readyState) => {
+      const native = nativeHarness({ readyState });
+      const { transport, release } = await openTransport(native);
+
+      expect(transport.ownerId).toBe("owner-a");
+      expect(native.load).not.toHaveBeenCalled();
+      expect(native.removeAttribute).not.toHaveBeenCalled();
+      expect(release).not.toHaveBeenCalled();
+      await transport.close();
+      expect(release).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("refuses a video that never loads without waiting for metadata or the native deadline", async () => {
+    vi.useFakeTimers();
+    const native = nativeHarness({ readyState: 0 });
+    const { video } = native;
+    const release = vi.fn(async () => undefined);
+    const factory = createHtmlMediaElementTransportFactory(async () => ({
+      element: video,
+      release,
+    }));
+
+    await expect(factory(request())).rejects.toMatchObject({
+      code: "metadata_unavailable",
+    });
+    expect(video.readyState).toBe(0);
+    expect(native.listenerCount("loadedmetadata")).toBe(0);
+    expect(release).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("preserves transport_failure when refusing metadata cannot release its owner", async () => {
+    const native = nativeHarness({ readyState: 0 });
+    const release = vi.fn(async () => {
+      throw new Error("release failed");
+    });
+    const factory = createHtmlMediaElementTransportFactory(async () => ({
+      element: native.video,
+      release,
+    }));
+
+    await expect(factory(request())).rejects.toMatchObject({
+      code: "transport_failure",
+    });
+    expect(release).toHaveBeenCalledOnce();
+    expect(native.load).toHaveBeenCalledOnce();
+  });
 });
 
 describe("M25-12 native HTML media transport", () => {

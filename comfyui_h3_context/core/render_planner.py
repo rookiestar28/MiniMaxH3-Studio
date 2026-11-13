@@ -921,9 +921,10 @@ def _validate_font_facts(
             raise _reject("font_asset_unsupported", "title font is outside packaged fallback order")
         if binding.weight != clip.text.weight or binding.style != clip.text.style:
             raise _reject("font_style_unsupported", "title style lacks packaged font authority")
-        if binding.font_asset_id != clip.text.font_asset_id or binding.text_fingerprint != (
-            canonical_fingerprint({"content": clip.text.content})
-        ):
+        # CRITICAL: authoring_render_source._require_resolved_font_bindings validates the
+        # requested-to-resolved relation before planning. Restoring id equality here rejects
+        # valid regional fallback, whose resolved id differs from the requested id.
+        if binding.text_fingerprint != (canonical_fingerprint({"content": clip.text.content})):
             raise _reject("font_glyph_unsupported", "title text lacks packaged glyph authority")
 
 
@@ -1077,7 +1078,12 @@ def plan_render(
     font_facts: PackagedFontFacts,
     renderer_profile: RendererCapabilityProfile | None = None,
 ) -> RenderPlanV1:
-    """Build one deterministic plan without executing or qualifying a renderer."""
+    """Build one deterministic plan without executing or qualifying a renderer.
+
+    Production callers must first validate the requested-to-resolved font relation with
+    authoring_render_source._require_resolved_font_bindings. Resolved regional fallback ids
+    may differ from requested ids; restoring id equality here would reject valid titles.
+    """
 
     if type(snapshot) is not PublicCompositionSnapshot:
         raise _reject("invalid_contract", "render planner requires a typed public snapshot")

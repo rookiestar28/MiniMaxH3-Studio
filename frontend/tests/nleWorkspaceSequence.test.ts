@@ -7,6 +7,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { observeOwnedGraph } from "../src/host/ownedGraphIdentity";
+import { existingManagedHostGraphFixture } from "./support/managedHostGraphFixture";
+import { H3_NODE_TYPES } from "../src/host/graphAdapter";
+import type { ManagedSequenceState } from "../src/host/managedSequenceClient";
 import {
   NLE_SEQUENCE_POLL_INTERVAL_MS,
   createNleWorkspaceSession,
@@ -185,11 +188,278 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
+describe("sequence diagnostics projection", () => {
+  it.each(["304", "failed read"])(
+    "refreshes diagnostics through %s without changing authority or UI",
+    async (mode) => {
+      const ctx = subject();
+      const diagnostics = {
+        parentState: "active",
+        activeChildOrdinal: null,
+        gate: {
+          childOrdinal: 2,
+          artifactRecorded: true,
+          terminalKindKnown: true,
+          terminalFingerprintPresent: true,
+          released: true,
+          parentTerminalRecorded: true,
+        },
+        successor: { ordinal: 3, prepared: false },
+      };
+      Object.assign(ctx.snapshot, {
+        parentSequenceId: "parent.1",
+        parentState: "active",
+        diagnostics,
+      });
+      ctx.setPointer({
+        parentSequenceId: "parent.1",
+        readAuthorityFingerprint: fp("f"),
+      });
+      const previous = ctx.session.nleWorkspace.sequence;
+      if (mode === "304")
+        ctx.sequenceRead.mockResolvedValueOnce({
+          status: 304,
+          etag: "ignored",
+          projection: null,
+        } as never);
+      else
+        ctx.sequenceRead.mockRejectedValueOnce(
+          new Error("synthetic read failure"),
+        );
+      await ctx.nle.nleRefreshSequenceProjection();
+      const current = ctx.session.nleWorkspace.sequence;
+      expect(current.diagnostics).toEqual(diagnostics);
+      expect(current.projection).toBe(previous.projection);
+      expect(current.etag).toBe(previous.etag);
+      expect(current.ui).toBe(previous.ui);
+      expect(current.failure).toBe(previous.failure);
+      expect(ctx.actions.startManagedSerialSequence).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("sequence projection failure precedence", () => {
+  function activeSequence() {
+    const ctx = subject();
+    Object.assign(ctx.snapshot, {
+      attached: true,
+      parentSequenceId: "parent.1",
+      parentState: "active",
+      activeSegmentId: "segment.one",
+      activeQueuePromptId: "prompt.1",
+    });
+    ctx.setPointer({
+      parentSequenceId: "parent.1",
+      readAuthorityFingerprint: fp("f"),
+    });
+    ctx.session.nleWorkspace = Object.freeze({
+      ...ctx.session.nleWorkspace,
+      sequence: Object.freeze({
+        ...ctx.session.nleWorkspace.sequence,
+        ui: "detach_ready" as const,
+      }),
+    });
+    return ctx;
+  }
+
+  // Same projection transport fixture as the owning ETag poll case; client decoding is separate.
+  function readResult(state: ManagedSequenceState, etag = '"accepted"') {
+    return {
+      status: 200,
+      etag,
+      projection: {
+        parentSequenceId: "parent.1",
+        state,
+        activeSegmentId: state === "active" ? "segment.one" : null,
+        revision: 3,
+      },
+    };
+  }
+
+  async function acceptActive(ctx: ReturnType<typeof activeSequence>) {
+    ctx.sequenceRead.mockResolvedValueOnce(readResult("active") as never);
+    await ctx.nle.nleRefreshSequenceProjection();
+    return ctx.session.nleWorkspace.sequence;
+  }
+
+  it.each([
+    ["succeeded", "finished"],
+    ["cancelled", "finished"],
+    ["paused_failure", "failed"],
+  ] as const)(
+    "keeps explicit %s parent authority over a local failure",
+    async (parentState, ui) => {
+      const ctx = activeSequence();
+      await acceptActive(ctx);
+      ctx.snapshot.failure = "managed_sequence_rejected";
+      ctx.sequenceRead.mockResolvedValueOnce(
+        readResult(parentState, '"terminal"') as never,
+      );
+      await ctx.nle.nleRefreshSequenceProjection();
+      expect(ctx.session.nleWorkspace.sequence.ui).toBe(ui);
+      expect(ctx.session.nleWorkspace.sequence.projection?.state).toBe(
+        parentState,
+      );
+      expect(ctx.session.nleWorkspace.sequence.failure).toBe(
+        parentState === "paused_failure" ? "managed_sequence_rejected" : null,
+      );
+      expect(ctx.actions.startManagedSerialSequence).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps a known local failure when a 200 parent projection is active", async () => {
+    const ctx = activeSequence();
+    ctx.snapshot.failure = "managed_sequence_rejected";
+    await acceptActive(ctx);
+    expect(ctx.session.nleWorkspace.sequence.ui).toBe("failed");
+    expect(ctx.session.nleWorkspace.sequence.failure).toBe(
+      "managed_sequence_rejected",
+    );
+    expect(ctx.session.nleWorkspace.sequence.projection?.state).toBe("active");
+    expect(ctx.actions.startManagedSerialSequence).not.toHaveBeenCalled();
+  });
+
+  it.each(["304", "failed read"] as const)(
+    "shows a known local failure through %s and retains the accepted projection and ETag",
+    async (read) => {
+      const ctx = activeSequence();
+      const accepted = await acceptActive(ctx);
+      ctx.snapshot.failure = "managed_sequence_rejected";
+      if (read === "failed read")
+        ctx.sequenceRead.mockRejectedValueOnce(
+          new Error("synthetic private read detail"),
+        );
+      await ctx.nle.nleRefreshSequenceProjection();
+      const current = ctx.session.nleWorkspace.sequence;
+      expect(current.ui).toBe("failed");
+      expect(current.failure).toBe("managed_sequence_rejected");
+      expect(current.projection).toBe(accepted.projection);
+      expect(current.etag).toBe(accepted.etag);
+      expect(ctx.actions.startManagedSerialSequence).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["late active reply", "succeeded", null, "finished"],
+    ["late succeeded reply", "active", "managed_sequence_rejected", "failed"],
+    ["late read rejection", "succeeded", null, "finished"],
+  ] as const)(
+    "ignores %s after a newer accepted state",
+    async (late, newParent, failure, ui) => {
+      const ctx = activeSequence();
+      await acceptActive(ctx);
+      let resolve!: (value: unknown) => void;
+      let reject!: (reason: Error) => void;
+      const deferred = new Promise<unknown>((yes, no) => {
+        resolve = yes;
+        reject = no;
+      });
+      ctx.sequenceRead.mockImplementationOnce(() => deferred as never);
+      const older = ctx.nle.nleRefreshSequenceProjection();
+      ctx.snapshot.failure = failure;
+      ctx.sequenceRead.mockResolvedValueOnce(
+        readResult(newParent, '"newer"') as never,
+      );
+      await ctx.nle.nleRefreshSequenceProjection();
+      const newer = ctx.session.nleWorkspace.sequence;
+      expect(newer.ui).toBe(ui);
+      const calls = ctx.sequenceRead.mock.calls as unknown as unknown[][];
+      expect((calls[1]![3] as AbortSignal).aborted).toBe(true);
+      if (late === "late read rejection")
+        reject(new Error("synthetic stale private read detail"));
+      else
+        resolve(
+          readResult(late === "late active reply" ? "active" : "succeeded"),
+        );
+      await older;
+      expect(ctx.session.nleWorkspace.sequence).toBe(newer);
+    },
+  );
+
+  it.each(["304", "failed read"] as const)(
+    "keeps no-failure behavior unchanged through %s",
+    async (read) => {
+      const ctx = activeSequence();
+      const accepted = await acceptActive(ctx);
+      if (read === "failed read")
+        ctx.sequenceRead.mockRejectedValueOnce(
+          new Error("synthetic private read detail"),
+        );
+      await ctx.nle.nleRefreshSequenceProjection();
+      expect(ctx.session.nleWorkspace.sequence).toBe(accepted);
+      expect(accepted.ui).toBe("detach_ready");
+      expect(accepted.failure).toBeNull();
+      expect(ctx.actions.startManagedSerialSequence).not.toHaveBeenCalled();
+    },
+  );
+});
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("M25-16 planning inside the workspace", () => {
+  it("captures frame bindings only on explicit Generate and leaves a refused capture retryable", async () => {
+    const ctx = subject();
+    await planThroughImport(ctx);
+    await ctx.nle.nleRequestReadiness();
+    const fixture = existingManagedHostGraphFixture({
+      task_mode: "i2va",
+      first_frame_source: "9",
+      user_intent: "synthetic",
+      duration_milliseconds: 8_000,
+      frame_count: 192,
+    });
+    const shellId = Object.entries(fixture.compiled.output).find(
+      ([, value]) =>
+        (value as { class_type?: string }).class_type ===
+        H3_NODE_TYPES.productShell,
+    )![0];
+    const projection = (ctx.session.workspaceState as { projection: object })
+      .projection;
+    Object.assign(projection, {
+      task_mode: "i2va",
+      correlation: { execution_node_id: shellId },
+      reference_candidates: [{ asset_id: "first_frame_1", kind: "image" }],
+    });
+    const graphToPrompt = vi.fn(async () => fixture.compiled);
+    Object.assign(ctx.deps, {
+      app: { graph: { serialize: () => fixture.workflow }, graphToPrompt },
+    });
+    const observe = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("synthetic unavailable"))
+      .mockResolvedValue({
+        schema: "h3.context.input_geometry.receipt.v2",
+        receipt_handle: "ig_" + "r".repeat(40),
+        source_fingerprint: fp("5"),
+      });
+    ctx.deps.inputGeometryClient = { observe };
+    expect(observe).not.toHaveBeenCalled();
+    await ctx.nle.nleStartSequence();
+    expect(ctx.actions.startManagedSerialSequence).not.toHaveBeenCalled();
+    expect(ctx.session.nleWorkspace.sequence).toMatchObject({
+      ui: "idle",
+      failure: "sequence_media_unavailable",
+      busy: false,
+    });
+    expect(ctx.nle.nleSequenceStartable()).toBe(true);
+    expect(ctx.session.nleWorkspace.readiness.status).toBe("ready");
+    await ctx.nle.nleStartSequence();
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(
+      ctx.actions.startManagedSerialSequence,
+    ).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        sequenceTaskMode: "i2va",
+        mediaBindings: expect.objectContaining({
+          schema: "h3.context.sequence_media_binding_set.v1",
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
   it("binds prepare_context to the exact Context and Production identities", async () => {
     const ctx = subject();
     ctx.nle.nleSetTargetSeconds(20);

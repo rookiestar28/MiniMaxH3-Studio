@@ -20,7 +20,7 @@ from typing import Any
 
 from ..core.authoring_render_jobs import RenderJobLimits
 from ..core.authoring_render_receipts import MeasuredRenderOutput, render_video_timing_fingerprint
-from ..core.safe_paths import validate_regular_file
+from ..core.safe_paths import _native_io_path, validate_regular_file
 from .authoring_render_process import (
     PinnedRenderExecutable,
     ProcessControl,
@@ -370,7 +370,11 @@ def measure_render_output(
             kernel = _kernel()
             # CRITICAL: keep the output deny-write/delete handle through all decoder passes.
             # Rechecking size/mtime after separate opens misses same-stat replacement races.
-            handle = kernel.CreateFileW(str(admitted), 0x80000000, 0x1, None, 3, 0x00200080, None)
+            # IMPORTANT: validation returns a logical locator, not a native long-path operand.
+            # Keep child protocol arguments logical while converting every filesystem check.
+            handle = kernel.CreateFileW(
+                str(_native_io_path(admitted)), 0x80000000, 0x1, None, 3, 0x00200080, None
+            )
             if not handle or handle == ctypes.c_void_p(-1).value:
                 raise RenderProbeError()
             try:
@@ -382,7 +386,7 @@ def measure_render_output(
                 raise
             scope.callback(os.close, descriptor)
             metadata = os.fstat(descriptor)
-            expected = admitted.lstat()
+            expected = _native_io_path(admitted).lstat()
             identity = (metadata.st_dev, metadata.st_ino, metadata.st_size)
             if (
                 identity != (expected.st_dev, expected.st_ino, expected.st_size)
@@ -460,7 +464,9 @@ def measure_render_output(
             )
             if fingerprint() != before:
                 raise RenderProbeError()
-            current = validate_regular_file(admitted, maximum_bytes=limits.max_output_bytes).lstat()
+            current = _native_io_path(
+                validate_regular_file(admitted, maximum_bytes=limits.max_output_bytes)
+            ).lstat()
             if (current.st_dev, current.st_ino, current.st_size) != identity:
                 raise RenderProbeError()
             _guard(control)

@@ -39,6 +39,7 @@ export type RuntimeBlockerCode =
   | "snapshot_blocked"
   | "unsupported"
   | "resource_limit"
+  | "metadata_unavailable"
   | "transport_failure"
   | "cancelled";
 
@@ -2465,6 +2466,17 @@ export function createHtmlMediaElementTransportFactory(
       );
       if (!cleaned || !released) throw new RuntimeFailure("transport_failure");
       throw new RuntimeFailure("cancelled");
+    }
+    // IMPORTANT: owners must hand over metadata-ready video. At HAVE_NOTHING, currentTime only
+    // sets the default playback position; no seek receipt follows and a lost first frame times out.
+    if (acquired.element.readyState < 1) {
+      const cleaned = cleanNativeElement(acquired.element);
+      const released = await settleWithDeadline(
+        acquired.release(),
+        RUNTIME_PROFILE.limits.teardownDeadlineMs,
+      );
+      if (!cleaned || !released) throw new RuntimeFailure("transport_failure");
+      throw new RuntimeFailure("metadata_unavailable");
     }
     if (
       frameObserver === "request_video_frame_callback" &&

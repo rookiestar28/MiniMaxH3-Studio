@@ -150,6 +150,19 @@ test("the live empty V2 editor admits its first title and one undo returns to th
         before.authoringStateV2!.authoringFingerprint,
       commands: [{ kind: "create_track" }, { kind: "insert_title_clip" }],
     });
+    // IMPORTANT: the receipt count rises before the shell publishes the accepted
+    // authoring state and timeline. A single read right after the count can land
+    // in that gap and see no state at all. Wait for the asserted values, then read;
+    // do not turn these waits back into one-shot reads after the receipt poll.
+    await expect
+      .poll(async () => {
+        const settling = await shellSnapshot(page);
+        return [
+          settling.authoringStateV2?.contentEndExclusive,
+          settling.timelineSnapshot?.clips.length,
+        ];
+      })
+      .toEqual([24, 1]);
     const inserted = await shellSnapshot(page);
     expect(inserted.authoringStateV2?.contentEndExclusive).toBe(24);
     expect(inserted.timelineSnapshot?.clips).toHaveLength(1);
@@ -162,6 +175,15 @@ test("the live empty V2 editor admits its first title and one undo returns to th
     await expect
       .poll(async () => (await shellSnapshot(page)).receipts)
       .toBe(before.receipts + 2);
+    await expect
+      .poll(async () => {
+        const settling = await shellSnapshot(page);
+        return [
+          settling.authoringStateV2?.contentEndExclusive,
+          settling.timelineSnapshot,
+        ];
+      })
+      .toEqual([0, null]);
     const undone = await shellSnapshot(page);
     expect(undone.authoringStateV2?.tracks).toEqual(
       before.authoringStateV2?.tracks,
@@ -175,12 +197,17 @@ test("the live empty V2 editor admits its first title and one undo returns to th
     await expect
       .poll(async () => (await shellSnapshot(page)).receipts)
       .toBe(before.receipts + 3);
-    expect((await shellSnapshot(page)).authoringStateV2?.clips).toEqual(
+    await expect
+      .poll(
+        async () =>
+          (await shellSnapshot(page)).authoringStateV2?.contentEndExclusive,
+      )
+      .toBe(24);
+    const redone = await shellSnapshot(page);
+    expect(redone.authoringStateV2?.clips).toEqual(
       inserted.authoringStateV2?.clips,
     );
-    expect(
-      (await shellSnapshot(page)).authoringStateV2?.contentEndExclusive,
-    ).toBe(24);
+    expect(redone.authoringStateV2?.contentEndExclusive).toBe(24);
     expect(fixture.importRequests).toEqual([]);
     expect(fixture.productionActions).toEqual(productionBefore);
     expect(fixture.output.counts).toEqual({

@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "minimax-h3-studio"
-version = "1.4.1"
+version = "1.4.5"
 description = "Turn a description into a finished MiniMax H3 video without leaving ComfyUI, prompt, segments, continuity and final cut in one workbench."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -89,7 +89,7 @@ where = ["."]
 include = ["comfyui_h3_context*"]
 
 [tool.setuptools.package-data]
-comfyui_h3_context = ["py.typed", "contracts/*.json", "web/*.js", "fonts/*.json", "fonts/*.ttf", "fonts/*.txt"]
+comfyui_h3_context = ["py.typed", "contracts/*.json", "web/*.js", "fonts/*.json", "fonts/*.ttf", "fonts/*.otf", "fonts/*.txt"]
 
 [tool.ruff]
 target-version = "py310"

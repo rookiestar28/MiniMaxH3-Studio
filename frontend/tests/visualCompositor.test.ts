@@ -1,3 +1,4 @@
+import packagedTitle from "./fixtures/packagedTitlePreview.json";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import fixture from "../../tests/fixtures/m25_10_composition_contract_v1.json";
@@ -1705,4 +1706,103 @@ describe("M25-14 visual compositor", () => {
     expect(nestedStatus).toBe("unavailable");
     expect(nestedBlocker).toBe("resource_limit");
   });
+});
+
+// The retained TC400 wire shape uses synthetic identities here; no host handle is public.
+function packagedTitleSubject(fontId: string, weight: number) {
+  const wire = structuredClone(packagedTitle);
+  wire.clips[0]!.text.font_asset_id = fontId;
+  wire.clips[0]!.text.weight = weight;
+  if (!wire.assets.some((a) => a.asset_id === fontId))
+    wire.assets.push({ ...wire.assets[0]!, asset_id: fontId });
+  wire.public_fingerprint = publicCompositionFingerprint(wire);
+  const snapshot = decodePublicCompositionSnapshot(wire);
+  const scene = decodeResolvedScene(resolveCompositionScene(snapshot, 0));
+  return { snapshot, scene };
+}
+const packagedFaces = [
+  ["h3.font.noto_sans.v1", 400],
+  ["h3.font.noto_sans.v1", 700],
+  ["h3.font.noto_sans_tc.v1", 400],
+  ["h3.font.noto_sans_tc.v1", 700],
+  ["h3.font.noto_sans_sc.v1", 400],
+  ["h3.font.noto_sans_sc.v1", 700],
+  ["h3.font.noto_sans_jp.v1", 400],
+  ["h3.font.noto_sans_jp.v1", 700],
+  ["h3.font.noto_sans_kr.v1", 400],
+  ["h3.font.noto_sans_kr.v1", 700],
+] as const;
+
+describe("bundled title preview admission", () => {
+  it.each(packagedFaces)(
+    "draws bundled %s at %i through both compositor gates",
+    (id, weight) => {
+      const { snapshot, scene } = packagedTitleSubject(id, weight);
+      const { canvas, context } = harness();
+      const renderer = createVisualCompositor(canvas, snapshot);
+      const receipt = renderer.render(
+        scene,
+        new Map([
+          [
+            "title.TC400",
+            { kind: "font" as const, family: "BundledTitleFace" },
+          ],
+        ]),
+        1,
+      );
+      expect(
+        receipt,
+        JSON.stringify({ status: receipt.status, blocker: receipt.blocker }),
+      ).toMatchObject({
+        status: "presented",
+        blocker: null,
+        renderedLayerCount: 1,
+      });
+      expect(context.textDraws.length).toBeGreaterThan(0);
+      expect(context.font).toContain(String(weight));
+      renderer.close();
+    },
+  );
+  it.each(["unknown", "wrong-kind", "absent", "forged", "family"])(
+    "refuses %s title binding",
+    (bad) => {
+      let { snapshot, scene } = packagedTitleSubject(
+        bad === "unknown" ? "unbundled.font" : "h3.font.noto_sans_tc.v1",
+        400,
+      );
+      if (bad === "wrong-kind")
+        snapshot = {
+          ...snapshot,
+          assets: snapshot.assets.map((a) =>
+            a.assetId === "h3.font.noto_sans_tc.v1"
+              ? { ...a, kind: "image" as const }
+              : a,
+          ),
+        };
+      if (bad === "forged")
+        scene = { ...scene, publicFingerprint: "sha256:" + "0".repeat(64) };
+      const resources = new Map(
+        bad === "absent"
+          ? []
+          : [
+              [
+                "title.TC400",
+                {
+                  kind: "font" as const,
+                  family:
+                    bad === "family" ? "bad\u0000family" : "BundledTitleFace",
+                },
+              ],
+            ],
+      );
+      const { canvas, context } = harness();
+      const renderer = createVisualCompositor(canvas, snapshot);
+      expect(renderer.render(scene, resources, 1)).toMatchObject({
+        status: "unavailable",
+        blocker: bad === "forged" ? "stale_snapshot" : "source_unavailable",
+      });
+      expect(context.textDraws).toEqual([]);
+      renderer.close();
+    },
+  );
 });

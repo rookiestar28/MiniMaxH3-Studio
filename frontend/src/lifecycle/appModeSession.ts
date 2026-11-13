@@ -25,11 +25,9 @@ import {
   SequenceCoordinatorClientError,
   type SequenceCoordinatorResult,
 } from "../host/sequenceCoordinator";
-import type { AppModeEvent } from "./appModeMachine";
 import { managedJournal } from "../state/managedJournal";
 import {
   hasExistingGraphAuthority,
-  projectAppModeSnapshot,
   type ShellErrorCode,
 } from "../state/shellState";
 import { probeGraphSerializer } from "../host/hostSeams";
@@ -66,6 +64,7 @@ export function createAppModeSession(ctx: ShellRuntime) {
   const { session, deps, actions } = ctx;
   const {
     completeAppModeLifecycle,
+    sendAppModeLifecycle,
     failAppModeLifecycle,
     currentAppModeCapability,
     currentAppModeRun,
@@ -143,12 +142,6 @@ export function createAppModeSession(ctx: ShellRuntime) {
     session.retryableManagedProductionMember = undefined;
     session.productionAccumulationNotice = undefined;
     actions.renderCurrent();
-  }
-
-  function sendAppModeLifecycle(event: AppModeEvent, project = false): void {
-    const snapshot = deps.appModeLifecycle.send(event);
-    if (project)
-      session.state = projectAppModeSnapshot(snapshot, session.state);
   }
 
   async function prepareManagedAppMode(
@@ -951,7 +944,13 @@ export function createAppModeSession(ctx: ShellRuntime) {
       if (!isCurrentAppModeRun(run)) throw error;
       if (error instanceof AppModeError)
         managedJournal.recordAppModeError(journalRun, {
-          code: error.code,
+          // IMPORTANT: frame pause reasons are transient NLE state. Keep the durable
+          // AppMode journal vocabulary unchanged; the serial session preserves the reason.
+          code:
+            error.code === "sequence_media_changed" ||
+            error.code === "sequence_media_unavailable"
+              ? "queue_failed"
+              : error.code,
           source: error.source,
           ...(error.reason === undefined ? {} : { reason: error.reason.kind }),
         });

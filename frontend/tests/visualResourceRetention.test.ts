@@ -1524,8 +1524,8 @@ describe("independent decoded resource admission", () => {
         lease.body = {
           ...lease.body,
           blob: new Blob(
-            [new Uint8Array(field === "size" ? 1024 * 1024 + 1 : 8)],
-            { type: field === "mime" ? "font/otf" : "font/ttf" },
+            [new Uint8Array(field === "size" ? 12 * 1024 * 1024 + 1 : 8)],
+            { type: field === "mime" ? "font/woff2" : "font/ttf" },
           ),
         };
       });

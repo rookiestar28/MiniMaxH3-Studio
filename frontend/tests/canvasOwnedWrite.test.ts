@@ -45,3 +45,28 @@ describe("owned canvas write seam", () => {
     });
   });
 });
+
+describe("closed compile diagnostic origin", () => {
+  it("distinguishes the tabless root-write bootstrap refusal", async () => {
+    const hostApp = {
+      extensionManager: {
+        workflow: { activeWorkflow: null, openWorkflows: [] },
+      },
+      loadGraphData: vi.fn(() => {
+        throw new Error("synthetic bootstrap refusal");
+      }),
+    };
+    const release = vi.fn();
+    const pending = captureGraphWriteAuthority(hostApp, () => release);
+    await expect(
+      writeValidatedGraph(hostApp, { nodes: [], links: [] }, pending),
+    ).rejects.toMatchObject({
+      code: "compile_failed",
+      compileStep: "root_write_bootstrap",
+      message:
+        "compile_failed: the host rejected the validated graph transaction",
+    });
+    expect(hostApp.loadGraphData).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
+  });
+});

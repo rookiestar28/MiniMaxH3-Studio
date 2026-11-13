@@ -574,6 +574,8 @@ def _member(node: ast.AST, name: str, member: str) -> ast.AST:
 def _surface_nodes(
     definitions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef],
     names: Iterator[str],
+    *,
+    mask_keyframes: bool = True,
 ) -> Iterator[tuple[str, ast.AST]]:
     masked: dict[str, ast.AST] = {}
     for name in names:
@@ -581,7 +583,7 @@ def _surface_nodes(
         node: ast.AST | None = definitions.get(owner)
         if node is None:
             raise _changed("definition:" + owner)
-        if owner == IMAGE_TO_VIDEO:
+        if owner == IMAGE_TO_VIDEO and mask_keyframes:
             if owner not in masked:
                 masked[owner] = _masked_image_to_video(node)
             node = masked[owner]
@@ -669,6 +671,7 @@ def derive_manifest(
     source_revision: str,
     source_blob: str,
     definitions: tuple[str, ...],
+    mask_keyframes: bool = True,
 ) -> NativeT2VABaselineManifest:
     """Derive a manifest from an accepted source; refuses a surface whose closure is open."""
     tree = _parse(content)
@@ -686,7 +689,7 @@ def derive_manifest(
     ]
     imports = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
     try:
-        rows = list(_surface_nodes(top, iter(definitions)))
+        rows = list(_surface_nodes(top, iter(definitions), mask_keyframes=mask_keyframes))
     except _Refusal:
         raise ValueError("definition absent or differently shaped") from None
     # The closure is computed over top-level definitions; member rows are contained in them.

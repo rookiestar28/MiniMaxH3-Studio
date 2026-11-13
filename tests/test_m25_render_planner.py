@@ -212,6 +212,20 @@ def _inputs() -> tuple[
     return snapshot, manifest, _currentness(manifest), _font_facts(snapshot)
 
 
+def test_planner_accepts_adapter_authorized_regional_fallback() -> None:
+    snapshot, manifest, currentness, facts = _inputs()
+    regional = "h3.font.noto_sans_jp.v1"
+    binding = replace(facts.title_bindings[0], font_asset_id=regional)
+    facts = replace(
+        facts, fallback_order=(*facts.fallback_order, regional), title_bindings=(binding,)
+    )
+    facts = replace(facts, facts_fingerprint=packaged_font_facts_fingerprint(facts))
+    plan = plan_render(
+        snapshot=snapshot, source_manifest=manifest, currentness=currentness, font_facts=facts
+    )
+    assert plan.font_facts_fingerprint == facts.facts_fingerprint
+
+
 def _error_code(call: Any) -> str:
     with pytest.raises(RenderPlannerError) as exc_info:
         call()

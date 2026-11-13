@@ -1,0 +1,198 @@
+[
+  {
+    "id": "outline",
+    "style": {
+      "weight": 400,
+      "style": "normal",
+      "fill_rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "background_rgba": null,
+      "stroke": {
+        "rgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "width_px": 3
+      }
+    }
+  },
+  {
+    "id": "outlineYellow",
+    "style": {
+      "weight": 400,
+      "style": "normal",
+      "fill_rgba": [
+        255,
+        255,
+        0,
+        255
+      ],
+      "background_rgba": null,
+      "stroke": {
+        "rgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "width_px": 4
+      }
+    }
+  },
+  {
+    "id": "dropShadow",
+    "style": {
+      "weight": 400,
+      "style": "normal",
+      "fill_rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "background_rgba": null,
+      "shadow": {
+        "rgba": [
+          0,
+          0,
+          0,
+          128
+        ],
+        "offset_x_px": 3,
+        "offset_y_px": 3
+      }
+    }
+  },
+  {
+    "id": "outlineShadow",
+    "style": {
+      "weight": 400,
+      "style": "normal",
+      "fill_rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "background_rgba": null,
+      "stroke": {
+        "rgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "width_px": 3
+      },
+      "shadow": {
+        "rgba": [
+          0,
+          0,
+          0,
+          128
+        ],
+        "offset_x_px": 3,
+        "offset_y_px": 3
+      }
+    }
+  },
+  {
+    "id": "captionBox",
+    "style": {
+      "weight": 400,
+      "style": "normal",
+      "fill_rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "background_rgba": [
+        0,
+        0,
+        0,
+        153
+      ],
+      "background_padding_px": 8
+    }
+  },
+  {
+    "id": "highlight",
+    "style": {
+      "weight": 400,
+      "style": "normal",
+      "fill_rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "background_rgba": [
+        255,
+        255,
+        0,
+        255
+      ],
+      "background_padding_px": 6
+    }
+  },
+  {
+    "id": "inverseBox",
+    "style": {
+      "weight": 400,
+      "style": "normal",
+      "fill_rgba": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "background_rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "background_padding_px": 8
+    }
+  },
+  {
+    "id": "boldOutline",
+    "style": {
+      "weight": 700,
+      "style": "normal",
+      "fill_rgba": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "background_rgba": null,
+      "stroke": {
+        "rgba": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "width_px": 5
+      },
+      "shadow": {
+        "rgba": [
+          0,
+          0,
+          0,
+          102
+        ],
+        "offset_x_px": 2,
+        "offset_y_px": 2
+      }
+    }
+  }
+]

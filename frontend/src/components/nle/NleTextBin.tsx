@@ -2,7 +2,9 @@ import { useCallback, useId, useState, useSyncExternalStore } from "react";
 
 import type { AuthoringIntent } from "../../state/authoringViewState";
 import type { Locale } from "../../i18n/catalog";
-import { DEFAULT_TITLE_TEXT } from "./nleCommandBuilders";
+import { DEFAULT_TEXT_STYLE, DEFAULT_TITLE_TEXT } from "./nleCommandBuilders";
+import { NleTextPresetGrid } from "./NleTextPresetGrid";
+import { applyPreset, type TextPreset } from "./nleTextPresets";
 import {
   planTitleInsertion,
   type TitleInsertionAuthority,
@@ -62,6 +64,17 @@ export function NleTextBin({
     const decision = decide();
     if (decision.admitted) void onIntent(decision.intent);
   };
+  const decidePreset = (preset: TextPreset) =>
+    planTitleInsertion(snapshot, {
+      busy,
+      frame: currentFrame(),
+      fontId,
+      content,
+      style: applyPreset(
+        { ...DEFAULT_TEXT_STYLE, font_asset_id: fontId },
+        preset,
+      ),
+    });
 
   return (
     <section className="h3-nle-text-bin">
@@ -108,6 +121,20 @@ export function NleTextBin({
           {refusal}
         </p>
       )}
+      <NleTextPresetGrid
+        locale={locale}
+        mode="insert"
+        refusal={(preset) => {
+          const decision = decidePreset(preset);
+          return decision.admitted
+            ? undefined
+            : text.titleRefusals[decision.reason];
+        }}
+        onChoose={(preset) => {
+          const decision = decidePreset(preset);
+          if (decision.admitted) void onIntent(decision.intent);
+        }}
+      />
     </section>
   );
 }

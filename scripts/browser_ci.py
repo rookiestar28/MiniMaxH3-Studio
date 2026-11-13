@@ -6,11 +6,14 @@ import argparse
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import threading
 from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -202,6 +205,48 @@ def execute_browser(argv: list[str], env: dict[str, str]) -> tuple[int, list[dic
     return status, events
 
 
+def windows_extended_path(path: str) -> str:
+    """Return the extended-length spelling of an absolute Windows path."""
+    absolute = os.path.abspath(path)
+    if absolute.startswith("\\\\?\\"):
+        return absolute
+    if absolute.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + absolute[2:]
+    return "\\\\?\\" + absolute
+
+
+def empty_scratch_directory(directory: str, scratch: Path) -> None:
+    """Remove everything inside one run's temporary directory, a child of ``scratch``."""
+    owned = Path(directory)
+    if owned.parent.resolve() != scratch.resolve() or not owned.name.startswith("browser-ci-"):
+        raise ValueError("scratch removal leaves the owned temporary directory")
+    with os.scandir(windows_extended_path(directory)) as entries:
+        children = [(entry.path, entry.is_dir(follow_symlinks=False)) for entry in entries]
+    for child, is_directory in children:
+        if is_directory:
+            shutil.rmtree(child)
+        else:
+            os.unlink(child)
+
+
+@contextmanager
+def scratch_directory(scratch: Path) -> Iterator[str]:
+    """Hold one run's temporary directory under the owned scratch root and remove it afterwards."""
+    with tempfile.TemporaryDirectory(prefix="browser-ci-", dir=scratch) as directory:
+        try:
+            yield directory
+        finally:
+            # CRITICAL: Playwright output under this directory can pass 259 characters
+            # (frameSequence.spec.ts nests a 64-character digest). Node creates such paths
+            # whatever the host's long-path setting, but a plain rmtree cannot remove them
+            # there and fails with WinError 145 after every case passed. So on Windows empty
+            # the directory through extended-length paths first; TemporaryDirectory then
+            # removes the empty directory. Errors still propagate and fail the run; do not
+            # add ignore_errors. Other platforms keep the plain TemporaryDirectory removal.
+            if os.name == "nt":
+                empty_scratch_directory(directory, scratch)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list-only", action="store_true")
@@ -241,7 +286,7 @@ def main() -> int:
         scratch = ROOT / ".tmp"
         require_owned_path(ROOT, scratch)
         scratch.mkdir(exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="browser-ci-", dir=scratch) as directory:
+        with scratch_directory(scratch) as directory:
             report_path = Path(directory) / "results.json"
             env["PLAYWRIGHT_JSON_OUTPUT_FILE"] = str(report_path)
             if destination is not None:

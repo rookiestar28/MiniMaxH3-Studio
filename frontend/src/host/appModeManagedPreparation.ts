@@ -2,6 +2,9 @@
 // and execution projection ( split).
 
 import { sha256Text } from "../contracts/canonicalFingerprint";
+import { IMAGE_CROP_NODE_TYPE } from "./imageCropCapability";
+import { isLoaderBoundImageCrop } from "./imageCropBindings";
+import type { SequenceMediaSourceObservation } from "./preparedSequenceObservation";
 import {
   INPUT_GEOMETRY_RECEIPT_SCHEMA,
   INPUT_GEOMETRY_REQUEST_SCHEMA,
@@ -9,6 +12,7 @@ import {
   type InputGeometryRequest,
 } from "./inputGeometry";
 import type { OwnedGraphObservation } from "./ownedGraphIdentity";
+import { cloneCompiledPromptData } from "./compiledPromptData";
 import { cloneQueueEnvelope } from "./queueSeam";
 import { existingCompiledProjection } from "./appModeCensus";
 import {
@@ -34,6 +38,7 @@ import {
   nativeAdapterNodeType,
   planNodeType,
   PREPARED_GRAPH_OBSERVATION_SCHEMA,
+  SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA,
   type PreparedGraphObservation,
   productShellNodeType,
   record,
@@ -127,6 +132,25 @@ const managedBootstrapNodeTypes = new Set<string>([
   floatPrimitiveNodeType,
   "PrimitiveInt",
 ]);
+
+// IMPORTANT: a single-clip bootstrap admits the native crop node only on the existing route
+// and only as a one-hop interposer over a loader (exactly `image` and `crop_region`, the image
+// from a LoadImage at slot 0, a bounded region). Do not add the crop type to
+// managedBootstrapNodeTypes or to a single clip's bootstrapTypes instead: that admits it on the
+// connect, new and replace routes, and drops crop nodes from model_fingerprint, which is
+// computed outside the bootstrap type set.
+function isExistingCanvasImageCrop(
+  node: Record<string, unknown>,
+  byId: ReadonlyMap<string, Record<string, unknown>>,
+): boolean {
+  const inputs = record(node.inputs);
+  return (
+    node.class_type === IMAGE_CROP_NODE_TYPE &&
+    inputs !== undefined &&
+    Object.keys(inputs).sort().join(",") === "crop_region,image" &&
+    isLoaderBoundImageCrop(node, byId)
+  );
+}
 
 function contentFreeInputIdentity(
   value: unknown,
@@ -235,6 +259,72 @@ function validatedSourceIdentity(
  * valid, content-free workflow envelope as history metadata; compatible prompt
  * handlers therefore never receive the native canvas.
  */
+function validatedSequenceSources(
+  value: SequenceMediaSourceObservation,
+): SequenceMediaSourceObservation {
+  const invalid = (): never => {
+    throw new AppModeError(
+      "invalid_request",
+      "invalid sequence source observation",
+    );
+  };
+  const wire = record(value);
+  if (
+    wire === undefined ||
+    !exactRecordKeys(wire, [
+      "source_identities",
+      "media_binding_fingerprint",
+    ]) ||
+    !Array.isArray(wire.source_identities) ||
+    wire.source_identities.length > 3 ||
+    (wire.source_identities.length
+      ? typeof wire.media_binding_fingerprint !== "string" ||
+        !/^sha256:[0-9a-f]{64}$/.test(wire.media_binding_fingerprint)
+      : wire.media_binding_fingerprint !== null)
+  )
+    return invalid();
+  const rows = wire.source_identities.map((value) => {
+    const row = record(value);
+    // IMPORTANT: regex coerces undefined and numbers into valid-looking asset IDs.
+    // Require exact own keys and string types before testing the closed V5 row.
+    if (
+      row === undefined ||
+      !exactRecordKeys(row, [
+        "asset_id",
+        "role",
+        "receipt_handle",
+        "source_fingerprint",
+      ]) ||
+      typeof row.asset_id !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(row.asset_id) ||
+      (row.role !== "first_frame" && row.role !== "last_frame") ||
+      typeof row.receipt_handle !== "string" ||
+      typeof row.source_fingerprint !== "string"
+    )
+      return invalid();
+    const receipt = validatedSourceIdentity({
+      schema: INPUT_GEOMETRY_RECEIPT_SCHEMA,
+      receipt_handle: row.receipt_handle,
+      source_fingerprint: row.source_fingerprint,
+    });
+    return Object.freeze({
+      asset_id: row.asset_id,
+      role: row.role,
+      receipt_handle: receipt.receipt_handle,
+      source_fingerprint: receipt.source_fingerprint,
+    });
+  });
+  if (
+    new Set(rows.map((row) => row.asset_id)).size !== rows.length ||
+    new Set(rows.map((row) => row.role)).size !== rows.length
+  )
+    return invalid();
+  return Object.freeze({
+    source_identities: Object.freeze(rows),
+    media_binding_fingerprint: value.media_binding_fingerprint,
+  });
+}
+
 export function buildManagedAppModePreparation(
   completeCompiled: AppModeCompiledPrompt,
   inputs: AppModeInputs,
@@ -244,7 +334,23 @@ export function buildManagedAppModePreparation(
   sourceIdentityReceipt?: InputGeometryReceipt,
   existingSubject?: ExistingCompiledAdmission,
   projectManagedExecution?: ManagedAppModeExecutionProjector,
+  sequenceSources?: SequenceMediaSourceObservation,
 ): ManagedAppModePreflight {
+  if (
+    sequenceSources !== undefined &&
+    (route === "existing" || sourceIdentityReceipt !== undefined)
+  )
+    throw new AppModeError(
+      "invalid_request",
+      "sequence sources require private prepared materialization",
+    );
+  const sequenceMedia =
+    sequenceSources === undefined
+      ? undefined
+      : validatedSequenceSources(sequenceSources);
+  const bootstrapTypes = new Set(managedBootstrapNodeTypes);
+  if (sequenceMedia !== undefined) bootstrapTypes.add(IMAGE_CROP_NODE_TYPE);
+  const admitsCanvasCrops = sequenceMedia === undefined && route === "existing";
   if (!/^sha256:[0-9a-f]{64}$/.test(graphFingerprintValue))
     throw new AppModeError(
       "compile_failed",
@@ -308,7 +414,8 @@ export function buildManagedAppModePreparation(
     if (
       node === undefined ||
       typeof node.class_type !== "string" ||
-      !managedBootstrapNodeTypes.has(node.class_type)
+      (!bootstrapTypes.has(node.class_type) &&
+        !(admitsCanvasCrops && isExistingCanvasImageCrop(node, byId)))
     )
       throw new AppModeError(
         "compile_failed",
@@ -331,7 +438,11 @@ export function buildManagedAppModePreparation(
         .map(({ id, node }) => {
           // CRITICAL: the bootstrap queue is host-owned and may normalize its payload. Sharing
           // nested nodes here would mutate the already-fingerprinted full model prompt.
-          return [id, structuredClone(node)];
+          // Preserve structuredClone first; its data-only fallback admits native widget proxies.
+          const isolated = cloneCompiledPromptData(node);
+          if (isolated === undefined)
+            throw new Error("bootstrap isolation failed");
+          return [id, isolated];
         }),
     );
   } catch {
@@ -348,7 +459,11 @@ export function buildManagedAppModePreparation(
       );
 
   let sourceIdentity: InputGeometryReceipt | null = null;
-  if (route !== "existing" && inputs.task_mode === "i2va") {
+  if (
+    sequenceMedia === undefined &&
+    route !== "existing" &&
+    inputs.task_mode === "i2va"
+  ) {
     sourceIdentity = validatedSourceIdentity(sourceIdentityReceipt);
   } else if (route !== "existing" && sourceIdentityReceipt !== undefined)
     throw new AppModeError(
@@ -356,7 +471,7 @@ export function buildManagedAppModePreparation(
       "source identity is valid only for I2VA",
     );
 
-  const contextTypes = new Set<string>(managedBootstrapNodeTypes);
+  const contextTypes = bootstrapTypes;
   const modelIdentity = completeNodes
     .filter(({ node }) => !contextTypes.has(String(node.class_type)))
     .map(({ id, node }) => ({
@@ -366,8 +481,11 @@ export function buildManagedAppModePreparation(
     }))
     .sort((left, right) => left.id.localeCompare(right.id));
   const compiledPromptFingerprint = fingerprint(compiled);
-  const observation: PreparedGraphObservation = Object.freeze({
-    schema: PREPARED_GRAPH_OBSERVATION_SCHEMA,
+  const observation = Object.freeze({
+    schema:
+      sequenceMedia === undefined
+        ? PREPARED_GRAPH_OBSERVATION_SCHEMA
+        : SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA,
     route,
     graph_fingerprint: graphFingerprintValue,
     compiled_prompt_fingerprint: compiledPromptFingerprint,
@@ -379,20 +497,29 @@ export function buildManagedAppModePreparation(
       nodes: modelIdentity,
     }),
     runtime_fingerprint: fingerprint({
-      schema: "h3.context.prepared_runtime_identity.v1",
+      schema:
+        sequenceMedia === undefined
+          ? "h3.context.prepared_runtime_identity.v1"
+          : "h3.context.prepared_runtime_identity.v2",
       route,
       node_types: completeNodes.map(({ node }) => node.class_type).sort(),
       product_shell_node_id: productShell.id,
       native_anchor_node_id: anchor.id,
       fingerprint_domain: "output_producing_graph",
-      source_identity_present: sourceIdentity !== null,
+      ...(sequenceMedia === undefined
+        ? { source_identity_present: sourceIdentity !== null }
+        : {
+            media_binding_fingerprint: sequenceMedia.media_binding_fingerprint,
+          }),
     }),
     fingerprint_domain: "output_producing_graph",
     expected_frames: inputs.frame_count,
-    source_identity: sourceIdentity,
+    ...(sequenceMedia === undefined
+      ? { source_identity: sourceIdentity }
+      : sequenceMedia),
     timeout_ms: 3_600_000,
     native_anchor_node_id: anchor.id,
-  });
+  }) as PreparedGraphObservation;
   return Object.freeze({
     bootstrap: Object.freeze({
       output: bootstrapOutput,

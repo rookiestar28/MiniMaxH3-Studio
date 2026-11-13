@@ -4,6 +4,10 @@ import {
 } from "./support/compiledMetadataFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as canvasOwnedWrite from "../src/host/canvasOwnedWrite";
+import * as compilationRoutes from "../src/host/appModeRoutes";
+import * as compiledContract from "../src/host/appModeContract";
+import * as compiledRoutes from "../src/host/appModeExistingRoute";
+import * as compiledMetadata from "../src/host/compiledMetadata";
 
 import {
   APP_MODE_MODE_CAPABILITIES,
@@ -28,6 +32,7 @@ import {
 } from "../src/host/appMode";
 import { createQualifiedBasePrompt } from "./support/qualifiedBasePrompt";
 import { createMaterializedReferencePrompt } from "./support/materializedReferencePrompt";
+import { hostCompiledPrompt } from "./support/hostCompiledPrompt";
 import {
   loadSyntheticTemplate,
   materializedGraphSummary,
@@ -452,7 +457,7 @@ describe("H3 App Mode host seam", () => {
           const graphToPrompt = vi.fn((detached?: unknown) => {
             if (detached === undefined)
               throw new Error("the unrelated canvas cannot compile");
-            return { output: expectedOutput, workflow: {} };
+            return hostCompiledPrompt(expectedOutput, {});
           });
           const { app, api } = fixtureBackedAppModeHost(
             {
@@ -4947,17 +4952,26 @@ describe("M23-20 hardened queue seam", () => {
       compiled: AppModeCompiledPrompt,
       options?: unknown,
     ) => unknown,
+    order: "fixture" | "host" = "fixture",
   ) {
     const fixture = existingGraphRouteFixture(inputs);
     let visibleGraph = structuredClone(fixture.workflow);
     const graph = liveAuthoringGraph(() => visibleGraph);
+    // "host" returns the same output object in the host's own key order (workflow first).
+    const compiled =
+      order === "host"
+        ? (hostCompiledPrompt(
+            fixture.compiled.output,
+            fixture.compiled.workflow,
+          ) as AppModeCompiledPrompt)
+        : fixture.compiled;
     const host = fixtureBackedAppModeHost(
       {
         loadApiJson: vi.fn(),
         loadGraphData: vi.fn((next: unknown) => {
           visibleGraph = structuredClone(next) as Json;
         }),
-        graphToPrompt: vi.fn().mockResolvedValue(fixture.compiled),
+        graphToPrompt: vi.fn().mockResolvedValue(compiled),
         graph,
       },
       { queuePrompt },
@@ -4994,6 +5008,78 @@ describe("M23-20 hardened queue seam", () => {
       }),
     };
   }
+
+  it.each(["unmanaged", "managed"] as const)(
+    "queues native proxy data in host order on the %s existing route",
+    async (route) => {
+      const received: AppModeCompiledPrompt[] = [];
+      const fixture = subject((_batch, envelope) => {
+        received.push(envelope);
+        return Promise.resolve(acceptedQueueResponse(151));
+      }, "host");
+      const request = Object.values(fixture.fixture.compiled.output).find(
+        (value) =>
+          (value as { class_type: string }).class_type ===
+          H3_NODE_TYPES.request,
+      ) as { inputs: Record<string, unknown> };
+      // structuredClone rejects this region, so the queue copy takes the data fallback.
+      request.inputs.native_widget_region = new Proxy({ x: 1, y: 2 }, {});
+      const callbacks = managedCallbacks();
+
+      const result = await fixture.controller.start(inputs, {
+        useExisting: true,
+        ...(route === "managed"
+          ? { prepareManaged: callbacks.prepareManaged }
+          : {}),
+      });
+
+      expect(result.queuePromptId).toBe(syntheticPromptUuid(151));
+      expect(received).toHaveLength(1);
+      expect(Reflect.ownKeys(received[0]!)).toEqual(["workflow", "output"]);
+      expect(fingerprint(received[0])).toBe(result.compiledPromptFingerprint);
+    },
+  );
+
+  it.each(["mutate", "clone"] as const)(
+    "queues native proxy data across consecutive %s wrappers without source aliasing",
+    async (mode) => {
+      const received: AppModeCompiledPrompt[] = [];
+      const sourceRegion = new Proxy({ x: 1, y: 2 }, {});
+      let number = 140;
+      const fixture = subject(
+        wrapQueuePrompt((_batch, envelope) => {
+          received.push(envelope);
+          const request = Object.values(envelope.output).find(
+            (value) =>
+              (value as { class_type: string }).class_type ===
+              H3_NODE_TYPES.request,
+          ) as { inputs: { native_widget_region: typeof sourceRegion } };
+          request.inputs.native_widget_region.x = 7;
+          return Promise.resolve(acceptedQueueResponse(++number));
+        }, mode),
+      );
+      const request = Object.values(fixture.fixture.compiled.output).find(
+        (value) =>
+          (value as { class_type: string }).class_type ===
+          H3_NODE_TYPES.request,
+      ) as { inputs: Record<string, unknown> };
+      request.inputs.native_widget_region = sourceRegion;
+      const before = fingerprint(fixture.fixture.compiled);
+      const first = await fixture.controller.start(inputs, {
+        useExisting: true,
+      });
+      const second = await fixture.controller.start(inputs, {
+        useExisting: true,
+      });
+      expect(first.queuePromptId).toBe(syntheticPromptUuid(141));
+      expect(second.queuePromptId).toBe(syntheticPromptUuid(142));
+      expect(received).toHaveLength(2);
+      expect(received[0]).not.toBe(received[1]);
+      expect(received[0]?.output).not.toBe(received[1]?.output);
+      expect(sourceRegion.x).toBe(1);
+      expect(fingerprint(fixture.fixture.compiled)).toBe(before);
+    },
+  );
 
   it.each(["mutate", "clone"] as const)(
     "keeps the validated prompt isolated across consecutive %s wrapper calls",
@@ -5689,7 +5775,9 @@ describe("M17-20 template materialization route", () => {
       "52",
       0,
     ];
-    vi.mocked(app.graphToPrompt).mockResolvedValue({ output, workflow: {} });
+    vi.mocked(app.graphToPrompt).mockResolvedValue(
+      hostCompiledPrompt(output, {}) as AppModeCompiledPrompt,
+    );
 
     await expect(
       createAppModeController(app, api, { loadTemplate, loadProfile }).start(
@@ -5743,7 +5831,7 @@ describe("M23-29 native length is not an admission authority", () => {
       class_type: "ComfyMathExpression",
       inputs: { expression, "values.a": ["50", 0] },
     };
-    return { output, workflow: {} };
+    return hostCompiledPrompt(output, {});
   };
 
   it.each([
@@ -6020,4 +6108,287 @@ describe("M17-20 D5 artifact sink location", () => {
     const sink = loaded.nodes.find((node) => node.type === "SaveVideo");
     expect(sink?.widgets_values?.[0]).toBe(appModeArtifactPrefix(base));
   });
+});
+
+describe("closed compile diagnostic origin", () => {
+  const inputs: AppModeInputs = {
+    task_mode: "t2va",
+    user_intent: "A synthetic diagnostic boundary.",
+    duration_milliseconds: 8000,
+    frame_count: 192,
+  };
+
+  const start = (host: ReturnType<typeof definitionsExistingHost>) =>
+    createAppModeController(host.app, host.api, {
+      loadTemplate,
+      loadProfile,
+      createDetachedGraph: host.createDetachedGraph,
+    }).start(inputs, { useExisting: true });
+
+  it("distinguishes the guarded root write and preserves rollback", async () => {
+    const host = definitionsExistingHost(inputs);
+    host.loadGraphData.mockImplementationOnce(() => {
+      throw new Error("synthetic write refusal");
+    });
+    await expect(start(host)).rejects.toMatchObject({
+      code: "compile_failed",
+      compileStep: "root_write",
+      message:
+        "compile_failed: the host rejected the validated graph transaction",
+    });
+    expect(host.loadGraphData).toHaveBeenCalledTimes(2);
+    expect(host.api.queuePrompt).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes the post-compile wrapper from the host compiler", async () => {
+    const host = definitionsExistingHost(inputs);
+    // Force the wrapper's non-AppModeError boundary, not the host helper's catch.
+    const compile = vi
+      .spyOn(compilationRoutes, "compileLoadedCandidate")
+      .mockRejectedValueOnce(new Error("synthetic post-compile boundary"));
+    try {
+      await expect(start(host)).rejects.toMatchObject({
+        code: "compile_failed",
+        compileStep: "post_compile_check",
+        message:
+          "compile_failed: the host could not compile the H3 graph candidate",
+      });
+      expect(host.api.queuePrompt).not.toHaveBeenCalled();
+    } finally {
+      compile.mockRestore();
+    }
+  });
+
+  it("tags the dynamic compile admission without forwarding its field", async () => {
+    const host = definitionsExistingHost(inputs, ({ compiled }) => ({
+      ...compiled,
+      output: {
+        ...compiled.output,
+        "1": Object.assign({}, compiled.output["1"], {
+          _meta: { unexpected: true },
+        }),
+      },
+    }));
+    const failure: unknown = await start(host).catch((error: unknown) => error);
+    expect(failure).toMatchObject({
+      code: "compile_failed",
+      compileStep: "compiled_admission",
+      message: "compile_failed: an unrecognized compiled _meta member",
+    });
+    expect(JSON.stringify(failure)).not.toContain("compileStep");
+    expect(host.api.queuePrompt).not.toHaveBeenCalled();
+    expect(JSON.stringify(host.loadGraphData.mock.calls)).not.toContain(
+      "compileStep",
+    );
+  });
+
+  it("distinguishes a non-serializable compiled identity after admission", async () => {
+    const host = definitionsExistingHost(inputs, ({ compiled }) => {
+      const value = { ...compiled };
+      Object.defineProperty(value, "toJSON", {
+        value: () => {
+          throw new Error("synthetic identity refusal");
+        },
+      });
+      return value;
+    });
+    await expect(start(host)).rejects.toMatchObject({
+      code: "compile_failed",
+      compileStep: "compiled_fingerprint",
+      message:
+        "compile_failed: host compilation returned no stable prompt identity",
+    });
+    expect(host.api.queuePrompt).not.toHaveBeenCalled();
+  });
+
+  it("leaves a dynamic non-compile admission refusal untagged", async () => {
+    const host = definitionsExistingHost(inputs, ({ compiled }) => ({
+      ...compiled,
+      output: {},
+    }));
+    const failure: unknown = await start(host).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ code: "incompatible_graph" });
+    expect(Object.hasOwn(failure as object, "compileStep")).toBe(false);
+    expect(host.api.queuePrompt).not.toHaveBeenCalled();
+  });
+});
+
+describe("closed compile admission selection", () => {
+  const inputs: AppModeInputs = {
+    task_mode: "t2va",
+    user_intent: "A synthetic admission selection.",
+    duration_milliseconds: 5167,
+    frame_count: 124,
+  };
+
+  it.each([
+    "envelope",
+    "compatibility",
+    "requested_route",
+    "accepted",
+  ] as const)(
+    "selects %s once before rollback without changing the original refusal",
+    async (selected) => {
+      const compiled: AppModeCompiledPrompt & Record<string, unknown> = {
+        output: createMaterializedPrompt(inputs),
+        workflow: {},
+      };
+      if (selected === "envelope") compiled.unexpected = true;
+      if (selected === "compatibility") compiled.output = {};
+      if (selected === "requested_route") {
+        const request = Object.values(compiled.output).find(
+          (node) => (node as Json).class_type === H3_NODE_TYPES.request,
+        ) as { inputs: Json };
+        request.inputs.user_intent = "A different synthetic intent.";
+      }
+      const before = { nodes: [], links: [] };
+      let visible: unknown = before;
+      const { app, api } = fixtureBackedAppModeHost(
+        {
+          loadApiJson: vi.fn(),
+          loadGraphData: vi.fn((value: unknown) => {
+            visible = structuredClone(value);
+          }),
+          graphToPrompt: vi.fn().mockResolvedValue(compiled),
+          graph: { serialize: () => visible },
+        },
+        { queuePrompt: vi.fn().mockResolvedValue(acceptedQueueResponse(19)) },
+      );
+      const events: string[] = [];
+      const originalEnvelope = compiledContract.isSafeCompiledPromptEnvelope;
+      const originalCompatible = compiledRoutes.isCompatibleExistingPrompt;
+      const originalRoute = compiledRoutes.compiledPromptMatchesRequestedRoute;
+      const originalRestore = canvasOwnedWrite.restoreGraph;
+      const originalClassify = compiledMetadata.compiledPromptAdmissionFailure;
+      const envelope = vi
+        .spyOn(compiledContract, "isSafeCompiledPromptEnvelope")
+        .mockImplementation((value): value is AppModeCompiledPrompt => {
+          events.push("envelope");
+          return originalEnvelope(value);
+        });
+      const compatible = vi
+        .spyOn(compiledRoutes, "isCompatibleExistingPrompt")
+        .mockImplementation((...args) => {
+          events.push("compatibility");
+          return originalCompatible(...args);
+        });
+      const route = vi
+        .spyOn(compiledRoutes, "compiledPromptMatchesRequestedRoute")
+        .mockImplementation((...args) => {
+          events.push("requested_route");
+          return originalRoute(...args);
+        });
+      const restore = vi
+        .spyOn(canvasOwnedWrite, "restoreGraph")
+        .mockImplementation(async (...args) => {
+          events.push("restore");
+          return originalRestore(...args);
+        });
+      const classify = vi
+        .spyOn(compiledMetadata, "compiledPromptAdmissionFailure")
+        .mockImplementation((...args) => {
+          events.push("classify");
+          return originalClassify(...args);
+        });
+      const materialize = vi.spyOn(
+        compilationRoutes,
+        "resolveMaterializeRoute",
+      );
+      try {
+        const result: unknown = await createAppModeController(app, api, {
+          loadTemplate: (name) => ({
+            ...loadSyntheticTemplate(name),
+            id: "compile-admission-root",
+          }),
+          loadProfile,
+        })
+          .start(inputs)
+          .catch((error: unknown) => error);
+        const called =
+          selected === "envelope"
+            ? ["envelope"]
+            : selected === "compatibility"
+              ? ["envelope", "compatibility"]
+              : ["envelope", "compatibility", "requested_route"];
+        expect(events).toEqual(
+          selected === "accepted" ? called : [...called, "restore", "classify"],
+        );
+        expect(envelope).toHaveBeenCalledExactlyOnceWith(compiled);
+        expect(envelope.mock.calls[0]?.[0]).toBe(compiled);
+        if (selected !== "envelope") {
+          expect(compatible).toHaveBeenCalledExactlyOnceWith(
+            compiled,
+            "materialize",
+            undefined,
+            undefined,
+          );
+          expect(compatible.mock.calls[0]?.[0]).toBe(compiled);
+        } else expect(compatible).not.toHaveBeenCalled();
+        if (selected === "requested_route" || selected === "accepted") {
+          const resolved = await materialize.mock.results[0]!.value;
+          expect(route).toHaveBeenCalledExactlyOnceWith(
+            compiled,
+            inputs,
+            "materialize",
+            resolved.materializedMedia,
+            undefined,
+            undefined,
+            false,
+            undefined,
+          );
+          expect(route.mock.calls[0]?.[0]).toBe(compiled);
+          expect(route.mock.calls[0]?.[1]).toBe(inputs);
+          expect(route.mock.calls[0]?.[3]).toBe(resolved.materializedMedia);
+        } else expect(route).not.toHaveBeenCalled();
+        if (selected === "accepted") {
+          expect(result).toMatchObject({ queuePromptId: expect.any(String) });
+          expect(api.queuePrompt).toHaveBeenCalledOnce();
+          expect(restore).not.toHaveBeenCalled();
+          expect(classify).not.toHaveBeenCalled();
+          expect(app.loadGraphData).toHaveBeenCalledOnce();
+        } else {
+          expect(restore).toHaveBeenCalledOnce();
+          expect(visible).toEqual(before);
+          expect(app.loadGraphData).toHaveBeenCalledTimes(2);
+          expect(classify).toHaveBeenCalledExactlyOnceWith(compiled, false);
+          expect(api.queuePrompt).not.toHaveBeenCalled();
+          expect(result).toBeInstanceOf(AppModeError);
+          expect(result).toMatchObject({
+            code: "compile_failed",
+            compileStep: "compiled_admission",
+            compileAdmission: selected,
+            reason: undefined,
+            message:
+              "compile_failed: host compilation returned an unqualified H3 prompt envelope",
+          });
+          expect(
+            Object.getOwnPropertyDescriptor(result, "compileAdmission"),
+          ).toEqual({
+            value: selected,
+            enumerable: false,
+            writable: false,
+            configurable: false,
+          });
+          expect(Object.isFrozen(result)).toBe(true);
+          expect(JSON.stringify(result)).not.toContain("compileAdmission");
+        }
+        expect(JSON.stringify(app.loadGraphData.mock.calls)).not.toContain(
+          "compileAdmission",
+        );
+        expect(JSON.stringify(api.queuePrompt.mock.calls)).not.toContain(
+          "compileAdmission",
+        );
+      } finally {
+        for (const spy of [
+          envelope,
+          compatible,
+          route,
+          restore,
+          classify,
+          materialize,
+        ])
+          spy.mockRestore();
+      }
+    },
+  );
 });

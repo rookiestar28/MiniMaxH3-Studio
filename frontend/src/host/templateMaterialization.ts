@@ -19,6 +19,7 @@
  */
 
 import { applyImageCrops } from "./imageCropInsertion";
+import { sequenceUsesSourceGeometry } from "./sequenceGeometry";
 import {
   definitionEdges,
   nodeIdentifier,
@@ -27,6 +28,10 @@ import {
   validateSerializedLinks,
 } from "./graphSerialization";
 import {
+  applyDuration,
+  assertI2vaSelectorDetached,
+  i2vaDimensionSelector,
+  scopeI2vaGeometryNotes,
   FRAME_BINDINGS,
   FAMILY_ANCHOR,
   I2VA_SCALE_NODE_TYPE,
@@ -45,8 +50,6 @@ import {
   linkList,
   nodeList,
   resolveAnchor,
-  subgraphDefinitions,
-  widgetOrder,
   type Json,
   type LoaderSource,
   type ModeFamily,
@@ -440,6 +443,7 @@ export function spliceContextPipeline(
   options: SpliceOptions,
 ): SpliceResult {
   const connecting = options.connect === true;
+  const sourceGeometry = sequenceUsesSourceGeometry(options);
   let admittedTemplate = template;
   if (connecting) {
     try {
@@ -723,7 +727,12 @@ export function spliceContextPipeline(
     return source === undefined ? undefined : [source, Number(edge[2])];
   };
 
+  const orphanedGeometry = new Set<Json>();
   const bindI2vaSourceGeometry = (source: Json): void => {
+    const selector = i2vaDimensionSelector(
+      inputOrigin(anchor, "width"),
+      inputOrigin(anchor, "height"),
+    );
     const scales = nodes.filter((node) => node.type === I2VA_SCALE_NODE_TYPE);
     const sizes = nodes.filter((node) => node.type === I2VA_SIZE_NODE_TYPE);
     if (scales.length > 1 || sizes.length > 1)
@@ -766,6 +775,18 @@ export function spliceContextPipeline(
     disconnect(anchor, "height");
     connect(size, 0, anchor, "width", "INT");
     connect(size, 1, anchor, "height", "INT");
+
+    if (selector !== undefined) {
+      assertI2vaSelectorDetached(
+        selector,
+        links,
+        ensureInputs(selector),
+        ensureOutputs(selector),
+      );
+      orphanedGeometry.add(selector);
+    }
+
+    scopeI2vaGeometryNotes(nodes);
   };
 
   const videos = requested.videos ?? 0;
@@ -908,6 +929,7 @@ export function spliceContextPipeline(
   };
 
   const mediaNodeIds: {
+    geometryDonor?: number;
     firstFrame?: number;
     lastFrame?: number;
     referenceImages: number[];
@@ -1011,7 +1033,11 @@ export function spliceContextPipeline(
     }
   }
 
-  if (!connecting && options.taskMode === "i2va") {
+  if (media.geometryDonor !== undefined) {
+    i2vaSourceNode = loader("image", media.geometryDonor);
+    mediaNodeIds.geometryDonor = Number(i2vaSourceNode.id);
+  }
+  if (!connecting && sourceGeometry) {
     if (i2vaSourceNode === undefined)
       throw new TemplateSpliceError(
         "missing_geometry_source",
@@ -1027,7 +1053,9 @@ export function spliceContextPipeline(
   const discarded = new Set(
     reusable.filter((node) => !spent.has(node)).map((node) => Number(node.id)),
   );
-  workflow.nodes = nodes.filter((node) => !discarded.has(Number(node.id)));
+  workflow.nodes = nodes.filter(
+    (node) => !discarded.has(Number(node.id)) && !orphanedGeometry.has(node),
+  );
   workflow.links = links.filter(
     (link) =>
       !Array.isArray(link) ||
@@ -1137,61 +1165,4 @@ function applyArtifactPrefix(workflow: Json, prefix: string): boolean {
   widgets[0] = prefix;
   sink.widgets_values = widgets;
   return true;
-}
-
-/**
- * Write the authored duration into the control the template already drives
- * `length` from.
- *
- * For a subgraph anchor that control is a promoted widget on the instance. For a
- * flat graph it is found by walking the edge the template actually built --
- * `length` back to the math node, and its first operand back to the primitive --
- * rather than by trusting a node id, because a node id is a property of one file
- * and the edge is a property of the design.
- */
-function applyDuration(
-  workflow: Json,
-  anchor: Json,
-  nested: boolean,
-  durationSeconds: number,
-): Readonly<{ applied: boolean; source?: Json }> {
-  if (nested) {
-    const definition = subgraphDefinitions(workflow).find(
-      (candidate) => String(candidate.id ?? "") === String(anchor.type ?? ""),
-    );
-    if (definition === undefined) return { applied: false };
-    const order = widgetOrder(definition);
-    const index = order.indexOf("value_1");
-    const widgets = Array.isArray(anchor.widgets_values)
-      ? [...anchor.widgets_values]
-      : [];
-    if (index < 0 || index >= widgets.length) return { applied: false };
-    widgets[index] = durationSeconds;
-    anchor.widgets_values = widgets;
-    return { applied: true };
-  }
-
-  const links = linkList(workflow).filter(Array.isArray) as unknown[][];
-  const byId = new Map(
-    nodeList(workflow).map((node) => [Number(node.id), node] as const),
-  );
-  const originOf = (linkId: unknown): Json | undefined => {
-    const link = links.find((entry) => entry[0] === linkId);
-    return link === undefined ? undefined : byId.get(Number(link[1]));
-  };
-  const inputsOf = (node: Json): Json[] =>
-    Array.isArray(node.inputs) ? (node.inputs.filter(isRecord) as Json[]) : [];
-
-  const lengthInput = inputsOf(anchor).find((input) => input.name === "length");
-  const math = originOf(lengthInput?.link);
-  if (math === undefined || math.type !== "ComfyMathExpression")
-    return { applied: false };
-  const operand = inputsOf(math).find((input) =>
-    String(input.name ?? "").endsWith("a"),
-  );
-  const primitive = originOf(operand?.link);
-  if (primitive === undefined || primitive.type !== "PrimitiveFloat")
-    return { applied: false };
-  primitive.widgets_values = [durationSeconds];
-  return { applied: true, source: primitive };
 }

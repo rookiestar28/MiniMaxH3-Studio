@@ -23,6 +23,7 @@ from typing import Any
 from ..core.canonical import canonical_bytes, canonical_fingerprint
 from ..core.safe_paths import (
     UnsafePathError,
+    _native_io_path,
     ensure_directory,
     validate_directory,
     validate_regular_file,
@@ -225,12 +226,16 @@ def _directory_identity(metadata: os.stat_result) -> tuple[int, int]:
 def _is_link_or_reparse(path: Path, metadata: os.stat_result) -> bool:
     attributes = getattr(metadata, "st_file_attributes", 0)
     reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
-    return bool(path.is_symlink() or stat.S_ISLNK(metadata.st_mode) or attributes & reparse_flag)
+    return bool(
+        _native_io_path(path).is_symlink()
+        or stat.S_ISLNK(metadata.st_mode)
+        or attributes & reparse_flag
+    )
 
 
 def _lstat_optional(path: Path) -> os.stat_result | None:
     try:
-        return path.lstat()
+        return _native_io_path(path).lstat()
     except FileNotFoundError:
         return None
     except OSError as exc:
@@ -257,7 +262,7 @@ def _validated_directories(*directories: Path) -> Iterator[None]:
         identities: dict[Path, tuple[int, int]] = {}
         for directory in unique:
             admitted = validate_directory(directory)
-            metadata = admitted.lstat()
+            metadata = _native_io_path(admitted).lstat()
             identity = _directory_identity(metadata)
             identities[directory] = identity
             if os.name == "nt":
@@ -274,7 +279,7 @@ def _validated_directories(*directories: Path) -> Iterator[None]:
                     raise ArtifactStoreError("unsafe_store_entry")
         yield
         for directory, identity in identities.items():
-            current = validate_directory(directory).lstat()
+            current = _native_io_path(validate_directory(directory)).lstat()
             if _directory_identity(current) != identity:
                 raise ArtifactStoreError("unsafe_store_entry")
             pinned_descriptor = pinned.get(directory)
@@ -301,7 +306,7 @@ def _read_regular_bytes(path: Path, *, maximum_bytes: int) -> bytes:
 def _read_regular_bytes_pinned(path: Path, *, maximum_bytes: int) -> bytes:
     try:
         admitted = validate_regular_file(path, maximum_bytes=maximum_bytes)
-        before = admitted.lstat()
+        before = _native_io_path(admitted).lstat()
     except UnsafePathError as exc:
         raise ArtifactStoreError("unsafe_store_entry") from exc
     if before.st_nlink != 1:
@@ -309,7 +314,9 @@ def _read_regular_bytes_pinned(path: Path, *, maximum_bytes: int) -> bytes:
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
         descriptor = (
-            _windows_open_existing_file(admitted) if os.name == "nt" else os.open(admitted, flags)
+            _windows_open_existing_file(admitted)
+            if os.name == "nt"
+            else os.open(_native_io_path(admitted), flags)
         )
     except OSError as exc:
         raise ArtifactStoreError("store_entry_unavailable") from exc
@@ -331,7 +338,7 @@ def _read_regular_bytes_pinned(path: Path, *, maximum_bytes: int) -> bytes:
             remaining -= len(chunk)
         payload = b"".join(chunks)
         after_handle = os.fstat(descriptor)
-        after_path = admitted.lstat()
+        after_path = _native_io_path(admitted).lstat()
         if (
             len(payload) > maximum_bytes
             or _is_link_or_reparse(admitted, after_path)
@@ -355,7 +362,7 @@ def _write_new_file(path: Path, payload: bytes) -> None:
 def _write_new_file_pinned(path: Path, payload: bytes) -> None:
     try:
         parent = validate_directory(path.parent)
-        parent_before = parent.lstat()
+        parent_before = _native_io_path(parent).lstat()
     except (UnsafePathError, OSError) as exc:
         raise ArtifactStoreError("unsafe_store_entry") from exc
     if path.parent != parent or path.name in {"", ".", ".."}:
@@ -365,7 +372,7 @@ def _write_new_file_pinned(path: Path, payload: bytes) -> None:
             _windows_open_new_file(path)
             if os.name == "nt"
             else os.open(
-                path,
+                _native_io_path(path),
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
                 0o600,
             )
@@ -377,9 +384,9 @@ def _write_new_file_pinned(path: Path, payload: bytes) -> None:
     created_identity: tuple[int, int, int, int] | None = None
     failure: ArtifactStoreError | None = None
     try:
-        parent_opened = validate_directory(parent).lstat()
+        parent_opened = _native_io_path(validate_directory(parent)).lstat()
         opened_handle = os.fstat(descriptor)
-        opened_path = validate_regular_file(path, maximum_bytes=1).lstat()
+        opened_path = _native_io_path(validate_regular_file(path, maximum_bytes=1)).lstat()
         created_identity = _identity(opened_handle)
         if (
             _directory_identity(parent_before) != _directory_identity(parent_opened)
@@ -395,8 +402,10 @@ def _write_new_file_pinned(path: Path, payload: bytes) -> None:
                 raise ArtifactStoreError("store_write_failed")
             view = view[written:]
         os.fsync(descriptor)
-        parent_after = validate_directory(parent).lstat()
-        created = validate_regular_file(path, maximum_bytes=max(len(payload), 1)).lstat()
+        parent_after = _native_io_path(validate_directory(parent)).lstat()
+        created = _native_io_path(
+            validate_regular_file(path, maximum_bytes=max(len(payload), 1))
+        ).lstat()
         after_handle = os.fstat(descriptor)
         if (
             _directory_identity(parent_before) != _directory_identity(parent_after)
@@ -465,7 +474,7 @@ def _copy_regular_file_into_new_pinned(
 
     try:
         admitted = validate_regular_file(source, maximum_bytes=maximum_bytes)
-        before = admitted.lstat()
+        before = _native_io_path(admitted).lstat()
     except UnsafePathError as exc:
         raise ArtifactStoreError("unsafe_store_entry") from exc
     if before.st_nlink != 1:
@@ -473,7 +482,9 @@ def _copy_regular_file_into_new_pinned(
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
         reader = (
-            _windows_open_existing_file(admitted) if os.name == "nt" else os.open(admitted, flags)
+            _windows_open_existing_file(admitted)
+            if os.name == "nt"
+            else os.open(_native_io_path(admitted), flags)
         )
     except OSError as exc:
         raise ArtifactStoreError("store_entry_unavailable") from exc
@@ -487,7 +498,7 @@ def _copy_regular_file_into_new_pinned(
             raise ArtifactStoreError("unsafe_store_entry")
         try:
             parent = validate_directory(destination.parent)
-            parent_before = parent.lstat()
+            parent_before = _native_io_path(parent).lstat()
         except (UnsafePathError, OSError) as exc:
             raise ArtifactStoreError("unsafe_store_entry") from exc
         if destination.parent != parent or destination.name in {"", ".", ".."}:
@@ -497,7 +508,7 @@ def _copy_regular_file_into_new_pinned(
                 _windows_open_new_file(destination)
                 if os.name == "nt"
                 else os.open(
-                    destination,
+                    _native_io_path(destination),
                     os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
                     0o600,
                 )
@@ -511,9 +522,11 @@ def _copy_regular_file_into_new_pinned(
         digest = hashlib.sha256()
         total = 0
         try:
-            parent_opened = validate_directory(parent).lstat()
+            parent_opened = _native_io_path(validate_directory(parent)).lstat()
             writer_handle = os.fstat(writer)
-            writer_path = validate_regular_file(destination, maximum_bytes=1).lstat()
+            writer_path = _native_io_path(
+                validate_regular_file(destination, maximum_bytes=1)
+            ).lstat()
             created_identity = _identity(writer_handle)
             if (
                 _directory_identity(parent_before) != _directory_identity(parent_opened)
@@ -542,7 +555,7 @@ def _copy_regular_file_into_new_pinned(
                 remaining -= len(chunk)
             os.fsync(writer)
             reader_after = os.fstat(reader)
-            source_after = admitted.lstat()
+            source_after = _native_io_path(admitted).lstat()
             if (
                 _is_link_or_reparse(admitted, source_after)
                 or source_after.st_nlink != 1
@@ -550,8 +563,10 @@ def _copy_regular_file_into_new_pinned(
                 or _identity(source_after) != _identity(opened)
             ):
                 raise ArtifactStoreError("unsafe_store_entry")
-            parent_after = validate_directory(parent).lstat()
-            created = validate_regular_file(destination, maximum_bytes=max(total, 1)).lstat()
+            parent_after = _native_io_path(validate_directory(parent)).lstat()
+            created = _native_io_path(
+                validate_regular_file(destination, maximum_bytes=max(total, 1))
+            ).lstat()
             writer_after = os.fstat(writer)
             if (
                 _directory_identity(parent_before) != _directory_identity(parent_after)
@@ -616,14 +631,10 @@ def _msvcrt_get_osfhandle(descriptor: int) -> int:
 
 
 def _windows_native_path(path: Path, *, force: bool = False) -> str:
-    value = str(path)
-    if (not force and len(value) < 248) or value.startswith("\\\\?\\"):
-        return value
-    if not path.is_absolute() or ".." in path.parts:
-        raise ArtifactStoreError("unsafe_store_entry")
-    # CRITICAL: Python's long-path support does not extend to direct CreateFileW calls.
-    # Prefix only an already admitted absolute path; never resolve across reparse components.
-    return "\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value
+    try:
+        return str(_native_io_path(path, force=force))
+    except UnsafePathError:
+        raise ArtifactStoreError("unsafe_store_entry") from None
 
 
 def _windows_pin_directory(path: Path) -> int:
@@ -773,7 +784,9 @@ def _windows_move_new_file(source: Path, destination: Path) -> int:
                 ("file_name", wintypes.WCHAR * 1),
             )
 
-        encoded_name = str(destination).encode("utf-16-le")
+        # CRITICAL: FileRenameInfo does not inherit CreateFileW's extended source spelling.
+        # Prefix its destination too; retain byte length and handle-based no-clobber rename.
+        encoded_name = _windows_native_path(destination, force=True).encode("utf-16-le")
         buffer_size = ctypes.sizeof(FileRenameInfo) + len(encoded_name)
         buffer = ctypes.create_string_buffer(buffer_size)
         information = ctypes.cast(buffer, ctypes.POINTER(FileRenameInfo)).contents
@@ -877,13 +890,13 @@ def _safe_unlink_pinned(
         admitted = validate_regular_file(path)
     except UnsafePathError as exc:
         raise ArtifactStoreError("unsafe_store_entry") from exc
-    if _identity(admitted.lstat()) != _identity(metadata):
+    if _identity(_native_io_path(admitted).lstat()) != _identity(metadata):
         raise ArtifactStoreError("unsafe_store_entry")
     if os.name == "nt":
         _windows_delete_exact(admitted, expected=metadata)
         return True
     try:
-        path.unlink()
+        _native_io_path(path).unlink()
     except OSError as exc:
         raise ArtifactStoreError("store_cleanup_failed") from exc
     return True
@@ -1101,7 +1114,9 @@ class PrivateSegmentArtifactStore:
             try:
                 if type(owner_lock) is not int or owner_lock < 0:
                     raise ArtifactStoreError("unsafe_store_owner")
-                owner = validate_regular_file(root / ".owner.lock", maximum_bytes=1_024).lstat()
+                owner = _native_io_path(
+                    validate_regular_file(root / ".owner.lock", maximum_bytes=1_024)
+                ).lstat()
                 opened = os.fstat(owner_lock)
                 # CRITICAL: only the production lease's exact open single-link file extends
                 # the closed root layout; merely finding an owner filename grants nothing.
@@ -1164,7 +1179,10 @@ class PrivateSegmentArtifactStore:
         if self._owner_lock is not None:
             allowed_root_names.add(".owner.lock")
         try:
-            if any(entry.name not in allowed_root_names for entry in self._root.iterdir()):
+            if any(
+                entry.name not in allowed_root_names
+                for entry in _native_io_path(self._root).iterdir()
+            ):
                 raise ArtifactStoreError("foreign_store_root")
             for name in _CHILD_NAMES:
                 ensure_directory(self._root / name)
@@ -1242,7 +1260,7 @@ class PrivateSegmentArtifactStore:
         try:
             validate_regular_file(self._state, maximum_bytes=1_024)
             # CRITICAL: replace only this validated store-owned state file; never accept a path.
-            os.replace(temporary, self._state)
+            os.replace(_native_io_path(temporary), _native_io_path(self._state))
         except (OSError, UnsafePathError) as exc:
             _safe_unlink(temporary, maximum_links=2)
             raise ArtifactStoreError("store_state_write_failed") from exc
@@ -1262,8 +1280,10 @@ class PrivateSegmentArtifactStore:
         try:
             admitted_parent = validate_directory(parent)
             admitted_final_parent = validate_directory(final.parent)
-            parent_identity = _directory_identity(admitted_parent.lstat())
-            final_parent_identity = _directory_identity(admitted_final_parent.lstat())
+            parent_identity = _directory_identity(_native_io_path(admitted_parent).lstat())
+            final_parent_identity = _directory_identity(
+                _native_io_path(admitted_final_parent).lstat()
+            )
         except UnsafePathError as exc:
             raise ArtifactStoreError("unsafe_store_entry") from exc
         if admitted_parent != parent or admitted_final_parent != final.parent:
@@ -1278,10 +1298,11 @@ class PrivateSegmentArtifactStore:
         published_descriptor: int | None = None
         try:
             _write_new_file(temporary, payload)
-            temporary_identity = _identity(temporary.lstat())
+            temporary_identity = _identity(_native_io_path(temporary).lstat())
             if (
-                _directory_identity(validate_directory(parent).lstat()) != parent_identity
-                or _directory_identity(validate_directory(final.parent).lstat())
+                _directory_identity(_native_io_path(validate_directory(parent)).lstat())
+                != parent_identity
+                or _directory_identity(_native_io_path(validate_directory(final.parent)).lstat())
                 != final_parent_identity
             ):
                 raise ArtifactStoreError("unsafe_store_entry")
@@ -1297,8 +1318,8 @@ class PrivateSegmentArtifactStore:
             else:
                 # Hard-link publication is atomic and fails instead of clobbering
                 # an existing target.
-                os.link(temporary, final, follow_symlinks=False)
-            published_identity = _identity(final.lstat())
+                os.link(_native_io_path(temporary), _native_io_path(final), follow_symlinks=False)
+            published_identity = _identity(_native_io_path(final).lstat())
         except FileExistsError as exc:
             _safe_unlink(temporary, maximum_links=2)
             raise ArtifactStoreError("duplicate_artifact") from exc
@@ -1316,10 +1337,11 @@ class PrivateSegmentArtifactStore:
                 maximum_bytes=max(len(payload), 1),
             )
             if (
-                _directory_identity(validate_directory(parent).lstat()) != parent_identity
-                or _directory_identity(validate_directory(final.parent).lstat())
+                _directory_identity(_native_io_path(validate_directory(parent)).lstat())
+                != parent_identity
+                or _directory_identity(_native_io_path(validate_directory(final.parent)).lstat())
                 != final_parent_identity
-                or _identity(admitted_final.lstat()) != published_identity
+                or _identity(_native_io_path(admitted_final).lstat()) != published_identity
                 or (
                     published_descriptor is not None
                     and _identity(os.fstat(published_descriptor)) != published_identity
@@ -1335,7 +1357,7 @@ class PrivateSegmentArtifactStore:
                 current = _lstat_optional(final)
                 if current is not None and _identity(current) == published_identity:
                     try:
-                        final.unlink()
+                        _native_io_path(final).unlink()
                     except OSError:
                         pass
             _safe_unlink(temporary, maximum_links=2)
@@ -1916,14 +1938,14 @@ class PrivateSegmentArtifactStore:
             raise ArtifactStoreError("recovery_scan_limit")
         try:
             admitted = validate_directory(directory)
-            before = admitted.lstat()
+            before = _native_io_path(admitted).lstat()
             entries: list[Path] = []
-            with os.scandir(admitted) as iterator:
+            with os.scandir(_native_io_path(admitted)) as iterator:
                 for entry in iterator:
                     entries.append(admitted / entry.name)
                     if len(entries) > maximum:
                         raise ArtifactStoreError("recovery_scan_limit")
-            after = validate_directory(admitted).lstat()
+            after = _native_io_path(validate_directory(admitted)).lstat()
         except (UnsafePathError, OSError) as exc:
             raise ArtifactStoreError("unsafe_store_entry") from exc
         if _directory_identity(before) != _directory_identity(after):

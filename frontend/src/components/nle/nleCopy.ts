@@ -7,6 +7,23 @@ import type { PrimaryAppendNotice } from "./nleCommandBuilders";
 
 export const copy = {
   en: {
+    presets: {
+      heading: "Title styles",
+      insert: "Insert {name}",
+      apply: "Apply {name}",
+      loading: "Loading style previews…",
+      unavailable: "Style previews are unavailable.",
+      names: {
+        outline: "Outline",
+        outlineYellow: "Yellow outline",
+        dropShadow: "Drop shadow",
+        outlineShadow: "Outline and shadow",
+        captionBox: "Caption box",
+        highlight: "Highlight",
+        inverseBox: "Inverse box",
+        boldOutline: "Bold outline",
+      },
+    },
     launcher: "Open full editor",
     launcherBusy: "Opening full editor…",
     unsupported: "The full editor is unavailable in this browser.",
@@ -153,10 +170,12 @@ export const copy = {
       font: "Font {ordinal}",
       addTitle: "Add title",
       titleRefusals: {
+        font_italic_unsupported:
+          "These characters support regular and bold only. Turn off italic for this text.",
         busy: "Wait for the current edit to finish.",
         missing_font: "Choose an available font before adding a title.",
         font_glyph_unsupported:
-          "The bundled title font cannot render some of these characters. Use supported Latin, Greek or Cyrillic characters.",
+          "The bundled title font cannot render some of these characters. Use supported Latin, Greek, Cyrillic or CJK characters.",
         invalid_content:
           "Use 1–2,048 characters and at most 32 lines, without unsupported control characters.",
         unavailable_frame: "Choose a valid playhead position.",
@@ -656,7 +675,7 @@ export const copy = {
         approveImport:
           "Creates the proposed segments in the Production project. Nothing is queued for generation.",
         readiness:
-          "Checks whether the imported plan can be generated with the current host, models and extension.",
+          "Checks plan and host support. Frame sources are checked when you start generation.",
         addRow: "Adds a five-second shot after the last row.",
         admitReviewed: "Uses your edited shot rows as this plan's storyboard.",
         createPlannedProject:
@@ -670,7 +689,7 @@ export const copy = {
         idle: "Readiness not checked",
         requesting: "Checking readiness…",
         held: "Not ready to generate",
-        ready: "Ready to generate",
+        ready: "Plan ready; frame sources are checked at generation",
         error: "Readiness check unavailable",
       },
       start: "Generate approved sequence",
@@ -735,6 +754,23 @@ export const copy = {
     },
   },
   "zh-TW": {
+    presets: {
+      heading: "標題樣式",
+      insert: "插入{name}",
+      apply: "套用{name}",
+      loading: "正在載入樣式預覽…",
+      unavailable: "樣式預覽無法使用。",
+      names: {
+        outline: "描邊",
+        outlineYellow: "黃色描邊",
+        dropShadow: "陰影",
+        outlineShadow: "描邊與陰影",
+        captionBox: "字幕底框",
+        highlight: "醒目標示",
+        inverseBox: "反白底框",
+        boldOutline: "粗體描邊",
+      },
+    },
     launcher: "開啟完整剪輯器",
     launcherBusy: "正在開啟完整剪輯器…",
     unsupported: "此瀏覽器無法使用完整剪輯器。",
@@ -868,10 +904,11 @@ export const copy = {
       font: "字型 {ordinal}",
       addTitle: "加入標題",
       titleRefusals: {
+        font_italic_unsupported: "這段文字僅支援一般與粗體。請關閉斜體。",
         busy: "請等目前的編輯完成。",
         missing_font: "請先選擇可用字型，再加入標題。",
         font_glyph_unsupported:
-          "封裝的標題字型無法顯示其中部分字元。請使用支援的拉丁文、希臘文或西里爾文字元。",
+          "封裝的標題字型無法顯示其中部分字元。請使用支援的拉丁文、希臘文、西里爾文或中日韓字元。",
         invalid_content:
           "請使用 1–2,048 個字元、最多 32 行，且不要包含不支援的控制字元。",
         unavailable_frame: "請選擇有效的播放位置。",
@@ -1337,7 +1374,7 @@ export const copy = {
           "顯示分鏡列，讓你在採用前編輯每個鏡頭的文字、時間與硬邊界。",
         propose: "將分鏡拆成製作片段，並列出各片段的時長與模式供你檢視。",
         approveImport: "在製作專案中建立提議的片段。不會排入任何生成工作。",
-        readiness: "檢查目前的主機、模型與擴充功能能否生成已匯入的計畫。",
+        readiness: "檢查計畫與主機支援。開始生成時才會檢查影格來源。",
         addRow: "在最後一列之後新增一個 5 秒的鏡頭。",
         admitReviewed: "使用你編輯過的分鏡列作為此計畫的分鏡。",
         createPlannedProject:
@@ -1350,7 +1387,7 @@ export const copy = {
         idle: "尚未檢查就緒狀態",
         requesting: "正在檢查就緒狀態…",
         held: "尚未就緒，無法生成",
-        ready: "可以生成",
+        ready: "計畫已就緒；生成時才會檢查影格來源",
         error: "無法檢查就緒狀態",
       },
       start: "生成已核准的序列",
@@ -1411,6 +1448,23 @@ export const copy = {
     },
   },
   "zh-CN": {
+    presets: {
+      heading: "标题样式",
+      insert: "插入{name}",
+      apply: "应用{name}",
+      loading: "正在加载样式预览…",
+      unavailable: "样式预览不可用。",
+      names: {
+        outline: "描边",
+        outlineYellow: "黄色描边",
+        dropShadow: "阴影",
+        outlineShadow: "描边与阴影",
+        captionBox: "字幕底框",
+        highlight: "醒目标记",
+        inverseBox: "反白底框",
+        boldOutline: "粗体描边",
+      },
+    },
     launcher: "打开完整剪辑器",
     launcherBusy: "正在打开完整剪辑器…",
     unsupported: "此浏览器无法使用完整剪辑器。",
@@ -1544,10 +1598,11 @@ export const copy = {
       font: "字体 {ordinal}",
       addTitle: "添加标题",
       titleRefusals: {
+        font_italic_unsupported: "这段文字仅支持常规和粗体。请关闭斜体。",
         busy: "请等待当前编辑完成。",
         missing_font: "请先选择可用字体，再添加标题。",
         font_glyph_unsupported:
-          "随附的标题字体无法显示其中部分字符。请使用支持的拉丁文、希腊文或西里尔文字符。",
+          "随附的标题字体无法显示其中部分字符。请使用支持的拉丁文、希腊文、西里尔文或中日韩字符。",
         invalid_content:
           "请使用 1–2,048 个字符、最多 32 行，且不要包含不支持的控制字符。",
         unavailable_frame: "请选择有效的播放位置。",
@@ -2014,7 +2069,7 @@ export const copy = {
           "显示分镜行，让你在采用前编辑每个镜头的文字、时间与硬边界。",
         propose: "将分镜拆成制作片段，并列出各片段的时长与模式供你查看。",
         approveImport: "在制作项目中创建提议的片段。不会排入任何生成任务。",
-        readiness: "检查当前的主机、模型与扩展能否生成已导入的计划。",
+        readiness: "检查计划与主机支持。开始生成时才会检查帧来源。",
         addRow: "在最后一行之后新增一个 5 秒的镜头。",
         admitReviewed: "使用你编辑过的分镜行作为此计划的分镜。",
         createPlannedProject:
@@ -2027,7 +2082,7 @@ export const copy = {
         idle: "尚未检查就绪状态",
         requesting: "正在检查就绪状态…",
         held: "尚未就绪，无法生成",
-        ready: "可以生成",
+        ready: "计划已就绪；生成时才会检查帧来源",
         error: "无法检查就绪状态",
       },
       start: "生成已批准的序列",

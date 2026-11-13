@@ -13,15 +13,15 @@ describe("packaged title glyph guidance", () => {
   it.each([
     [
       "en",
-      "The bundled title font cannot render some of these characters. Use supported Latin, Greek or Cyrillic characters.",
+      "The bundled title font cannot render some of these characters. Use supported Latin, Greek, Cyrillic or CJK characters.",
     ],
     [
       "zh-TW",
-      "封裝的標題字型無法顯示其中部分字元。請使用支援的拉丁文、希臘文或西里爾文字元。",
+      "封裝的標題字型無法顯示其中部分字元。請使用支援的拉丁文、希臘文、西里爾文或中日韓字元。",
     ],
     [
       "zh-CN",
-      "随附的标题字体无法显示其中部分字符。请使用支持的拉丁文、希腊文或西里尔文字符。",
+      "随附的标题字体无法显示其中部分字符。请使用支持的拉丁文、希腊文、西里尔文或中日韩字符。",
     ],
   ] as const)(
     "retains refused drafts and recovers in %s",
@@ -40,7 +40,7 @@ describe("packaged title glyph guidance", () => {
       const button = view.container.querySelector<HTMLButtonElement>(
         '[data-h3-nle-control="title.insert"]',
       )!;
-      for (const content of ["中文", "한국어", "😀"]) {
+      for (const content of ["中文😀", "한국어😀", "😀"]) {
         fireEvent.change(input, { target: { value: content } });
         expect(button.disabled).toBe(true);
         expect(view.getByRole("status").textContent).toBe(message);

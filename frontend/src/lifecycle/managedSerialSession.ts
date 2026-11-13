@@ -11,6 +11,7 @@ import {
 } from "../host/managedSequence";
 import { ComfyPromptHistoryError } from "../host/comfyPromptHistory";
 import { SequenceCoordinatorClientError } from "../host/sequenceCoordinator";
+import { AppModeError } from "../host/appModeContract";
 import type {
   ExecutionTerminalEvent,
   SaveVideoArtifactEvent,
@@ -35,6 +36,13 @@ export function createManagedSerialSession(
   const managedSerialTasks = new Set<Promise<void>>();
 
   function safeManagedSerialFailure(error: unknown): string {
+    if (
+      error instanceof AppModeError &&
+      (error.code === "compile_failed" ||
+        error.code === "sequence_media_changed" ||
+        error.code === "sequence_media_unavailable")
+    )
+      return error.code;
     return error instanceof ManagedSerialSequenceRunnerError ||
       error instanceof ManagedSequenceClientError ||
       error instanceof SequenceCoordinatorClientError ||
@@ -71,12 +79,8 @@ export function createManagedSerialSession(
     bindings: ManagedSerialSequenceBindings,
   ): SerialRunner {
     const current = managedSerialRunner?.snapshot();
-    // IMPORTANT (B-M1605-SEQ-02): a runner marks itself started before its first request, so a
-    // start refused before any parent existed (parentState still null) leaves a runner that
-    // answers every later start with already_started until the page reloads. Replace it, but
-    // never while a start is still in flight: that would authorize a second parent. The fresh
-    // runner derives the same authorize request ID, so a parent the server did create is
-    // replayed rather than duplicated.
+    // IMPORTANT: replace only a terminal runner or one with no parent and no in-flight Start.
+    // An authorized parent retained after a concrete-file refusal must retry that same parent.
     if (
       managedSerialRunner === undefined ||
       current?.parentState === "succeeded" ||
@@ -230,6 +234,7 @@ export function createManagedSerialSession(
         parentRevision: null,
         activeSegmentId: null,
         activeQueuePromptId: null,
+        diagnostics: undefined,
       }),
       failure: managedSerialFailure,
     });

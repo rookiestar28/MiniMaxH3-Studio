@@ -1271,6 +1271,11 @@ def slice_production_semantics(
         raise ProductionSemanticError("semantic_slice_interval")
     target_assets = _ids(asset_ids, "semantic_slice_asset_ids")
     target_asset_set = set(target_assets)
+    frame_assets = {
+        item.asset_id
+        for item in authority.reference_definitions
+        if item.role in {AssetRole.FIRST_FRAME, AssetRole.LAST_FRAME}
+    }
     subject_source_assets = {
         item.subject_id: frozenset(item.source_asset_ids) for item in authority.subject_definitions
     }
@@ -1301,8 +1306,20 @@ def slice_production_semantics(
     )
     local_globals: list[SemanticFieldV1] = []
     for item in authority.global_fields:
-        if required_assets(item.subject_ids, item.asset_ids).issubset(target_asset_set):
-            local_globals.append(item)
+        # CRITICAL: a direct frame binding belongs only to its outer clip. Carry the authored
+        # global text elsewhere without that binding; carrying every binding invents local frame
+        # ownership, while rejecting the text loses the whole-video field. Subject sources and
+        # ordinary references remain strict requirements, including frame-sourced subjects.
+        scoped = replace(
+            item,
+            asset_ids=tuple(
+                asset_id
+                for asset_id in item.asset_ids
+                if asset_id not in frame_assets or asset_id in target_asset_set
+            ),
+        )
+        if required_assets(scoped.subject_ids, scoped.asset_ids).issubset(target_asset_set):
+            local_globals.append(scoped)
             census.append(
                 SemanticCensusEntryV1(
                     item.field_id, SemanticDispositionV1.GLOBAL_CARRIED, segment_id
@@ -1400,6 +1417,33 @@ def assert_complete_semantic_census(
             SemanticDispositionV1.REVIEW_REQUIRED,
             SemanticDispositionV1.REJECTED,
         }:
+            raise ProductionSemanticError("semantic_preservation_incomplete")
+    # CRITICAL: source re-derivation alone permits a self-consistent plan with the frame moved
+    # to another clip or removed everywhere. Each direct frame binding must survive in its
+    # opening/closing owner, and the reference must never appear in another segment.
+    for reference in authority.reference_definitions:
+        if reference.role not in {AssetRole.FIRST_FRAME, AssetRole.LAST_FRAME}:
+            continue
+        if not slices:
+            raise ProductionSemanticError("semantic_preservation_incomplete")
+        owner = (
+            min(slices, key=lambda item: item.global_start_milliseconds)
+            if reference.role is AssetRole.FIRST_FRAME
+            else max(slices, key=lambda item: item.global_end_milliseconds)
+        )
+        if reference.asset_id not in owner.asset_ids or any(
+            reference.asset_id in item.asset_ids for item in slices if item is not owner
+        ):
+            raise ProductionSemanticError("semantic_frame_owner_mismatch")
+        owner_fields = {item.field_id: item for item in owner.global_fields}
+        if any(
+            reference.asset_id in field.asset_ids
+            and (
+                field.field_id not in owner_fields
+                or reference.asset_id not in owner_fields[field.field_id].asset_ids
+            )
+            for field in authority.global_fields
+        ):
             raise ProductionSemanticError("semantic_preservation_incomplete")
     global_ids = (
         {item.subject_id for item in authority.subject_definitions}

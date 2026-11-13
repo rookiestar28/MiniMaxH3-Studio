@@ -7,6 +7,14 @@ The fonts are licensed under the SIL Open Font License, Version 1.1.
 Their copyright notice and complete license are included in
 comfyui_h3_context/fonts/LICENSE-OFL-1.1.txt.
 
+This distribution also includes unmodified Noto Sans TC, SC, JP and KR fonts,
+release Noto Sans CJK 2.004, regular and bold, from
+https://github.com/notofonts/noto-cjk (tag Sans2.004).
+© 2014-2021 Adobe (http://www.adobe.com/).
+These fonts are licensed under the SIL Open Font License, Version 1.1.
+Their complete license is included in
+comfyui_h3_context/fonts/LICENSE-NotoSansCJK-OFL-1.1.txt.
+
 The compiled sidebar, comfyui_h3_context/web/h3-context-sidebar.js, includes
 React 19.2.8, ReactDOM 19.2.8 and Scheduler 0.27.0. All three are licensed under
 the MIT License and share one copyright notice:

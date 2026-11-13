@@ -40,7 +40,7 @@ from .authoring_derivative_generator import (
     GeneratedAudioPreviewBody,
     GeneratedDerivativeBody,
 )
-from .authoring_fonts import AuthoringFontError, load_packaged_font_manifest
+from .authoring_fonts import AuthoringFontError, load_packaged_font_manifest, require_text_coverage
 from .authoring_generated_source import GeneratedAuthoringVideoSource
 from .authoring_image_source import OwnedImageSource
 from .authoring_render_source import PreparedAuthoringHistory
@@ -119,23 +119,23 @@ class AuthoringDerivativeClaim:
         if self._asset.kind == "font":
             if clip is None or clip.text is None:
                 raise MediaLeaseError("authority_mismatch")
-            self._font = next(
-                (
-                    face
-                    for face in history.fonts.faces
-                    if face.font_asset_id == self._asset.asset_id
-                    and face.weight == clip.text.weight
-                    and face.style == clip.text.style
-                ),
-                None,
-            )
-            if self._font is None or not self._font.covers(clip.text.content):
-                raise MediaLeaseError("unsupported")
+            # IMPORTANT: preview must resolve the same whole-text fallback as final render;
+            # selecting only the requested family refuses CJK or serves Latin bytes for it.
+            try:
+                self._font = require_text_coverage(
+                    history.fonts,
+                    self._asset.asset_id,
+                    clip.text.weight,
+                    clip.text.style,
+                    clip.text.content,
+                )
+            except AuthoringFontError:
+                raise MediaLeaseError("unsupported") from None
             source_fingerprint = self._font.file_fingerprint
             generation = history.generation or 1
             generator_fingerprint = canonical_fingerprint(
                 {
-                    "profile": "h3.authoring.packaged_ttf_identity.v1",
+                    "profile": "h3.authoring.packaged_font_identity.v1",
                     "fontManifest": history.fonts.manifest_fingerprint,
                     "fontPackage": history.fonts.package_fingerprint,
                     "fontFace": self._font.file_fingerprint,
@@ -522,6 +522,9 @@ class AuthoringDerivativeClaim:
                 len(body),
                 self._audio,
                 geometry,
+                media_type=("font/otf" if self._font.package_path.endswith(".otf") else "font/ttf")
+                if self._font is not None
+                else None,
             )
             completed, body = body, None
             return completed, verified

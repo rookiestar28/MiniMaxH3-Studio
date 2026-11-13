@@ -3,7 +3,7 @@
   "version": 1,
   "surface": "overlay_v1",
   "joined_sources": {
-    "control_coverage_manifest_sha256": "sha256:921399a9f7d1aa9f3aea76fc25c90b89e9a0c8f0fefbb22018a4ba165c5323d9",
+    "control_coverage_manifest_sha256": "sha256:2dd750700ae6203879c2659772343892c2ac5a5da5c01bf9a5cbbab38e2f6382",
     "sidebar_editor_ui_contract_sha256": "sha256:3a0bba2e967f413fafef6784b3a9691811a9fb390a271bac882ff8aadf68eede"
   },
   "fixtures": {

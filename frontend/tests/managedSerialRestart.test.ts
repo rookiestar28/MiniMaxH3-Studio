@@ -1,3 +1,9 @@
+import {
+  plainReason,
+  PLAIN_REASON_TABLES,
+} from "../src/components/plainReasons";
+import { sidebarCopy } from "../src/i18n/catalog";
+
 // B-M1605-SEQ-02: a start refused before any parent sequence exists must not poison the page
 // session. The runner marks itself started before its first request, so reusing that runner for
 // the next explicit Generate answered `already_started` until the page was reloaded.
@@ -10,6 +16,7 @@ import {
   type ManagedSerialSequenceStartIntent,
 } from "../src/host/managedSequence";
 import { createManagedSerialSession } from "../src/lifecycle/managedSerialSession";
+import { AppModeError } from "../src/host/appMode";
 import {
   createShellSession,
   type ShellRuntime,
@@ -63,6 +70,20 @@ function subject(
 }
 
 describe("B-M1605-SEQ-02 managed serial restart", () => {
+  it.each(["sequence_media_changed", "sequence_media_unavailable"] as const)(
+    "keeps the bounded AppMode failure %s in the session",
+    async (code) => {
+      const ctx = subject(async () => {
+        throw new AppModeError(code, "synthetic");
+      });
+      await expect(
+        ctx.serial.startManagedSerialSequence(intent, ctx.bindings),
+      ).rejects.toMatchObject({ code });
+      expect(ctx.serial.managedSerialSequenceSnapshot()).toMatchObject({
+        failure: code,
+      });
+    },
+  );
   it("starts again with a fresh runner after a start refused before any parent existed", async () => {
     const ctx = subject(async () => {
       throw new ManagedSequenceClientError("managed_sequence_rejected", 409);
@@ -101,4 +122,100 @@ describe("B-M1605-SEQ-02 managed serial restart", () => {
     await expect(second).rejects.toMatchObject({ code: "already_started" });
     expect(ctx.authorizations()).toBe(1);
   });
+});
+
+describe("managed serial compile reporting", () => {
+  const compileFailure = () =>
+    new AppModeError(
+      "compile_failed",
+      "synthetic private compile detail",
+      { kind: "template_unavailable" },
+      "compiled_admission",
+      "requested_route",
+    );
+
+  it("keeps only the closed compile code in the session snapshot", async () => {
+    const original = compileFailure();
+    const ctx = subject(async () => {
+      throw original;
+    });
+    await expect(
+      ctx.serial.startManagedSerialSequence(intent, ctx.bindings),
+    ).rejects.toBe(original);
+    const snapshot = ctx.serial.managedSerialSequenceSnapshot();
+    for (const property of [
+      "message",
+      "reason",
+      "compileStep",
+      "compileAdmission",
+    ])
+      expect(snapshot).not.toHaveProperty(property);
+    expect(JSON.stringify(snapshot)).not.toContain(original.message);
+    expect(JSON.stringify(snapshot)).not.toContain("requested_route");
+    expect(snapshot).toMatchObject({ failure: "compile_failed" });
+  });
+
+  it.each(["en", "zh-TW", "zh-CN"] as const)(
+    "renders the snapshot through actual plainReason and existing %s catalog copy",
+    async (locale) => {
+      const original = compileFailure();
+      const ctx = subject(async () => {
+        throw original;
+      });
+      await expect(
+        ctx.serial.startManagedSerialSequence(intent, ctx.bindings),
+      ).rejects.toBe(original);
+      const existingCopy = sidebarCopy(locale).errorMessages.compile_failed;
+      // Pin the actual formatter independently of the lifecycle mapping.
+      expect(plainReason(locale, "sequence", "compile_failed")).toBe(
+        existingCopy,
+      );
+      const snapshot = ctx.serial.managedSerialSequenceSnapshot();
+      expect(snapshot.failure).toBe("compile_failed");
+      const visible = plainReason(locale, "sequence", snapshot.failure);
+      expect(visible).toBe(existingCopy);
+      for (const forbidden of [
+        original.message,
+        "compile_failed",
+        "compiled_admission",
+        "requested_route",
+        "template_unavailable",
+      ])
+        expect(visible).not.toContain(forbidden);
+    },
+  );
+
+  it.each([
+    [
+      "unrelated AppMode queue error",
+      new AppModeError("queue_failed", "synthetic queue detail"),
+    ],
+    [
+      "unrelated AppMode seam error",
+      new AppModeError("incompatible_seam", "synthetic seam detail"),
+    ],
+    ["unknown error", new Error("synthetic unknown detail")],
+  ] as const)("keeps %s generic", async (_label, original) => {
+    const ctx = subject(async () => {
+      throw original;
+    });
+    await expect(
+      ctx.serial.startManagedSerialSequence(intent, ctx.bindings),
+    ).rejects.toBe(original);
+    expect(ctx.serial.managedSerialSequenceSnapshot()).toMatchObject({
+      failure: "managed_sequence_failed",
+    });
+    expect(
+      JSON.stringify(ctx.serial.managedSerialSequenceSnapshot()),
+    ).not.toContain(original.message);
+  });
+
+  it.each(["en", "zh-TW", "zh-CN"] as const)(
+    "retains the %s unknown sequence-code fallback",
+    (locale) => {
+      expect(
+        plainReason(locale, "sequence", "synthetic_unknown_sequence_code"),
+      ).toBe(PLAIN_REASON_TABLES[locale].sequence.fallback);
+    },
+  );
 });

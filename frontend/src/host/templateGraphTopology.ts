@@ -132,6 +132,8 @@ export function assertReferenceSpliceCapacity(
 }
 
 export type SpliceMedia = {
+  /** Private retained I2VA sequence source; geometry only, never a frame declaration. */
+  readonly geometryDonor?: LoaderSource;
   readonly firstFrame?: LoaderSource;
   readonly lastFrame?: LoaderSource;
   readonly referenceImages?: readonly LoaderSource[];
@@ -860,6 +862,7 @@ export function detachInput(
 }
 
 export type SpliceOptions = {
+  readonly sequenceTaskMode?: "i2va" | "l2va" | "fl2va";
   readonly taskMode: string;
   readonly userIntent: string;
   readonly durationSeconds: number;
@@ -894,6 +897,21 @@ export type SpliceOptions = {
 };
 
 export type SpliceMediaIds = {
+  readonly geometryDonor?: number;
+  readonly retainedCrops?: Readonly<
+    Record<
+      string,
+      Readonly<{
+        nodeId: number;
+        region: Readonly<{
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        }>;
+      }>
+    >
+  >;
   readonly crops?: Readonly<
     Record<string, Readonly<{ nodeId: number; crop: ImageCrop }>>
   >;
@@ -916,3 +934,135 @@ export type SpliceResult = {
   readonly artifactPrefixApplied: boolean;
   readonly mediaNodeIds: SpliceMediaIds;
 };
+
+export function i2vaDimensionSelector(
+  widthOrigin: readonly [Json, number] | undefined,
+  heightOrigin: readonly [Json, number] | undefined,
+): Json | undefined {
+  const selectorOrigins = [widthOrigin, heightOrigin].filter(
+    (origin) => origin?.[0].type === "ResolutionSelector",
+  );
+  const selector = selectorOrigins[0]?.[0];
+  if (
+    selector !== undefined &&
+    (widthOrigin?.[0] !== selector ||
+      widthOrigin[1] !== 0 ||
+      heightOrigin?.[0] !== selector ||
+      heightOrigin[1] !== 1)
+  )
+    throw new TemplateSpliceError(
+      "ambiguous_geometry_seam",
+      "the generation template exposes inconsistent dimension selector sources",
+    );
+  return selector;
+}
+
+export function assertI2vaSelectorDetached(
+  selector: Json,
+  links: unknown[],
+  inputs: Json[],
+  outputs: Json[],
+): void {
+  // CRITICAL: remove only the selector that drove both dimensions, after source-size
+  // rewiring. Deleting a selector with remaining consumers corrupts foreign branches.
+  if (
+    links.some(
+      (edge) =>
+        Array.isArray(edge) &&
+        (Number(edge[1]) === Number(selector.id) ||
+          Number(edge[3]) === Number(selector.id)),
+    ) ||
+    inputs.some((input) => input.link != null) ||
+    outputs.some(
+      (output) => Array.isArray(output.links) && output.links.length > 0,
+    )
+  )
+    throw new TemplateSpliceError(
+      "ambiguous_geometry_seam",
+      "the generation template dimension selector still has connected branches",
+    );
+}
+
+export function scopeI2vaGeometryNotes(nodes: Json[]): void {
+  for (const note of nodes.filter(
+    (node) =>
+      node.type === "MarkdownNote" && [116, 118].includes(Number(node.id)),
+  )) {
+    const values = note.widgets_values;
+    if (!Array.isArray(values) || typeof values[0] !== "string") continue;
+    const original = values[0];
+    let text = original;
+    if (Number(note.id) === 116)
+      text = original.replace(
+        /^- \*\*width \/ height\*\*: set via Resolution Selector\.[^\r\n]*/m,
+        "- **width / height**: Output dimensions follow the source aspect ratio, scaled to 0.8 MP and rounded in 32-pixel steps.",
+      );
+    else if (original.startsWith("| megapixels | Aspect |"))
+      text =
+        "FL2VA uses this Resolution Selector size reference. I2VA output dimensions follow source-image scaling.\n\n" +
+        original;
+    if (text === original) continue;
+    values[0] = text;
+    // Keep named and positional note text aligned; a stale named value can restore the old claim.
+    if (isRecord(note.widgets_values_named))
+      for (const [name, value] of Object.entries(note.widgets_values_named))
+        if (value === original) note.widgets_values_named[name] = text;
+  }
+}
+
+/**
+ * Write the authored duration into the control the template already drives
+ * `length` from.
+ *
+ * For a subgraph anchor that control is a promoted widget on the instance. For a
+ * flat graph it is found by walking the edge the template actually built --
+ * `length` back to the math node, and its first operand back to the primitive --
+ * rather than by trusting a node id, because a node id is a property of one file
+ * and the edge is a property of the design.
+ */
+export function applyDuration(
+  workflow: Json,
+  anchor: Json,
+  nested: boolean,
+  durationSeconds: number,
+): Readonly<{ applied: boolean; source?: Json }> {
+  if (nested) {
+    const definition = subgraphDefinitions(workflow).find(
+      (candidate) => String(candidate.id ?? "") === String(anchor.type ?? ""),
+    );
+    if (definition === undefined) return { applied: false };
+    const order = widgetOrder(definition);
+    const index = order.indexOf("value_1");
+    const widgets = Array.isArray(anchor.widgets_values)
+      ? [...anchor.widgets_values]
+      : [];
+    if (index < 0 || index >= widgets.length) return { applied: false };
+    widgets[index] = durationSeconds;
+    anchor.widgets_values = widgets;
+    return { applied: true };
+  }
+
+  const links = linkList(workflow).filter(Array.isArray) as unknown[][];
+  const byId = new Map(
+    nodeList(workflow).map((node) => [Number(node.id), node] as const),
+  );
+  const originOf = (linkId: unknown): Json | undefined => {
+    const link = links.find((entry) => entry[0] === linkId);
+    return link === undefined ? undefined : byId.get(Number(link[1]));
+  };
+  const inputsOf = (node: Json): Json[] =>
+    Array.isArray(node.inputs) ? (node.inputs.filter(isRecord) as Json[]) : [];
+
+  const lengthInput = inputsOf(anchor).find((input) => input.name === "length");
+  const math = originOf(lengthInput?.link);
+  if (math === undefined || math.type !== "ComfyMathExpression")
+    return { applied: false };
+  const operand = inputsOf(math).find((input) =>
+    String(input.name ?? "").endsWith("a"),
+  );
+  const primitive = originOf(operand?.link);
+  if (primitive === undefined || primitive.type !== "PrimitiveFloat")
+    return { applied: false };
+  primitive.widgets_values = [durationSeconds];
+  return { applied: true, source: primitive };
+}

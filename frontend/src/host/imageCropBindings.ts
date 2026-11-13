@@ -81,6 +81,36 @@ export function matchesImageCropNodes(
   });
 }
 
+/**
+ * The per-node structural rule of one native crop node: its image is output slot 0 of a
+ * `LoadImage` of the same prompt, and its region has exactly four bounded integer keys.
+ */
+export function isLoaderBoundImageCrop(
+  node: Node,
+  byId: ReadonlyMap<string, Node>,
+): boolean {
+  const inputs = record(node.inputs);
+  const image = inputs?.image;
+  const region = record(inputs?.crop_region);
+  return (
+    Array.isArray(image) &&
+    image.length === 2 &&
+    image[1] === 0 &&
+    (typeof image[0] === "string" || typeof image[0] === "number") &&
+    byId.get(String(image[0]))?.class_type === "LoadImage" &&
+    region !== undefined &&
+    Object.keys(region).length === 4 &&
+    ["x", "y", "width", "height"].every(
+      (key) =>
+        Number.isSafeInteger(region[key]) &&
+        Number(region[key]) >= (key === "width" || key === "height" ? 32 : 0) &&
+        Number(region[key]) <= 16384,
+    ) &&
+    Number(region.x) + Number(region.width) <= 16384 &&
+    Number(region.y) + Number(region.height) <= 16384
+  );
+}
+
 /** Structural admission permits one native interposer per loader, never chains. */
 export function validStructuralImageCrops(
   byId: ReadonlyMap<string, Node>,
@@ -88,30 +118,11 @@ export function validStructuralImageCrops(
   const seen = new Set<string>();
   for (const node of byId.values()) {
     if (node.class_type !== IMAGE_CROP_NODE_TYPE) continue;
-    const inputs = record(node.inputs);
-    const image = inputs?.image;
-    const region = record(inputs?.crop_region);
-    if (
-      !Array.isArray(image) ||
-      image.length !== 2 ||
-      image[1] !== 0 ||
-      !(typeof image[0] === "string" || typeof image[0] === "number") ||
-      byId.get(String(image[0]))?.class_type !== "LoadImage" ||
-      seen.has(String(image[0])) ||
-      region === undefined ||
-      Object.keys(region).length !== 4 ||
-      !["x", "y", "width", "height"].every(
-        (key) =>
-          Number.isSafeInteger(region[key]) &&
-          Number(region[key]) >=
-            (key === "width" || key === "height" ? 32 : 0) &&
-          Number(region[key]) <= 16384,
-      ) ||
-      Number(region.x) + Number(region.width) > 16384 ||
-      Number(region.y) + Number(region.height) > 16384
-    )
-      return false;
-    seen.add(String(image[0]));
+    if (!isLoaderBoundImageCrop(node, byId)) return false;
+    // One crop per loader over the whole graph: the materialize route keys its crops by loader.
+    const loader = String((record(node.inputs)!.image as unknown[])[0]);
+    if (seen.has(loader)) return false;
+    seen.add(loader);
   }
   return true;
 }

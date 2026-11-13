@@ -495,8 +495,6 @@ def test_shared_section_serializer_keeps_exact_double_newline_boundary() -> None
 def test_last_reference_maps_once_to_local_registry_and_protects_exact_text() -> None:
     from dataclasses import replace
 
-    from comfyui_h3_context.core.errors import PromptRenderingError
-
     authority = ProductionSemanticAuthorityV1(
         reference_definitions=(
             ReferenceDefinitionV1(
@@ -529,13 +527,17 @@ def test_last_reference_maps_once_to_local_registry_and_protects_exact_text() ->
     )
     assert local.reference_definitions[0].asset_id == "last"
     assert local.reference_definitions[0].backend_label == "<Picture 2>"
-    with pytest.raises(PromptRenderingError, match="lost exact text"):
-        render_production_segment_prompt(
-            local,
-            (replace(shot, visible_text=("<Picture 2>",)),),
-            section_heading="integrated_multimodal_description",
-            clip_duration_seconds=CLIP,
-        )
+    # REPLY-551 section 3 item 1 / REPLY-554 section 2: exact reference tokens renumber once;
+    # the guard preserves every non-token byte using the same local-label substitution.
+    exact = render_production_segment_prompt(
+        local,
+        (replace(shot, visible_text=("<Picture 2>",)),),
+        section_heading="integrated_multimodal_description",
+        clip_duration_seconds=CLIP,
+    )
+    assert exact.text == rendered.text
+    assert "End at <Picture 1>." in exact.text
+    assert "<Picture 2>" not in exact.text
 
 
 def test_typed_plan_and_exact_document_derive_source_authority_without_prose_timing() -> None:

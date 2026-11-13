@@ -280,6 +280,9 @@
   --h3-surface-3: #232932;
   /* A field is a recessed well, not a raised face. */
   --h3-well: #090b0f;
+  /* IMPORTANT: theme wells hide title fills or black decorations. Keep preset previews
+     on the same neutral backdrop in both themes so those styles remain visible. */
+  --h3-preset-backdrop: #767676;
   --h3-control: #1f242c;
   --h3-line-subtle: #242a33;
   --h3-line-strong: #363e4a;
@@ -465,6 +468,7 @@
   --h3-surface-2: #ffffff;
   --h3-surface-3: #e4e8ee;
   --h3-well: #f7f9fb;
+  --h3-preset-backdrop: #767676;
   /* the shipped grey control fill (#d6dae0) made every field read as
      disabled in light mode. A field here is white with a border. */
   --h3-control: #ffffff;

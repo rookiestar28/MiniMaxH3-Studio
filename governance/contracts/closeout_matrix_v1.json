@@ -1,5 +1,5 @@
 {
-  "fingerprint": "sha256:841e18205446e3115fdb30231bffe5d06e7555e09d883534da7aee4ebbef2109",
+  "fingerprint": "sha256:9800ef388417af63edf099c7c043e7be09dd99987006614d9e5c637c9420443d",
   "metrics": [
     {
       "baseline": 13,
@@ -22,7 +22,7 @@
       "unit": "identities"
     },
     {
-      "baseline": 250136,
+      "baseline": 250286,
       "baseline_commit": "15db3061b5d1c386db46551196a6d164f114baff",
       "evidence": "the v1 bindings and reachability sections, sized on the shipped manifest",
       "final": 0,
@@ -32,7 +32,7 @@
       "unit": "bytes"
     },
     {
-      "baseline": 326123,
+      "baseline": 326273,
       "baseline_commit": "15db3061b5d1c386db46551196a6d164f114baff",
       "evidence": "the shipped v1 wire against the v2 it projects from, sized here not copied",
       "final": 78696,

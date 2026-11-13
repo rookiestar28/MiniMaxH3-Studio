@@ -29,7 +29,7 @@ from .authoring_render_service import RenderExecutionIdentity, RenderServiceErro
 # CRITICAL: reissue each changed Source/Public subject by executing its actual corpus;
 # Source admission alone cannot qualify the redacted renderer's implementation bytes.
 _ACCEPTED_EVIDENCE: Final[str | None] = (
-    "sha256:008b3af6f6ee872302ad8bd0ce6191d2b715b55362729e4f42297d1aeec3c60c"
+    "sha256:7b1059b02d8662802ffd948035fdb9257162add4177360a50b00d7d36861e280"
 )
 _PACKAGE = Path(__file__).resolve().parents[1]
 _EVIDENCE = _PACKAGE / "contracts" / "authoring_renderer_qualification_v2.json"

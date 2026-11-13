@@ -1,0 +1,760 @@
+{
+  "last_node_id": 18,
+  "last_link_id": 32,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "PrimitiveFloat",
+      "pos": [
+        0,
+        0
+      ],
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "links": [
+            10,
+            31
+          ]
+        }
+      ],
+      "widgets_values": [
+        8
+      ]
+    },
+    {
+      "id": 2,
+      "type": "ComfyMathExpression",
+      "pos": [
+        0,
+        100
+      ],
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "values.a",
+          "type": "FLOAT,INT,BOOLEAN",
+          "link": 10
+        },
+        {
+          "name": "values.b",
+          "type": "FLOAT,INT,BOOLEAN",
+          "shape": 7,
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "widgets_values": [
+        "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "MiniMaxH3ImageToVideo",
+      "pos": [
+        200,
+        0
+      ],
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": 32,
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": null
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": null
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "widget": {
+            "name": "length"
+          },
+          "link": 11
+        },
+        {
+          "name": "first_frame",
+          "type": "IMAGE",
+          "shape": 7,
+          "link": null
+        },
+        {
+          "name": "last_frame",
+          "type": "IMAGE",
+          "shape": 7,
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": []
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "widgets_values": [
+        512,
+        512,
+        124
+      ]
+    },
+    {
+      "id": 4,
+      "type": "VAEDecode",
+      "pos": [
+        400,
+        0
+      ],
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            13
+          ]
+        }
+      ],
+      "widgets_values": []
+    },
+    {
+      "id": 5,
+      "type": "CreateVideo",
+      "pos": [
+        600,
+        0
+      ],
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "widgets_values": [
+        24,
+        8
+      ]
+    },
+    {
+      "id": 6,
+      "type": "SaveVideo",
+      "pos": [
+        800,
+        0
+      ],
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 14
+        }
+      ],
+      "outputs": [],
+      "widgets_values": [
+        "video/h3-context/session/afddcf485e0dfb06",
+        "auto",
+        "auto"
+      ]
+    },
+    {
+      "id": 11,
+      "type": "comfyui_h3_context.H3Context.Request",
+      "pos": [
+        -2400,
+        -1200
+      ],
+      "size": [
+        420,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "task_mode",
+          "type": "COMBO",
+          "link": null,
+          "widget": {
+            "name": "task_mode"
+          }
+        },
+        {
+          "name": "user_intent",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "user_intent"
+          }
+        },
+        {
+          "name": "duration_seconds",
+          "type": "FLOAT",
+          "link": 31,
+          "widget": {
+            "name": "duration_seconds"
+          }
+        },
+        {
+          "name": "hard_constraints",
+          "type": "H3_HARD_CONSTRAINTS",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "request",
+          "type": "H3_CONTEXT_REQUEST",
+          "links": [
+            22
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "t2va",
+        "A blue sphere turns slowly.",
+        8
+      ]
+    },
+    {
+      "id": 12,
+      "type": "comfyui_h3_context.H3Context.Plan",
+      "pos": [
+        -2400,
+        -1020
+      ],
+      "size": [
+        420,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "request",
+          "type": "H3_CONTEXT_REQUEST",
+          "link": 22
+        },
+        {
+          "name": "reference_registry",
+          "type": "H3_REFERENCE_REGISTRY",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "intent_graph",
+          "type": "H3_INTENT_GRAPH",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "plan",
+          "type": "H3_CONTEXT_PLAN",
+          "links": [
+            23,
+            25
+          ]
+        },
+        {
+          "name": "report",
+          "type": "H3_CONTEXT_REPORT",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 13,
+      "type": "comfyui_h3_context.H3Context.Compiler",
+      "pos": [
+        -2400,
+        -840
+      ],
+      "size": [
+        420,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "plan",
+          "type": "H3_CONTEXT_PLAN",
+          "link": 23
+        }
+      ],
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "H3_PROMPT_STRING",
+          "links": []
+        },
+        {
+          "name": "report",
+          "type": "H3_CONTEXT_REPORT",
+          "links": [
+            24
+          ]
+        },
+        {
+          "name": "prompt_document",
+          "type": "H3_PROMPT_DOCUMENT",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 14,
+      "type": "comfyui_h3_context.H3Context.AuditOverride",
+      "pos": [
+        -2400,
+        -660
+      ],
+      "size": [
+        420,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "report",
+          "type": "H3_CONTEXT_REPORT",
+          "link": 24
+        },
+        {
+          "name": "base_report_fingerprint",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "base_report_fingerprint"
+          }
+        },
+        {
+          "name": "revision",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "revision"
+          }
+        },
+        {
+          "name": "reason",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "reason"
+          }
+        },
+        {
+          "name": "prompt_text",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "prompt_text"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "edited_prompt",
+          "type": "H3_PROMPT_STRING",
+          "links": []
+        },
+        {
+          "name": "updated_report",
+          "type": "H3_CONTEXT_REPORT",
+          "links": []
+        },
+        {
+          "name": "override",
+          "type": "H3_AUDIT_OVERRIDE",
+          "links": []
+        },
+        {
+          "name": "prompt_document",
+          "type": "H3_PROMPT_DOCUMENT",
+          "links": [
+            26
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        1,
+        "Materialize approved Production segment prompt",
+        "A blue sphere turns slowly."
+      ]
+    },
+    {
+      "id": 15,
+      "type": "comfyui_h3_context.H3Context.Validator",
+      "pos": [
+        -2400,
+        -480
+      ],
+      "size": [
+        420,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "plan",
+          "type": "H3_CONTEXT_PLAN",
+          "link": 25
+        },
+        {
+          "name": "prompt_document",
+          "type": "H3_PROMPT_DOCUMENT",
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "validation",
+          "type": "H3_VALIDATION_RESULT",
+          "links": []
+        },
+        {
+          "name": "validated_report",
+          "type": "H3_CONTEXT_REPORT",
+          "links": [
+            27,
+            28,
+            29
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 16,
+      "type": "comfyui_h3_context.H3Context.NativeH3Adapter",
+      "pos": [
+        -2400,
+        -300
+      ],
+      "size": [
+        420,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "report",
+          "type": "H3_CONTEXT_REPORT",
+          "link": 27
+        }
+      ],
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "H3_PROMPT_STRING",
+          "links": []
+        },
+        {
+          "name": "native_h3_wiring",
+          "type": "H3_NATIVE_H3_WIRING",
+          "links": [
+            30
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 17,
+      "type": "comfyui_h3_context.H3Context.Preview",
+      "pos": [
+        -2400,
+        -120
+      ],
+      "size": [
+        420,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "report",
+          "type": "H3_CONTEXT_REPORT",
+          "link": 28
+        }
+      ],
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "H3_PROMPT_STRING",
+          "links": []
+        },
+        {
+          "name": "preview",
+          "type": "H3_CONTEXT_PREVIEW",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    },
+    {
+      "id": 18,
+      "type": "comfyui_h3_context.H3Context.ProductShell",
+      "pos": [
+        -2400,
+        60
+      ],
+      "size": [
+        420,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "report",
+          "type": "H3_CONTEXT_REPORT",
+          "link": 29
+        },
+        {
+          "name": "native_h3_wiring",
+          "type": "H3_NATIVE_H3_WIRING",
+          "link": 30
+        }
+      ],
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "links": [
+            32
+          ]
+        },
+        {
+          "name": "product_shell",
+          "type": "H3_PRODUCT_SHELL",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": []
+    }
+  ],
+  "links": [
+    [
+      10,
+      1,
+      0,
+      2,
+      0,
+      "FLOAT"
+    ],
+    [
+      11,
+      2,
+      0,
+      3,
+      5,
+      "INT"
+    ],
+    [
+      12,
+      3,
+      1,
+      4,
+      0,
+      "LATENT"
+    ],
+    [
+      13,
+      4,
+      0,
+      5,
+      0,
+      "IMAGE"
+    ],
+    [
+      14,
+      5,
+      0,
+      6,
+      0,
+      "VIDEO"
+    ],
+    [
+      22,
+      11,
+      0,
+      12,
+      0,
+      "H3_CONTEXT_REQUEST"
+    ],
+    [
+      23,
+      12,
+      0,
+      13,
+      0,
+      "H3_CONTEXT_PLAN"
+    ],
+    [
+      24,
+      13,
+      1,
+      14,
+      0,
+      "H3_CONTEXT_REPORT"
+    ],
+    [
+      25,
+      12,
+      0,
+      15,
+      0,
+      "H3_CONTEXT_PLAN"
+    ],
+    [
+      26,
+      14,
+      3,
+      15,
+      1,
+      "H3_PROMPT_DOCUMENT"
+    ],
+    [
+      27,
+      15,
+      1,
+      16,
+      0,
+      "H3_CONTEXT_REPORT"
+    ],
+    [
+      28,
+      15,
+      1,
+      17,
+      0,
+      "H3_CONTEXT_REPORT"
+    ],
+    [
+      29,
+      15,
+      1,
+      18,
+      0,
+      "H3_CONTEXT_REPORT"
+    ],
+    [
+      30,
+      16,
+      1,
+      18,
+      1,
+      "H3_NATIVE_H3_WIRING"
+    ],
+    [
+      31,
+      1,
+      0,
+      11,
+      2,
+      "FLOAT"
+    ],
+    [
+      32,
+      18,
+      0,
+      3,
+      2,
+      "STRING"
+    ]
+  ],
+  "definitions": {
+    "subgraphs": []
+  }
+}

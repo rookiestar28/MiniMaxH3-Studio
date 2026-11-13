@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -15,6 +17,41 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _mask_packaged_font_payloads(bundle: bytes) -> bytes:
+    manifest = json.loads((ROOT / "comfyui_h3_context/fonts/font_manifest_v1.json").read_bytes())
+    latin = next(
+        row for row in manifest["font_assets"] if row["font_asset_id"] == "h3.font.noto_sans.v1"
+    )
+    matches = list(re.finditer(rb"data:font/(?:ttf|sfnt);base64,([A-Za-z0-9+/=]+)", bundle))
+    spans: list[tuple[int, int]] = []
+    for weight, name in ((400, "Regular"), (700, "Bold")):
+        faces = [
+            face
+            for face in latin["faces"]
+            if face["weight"] == weight and face["style"] == "normal"
+        ]
+        assert len(faces) == 1, "expected one manifest-pinned normal font face"
+        face = faces[0]
+        assert face["package_path"] == f"fonts/NotoSans-{name}.ttf"
+        body = (ROOT / "comfyui_h3_context" / face["package_path"]).read_bytes()
+        assert len(body) == face["size_bytes"]
+        assert "sha256:" + hashlib.sha256(body).hexdigest() == face["file_sha256"]
+        payload = base64.b64encode(body)
+        exact = [match.span(1) for match in matches if match.group(1) == payload]
+        assert len(exact) == 1, "expected font payload exactly once"
+        spans.extend(exact)
+    assert len(set(spans)) == 2
+    # CRITICAL: exempt only complete, byte-identical manifest-pinned font payloads;
+    # masking arbitrary base64 would hide secrets in other bundle bytes.
+    for start, end in sorted(spans, reverse=True):
+        bundle = bundle[:start] + b"<packaged-font-payload>" + bundle[end:]
+    return bundle
+
+
+def _scanner_canary() -> bytes:
+    return b"pass" + b"word" + b' = "' + b"r7mV2q9" + b'X8pL6wZ4";\n'
 
 
 class FrontendBuildReportTests(unittest.TestCase):
@@ -264,23 +301,73 @@ class FrontendBuildReportTests(unittest.TestCase):
         ):
             module._module_dependency_boundary("const x=1;")
 
+    def test_scanner_mask_exempts_only_exact_manifest_pinned_font_payloads(self) -> None:
+        bundle = (ROOT / "comfyui_h3_context/web/h3-context-sidebar.js").read_bytes()
+        payloads = [
+            base64.b64encode((ROOT / f"comfyui_h3_context/fonts/NotoSans-{face}.ttf").read_bytes())
+            for face in ("Regular", "Bold")
+        ]
+        foreign = b'\n"data:font/ttf;base64,' + payloads[0] + b'AAAA";\n'
+        expected = bundle
+        for payload in payloads:
+            self.assertEqual(bundle.count(payload), 1)
+            expected = expected.replace(payload, b"<packaged-font-payload>")
+        self.assertEqual(_mask_packaged_font_payloads(bundle + foreign), expected + foreign)
+        changed = (b"A" if payloads[0][:1] != b"A" else b"B") + payloads[0][1:]
+        for invalid in (
+            bundle.replace(payloads[0], changed, 1),
+            bundle + b'\n"data:font/ttf;base64,' + payloads[0] + b'";\n',
+        ):
+            with (
+                self.subTest(invalid_bytes=len(invalid)),
+                self.assertRaisesRegex(AssertionError, "expected font payload exactly once"),
+            ):
+                _mask_packaged_font_payloads(invalid)
+
     def test_shipped_runtime_passes_the_secret_scanner(self) -> None:
         bundle = ROOT / "comfyui_h3_context" / "web" / "h3-context-sidebar.js"
-        completed = subprocess.run(
-            [sys.executable, "-m", "detect_secrets", "scan", str(bundle)],
-            cwd=ROOT,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="strict",
-            shell=False,
-            check=False,
-            timeout=30,
-        )
+        masked = _mask_packaged_font_payloads(bundle.read_bytes())
+        (ROOT / ".tmp").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="h3-scanner-", dir=ROOT / ".tmp") as temporary:
+            directory = Path(temporary)
+            (directory / "bundle.js").write_bytes(masked)
+            (directory / "canary.js").write_bytes(_scanner_canary())
+            # CRITICAL: copies are untracked; all-files plus the same-call canary
+            # prevents an ignored empty scan from passing as a clean bundle.
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "detect_secrets",
+                    "scan",
+                    # No candidate goes to a verification service; the result is equal without it.
+                    "--no-verify",
+                    "--all-files",
+                    "bundle.js",
+                    "canary.js",
+                ],
+                cwd=directory,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="strict",
+                shell=False,
+                check=False,
+                # IMPORTANT: a hang guard, not a speed budget. The scan of the masked shipped
+                # bundle (3.9 MB, twice its 1.4.1 size) takes 13 s under WSL, 19-20 s on Windows
+                # and more than 30 s on a Hosted runner, where 30 s killed a scan still running.
+                timeout=180,
+            )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         scan = json.loads(completed.stdout)
-        self.assertEqual(scan["results"], {})
+        results = scan["results"]
+        self.assertTrue(results.get("canary.js"), "scanner positive control missing")
+        self.assertTrue(any(row["type"] == "Secret Keyword" for row in results["canary.js"]))
+        self.assertEqual(
+            results.get("bundle.js", []), [], "non-font bundle bytes contain a finding"
+        )
+        self.assertEqual(set(results), {"canary.js"})
 
 
 if __name__ == "__main__":

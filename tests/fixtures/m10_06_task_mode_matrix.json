@@ -30,7 +30,7 @@
     "i2va": {
       "context_ir": "injected_only",
       "compiler": "reachable",
-      "native_generation": "unsupported"
+      "native_generation": "reachable"
     },
     "fl2va": {
       "context_ir": "injected_only",
@@ -40,7 +40,7 @@
     "l2va": {
       "context_ir": "injected_only",
       "compiler": "reachable",
-      "native_generation": "unsupported"
+      "native_generation": "reachable"
     },
     "ref2va": {
       "context_ir": "injected_only",
@@ -48,8 +48,5 @@
       "native_generation": "reachable"
     }
   },
-  "negative_failures": {
-    "i2va.native_generation": "unsupported_native_task_mode",
-    "l2va.native_generation": "unsupported_native_task_mode"
-  }
+  "negative_failures": {}
 }

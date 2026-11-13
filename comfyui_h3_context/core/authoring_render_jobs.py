@@ -294,6 +294,7 @@ class RenderJobFailure(str, Enum):
     STORE_UNAVAILABLE = "store_unavailable"
     SERVICE_CLOSED = "service_closed"
     RUNTIME_UNAVAILABLE = "runtime_unavailable"
+    PATH_TOO_DEEP = "path_too_deep"
 
 
 _TERMINAL: Final = frozenset(

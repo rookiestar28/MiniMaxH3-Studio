@@ -1,4 +1,12 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  writeFile,
+} from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { isAbsolute, relative, resolve } from "node:path";
 
 import type { Locator, Response } from "@playwright/test";
@@ -98,6 +106,56 @@ export async function readReadyPreviewBytes(
 
 export type OwnerCaptureOperation = "observe" | "capture" | "stop";
 
+async function absentCaptureFile(path: string) {
+  try {
+    await lstat(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  throw new Error("capture exchange final name already exists");
+}
+
+const OWNER_CAPTURE_RESULT_MAX_BYTES = 8_388_608;
+
+async function readCaptureResult(path: string) {
+  const before = await lstat(path);
+  // CRITICAL: full capture evidence uses the 8 MiB result contract. Applying the
+  // 4096-byte command bound here rejects valid plans and receipts before readback.
+  if (
+    !before.isFile() ||
+    before.isSymbolicLink() ||
+    before.size > OWNER_CAPTURE_RESULT_MAX_BYTES
+  )
+    throw new Error("capture exchange target refused");
+  const handle = await open(path, "r");
+  try {
+    const opened = await handle.stat();
+    if (opened.ino !== before.ino || opened.dev !== before.dev)
+      throw new Error("capture exchange identity changed");
+    const buffer = Buffer.alloc(OWNER_CAPTURE_RESULT_MAX_BYTES);
+    const { bytesRead } = await handle.read(
+      buffer,
+      0,
+      OWNER_CAPTURE_RESULT_MAX_BYTES,
+      0,
+    );
+    const after = await lstat(path);
+    if (
+      !after.isFile() ||
+      after.isSymbolicLink() ||
+      after.ino !== before.ino ||
+      after.dev !== before.dev ||
+      after.size !== before.size ||
+      bytesRead !== before.size
+    )
+      throw new Error("capture exchange identity changed");
+    return JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
  * File-command client for the instrumented host's passive M26 assembly observer. Each command is
  * bound to the current qualification session and host process; results are retained as evidence.
@@ -113,8 +171,10 @@ export async function createOwnerCapture(apparatus: string, evidence: string) {
     projection?: ProductionWorkbenchProjection,
   ) => {
     const sequence = ++captureSequence;
+    if (sequence > 64) throw new Error("capture command limit exceeded");
     const command = {
-      schema: "M26OwnerCaptureCommandV1",
+      schema: "M26OwnerCaptureCommandV2",
+      nonce: randomBytes(16).toString("hex"),
       session: session.sessionId,
       sequence,
       operation,
@@ -124,20 +184,28 @@ export async function createOwnerCapture(apparatus: string, evidence: string) {
       expectedWorkspaceFingerprint: projection?.workspaceFingerprint ?? null,
       assemblyJobId: projection?.assembly.assemblyJobId ?? null,
     };
-    const pending = resolve(apparatus, "m26-capture-command.pending.json");
-    await writeFile(pending, JSON.stringify(command));
-    await rename(pending, resolve(apparatus, "m26-capture-command.json"));
+    // CRITICAL: Windows cannot replace a target another peer holds open. Each
+    // nonce owns new command/result names; keep every prior exchange as evidence.
+    const suffix = `${sequence}.${command.nonce}`;
+    const pending = resolve(apparatus, `m26-capture-command.${suffix}.pending`);
+    const published = resolve(apparatus, `m26-capture-command.${suffix}.json`);
+    const resultPath = resolve(apparatus, `m26-capture-result.${suffix}.json`);
+    const raw = JSON.stringify(command);
+    if (Buffer.byteLength(raw) > 4096)
+      throw new Error("capture command too large");
+    await writeFile(pending, raw, { flag: "wx" });
+    await absentCaptureFile(published);
+    await rename(pending, published);
     let result: Record<string, any> | undefined;
     await expect
       .poll(
         async () => {
-          result = await readFile(
-            resolve(apparatus, "m26-capture-result.json"),
-            "utf8",
-          )
-            .then(JSON.parse)
-            .catch(() => undefined);
+          result = await readCaptureResult(resultPath).catch(() => undefined);
           return (
+            // A fresh helper restarts sequence at 1: only this command's nonce can
+            // admit its result, including a previous closure's delayed acknowledgement.
+            result?.schema === "M26OwnerCaptureResultV2" &&
+            result?.nonce === command.nonce &&
             result?.session === command.session &&
             result?.sequence === sequence &&
             result?.operation === operation
@@ -146,12 +214,13 @@ export async function createOwnerCapture(apparatus: string, evidence: string) {
         { timeout: 30_000 },
       )
       .toBe(true);
-    expect(result!.schema).toBe("M26OwnerCaptureResultV1");
+    expect(result!.schema).toBe("M26OwnerCaptureResultV2");
     expect(result!.hostPid).toBe(session.hostPid);
     expect(result!.hostCreateTime).toBe(session.hostCreateTime);
     await writeFile(
-      resolve(evidence, `owner-${sequence}-${operation}.json`),
+      resolve(evidence, `owner-${sequence}-${operation}-${command.nonce}.json`),
       JSON.stringify(result, null, 2),
+      { flag: "wx" },
     );
     expect(result!.status, JSON.stringify(result)).toBe("pass");
     return result!;

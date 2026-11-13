@@ -20,7 +20,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from pathlib import Path
-from typing import NoReturn
+from typing import NoReturn, cast
 
 from ..core.canonical import binary64_token, canonical_bytes, canonical_fingerprint
 from ..core.durable_workspace_state import StateRecord
@@ -77,6 +77,7 @@ from .comfyui_input_geometry import (
     GeometryPreflightError,
     InputGeometryReceipt,
     claim_input_geometry_receipt,
+    claim_input_geometry_source,
 )
 from .comfyui_production_workspace import (
     PRODUCTION_ACTION_SCHEMA,
@@ -117,6 +118,13 @@ from .segment_artifact_store import (
     ArtifactStorePolicy,
     PrivateSegmentArtifactStore,
     _read_regular_bytes,
+)
+from .sequence_media_bindings import SequenceMediaBindingError
+from .sequence_media_observation import (
+    SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA,
+    SequenceMediaSourceIdentityV1,
+    claim_sequence_media_sources,
+    decode_sequence_media_identities,
 )
 
 COORDINATOR_ACTION_SCHEMA = "h3.context.generation_coordinator.action.v1"
@@ -379,11 +387,26 @@ class PreparedGraphObservation:
     source_identity: InputGeometryReceipt | None
     timeout_ms: int
     native_anchor_node_id: str
+    source_identities: tuple[SequenceMediaSourceIdentityV1, ...] = field(default=(), kw_only=True)
+    media_binding_fingerprint: str | None = field(default=None, kw_only=True)
     schema: str = PREPARED_GRAPH_OBSERVATION_SCHEMA
 
     def __post_init__(self) -> None:
-        if self.schema != PREPARED_GRAPH_OBSERVATION_SCHEMA:
+        if self.schema not in {
+            PREPARED_GRAPH_OBSERVATION_SCHEMA,
+            SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA,
+        }:
             raise SequenceCoordinatorError("invalid_observation_schema", 400)
+        if self.schema == SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA:
+            if self.source_identity is not None:
+                raise SequenceCoordinatorError("invalid_source_identity", 400)
+            decode_sequence_media_identities([row.to_wire() for row in self.source_identities])
+            if self.media_binding_fingerprint is not None:
+                _fingerprint(self.media_binding_fingerprint, "media_binding_fingerprint")
+            if bool(self.source_identities) != (self.media_binding_fingerprint is not None):
+                raise SequenceCoordinatorError("invalid_source_identity", 400)
+        elif self.source_identities or self.media_binding_fingerprint is not None:
+            raise SequenceCoordinatorError("invalid_source_identity", 400)
         if self.route not in _MANAGED_ROUTES:
             raise SequenceCoordinatorError("unmanaged_route", 422)
         for value, field_name in (
@@ -406,6 +429,10 @@ class PreparedGraphObservation:
 
     @classmethod
     def from_wire(cls, value: object) -> PreparedGraphObservation:
+        is_sequence = (
+            type(value) is dict
+            and value.get("schema") == SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA
+        )
         wire = _closed(
             value,
             {
@@ -420,7 +447,11 @@ class PreparedGraphObservation:
                 "runtime_fingerprint",
                 "fingerprint_domain",
                 "expected_frames",
-                "source_identity",
+                *(
+                    {"source_identities", "media_binding_fingerprint"}
+                    if is_sequence
+                    else {"source_identity"}
+                ),
                 "timeout_ms",
                 "native_anchor_node_id",
             },
@@ -443,7 +474,7 @@ class PreparedGraphObservation:
         try:
             source_identity = (
                 None
-                if wire["source_identity"] is None
+                if is_sequence or wire["source_identity"] is None
                 else InputGeometryReceipt.from_wire(wire["source_identity"])
             )
         except GeometryPreflightError as exc:
@@ -469,10 +500,16 @@ class PreparedGraphObservation:
             native_anchor_node_id=_identifier(
                 wire["native_anchor_node_id"], "native_anchor_node_id"
             ),
+            source_identities=decode_sequence_media_identities(wire["source_identities"])
+            if is_sequence
+            else (),
+            media_binding_fingerprint=cast(str, wire["media_binding_fingerprint"])
+            if is_sequence
+            else None,
         )
 
     def to_wire(self) -> dict[str, object]:
-        return {
+        wire = {
             "schema": self.schema,
             "route": self.route,
             "graph_fingerprint": self.graph_fingerprint,
@@ -490,6 +527,13 @@ class PreparedGraphObservation:
             "timeout_ms": self.timeout_ms,
             "native_anchor_node_id": self.native_anchor_node_id,
         }
+        if self.schema == SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA:
+            wire.pop("source_identity")
+            wire.update(
+                source_identities=[row.to_wire() for row in self.source_identities],
+                media_binding_fingerprint=self.media_binding_fingerprint,
+            )
+        return wire
 
 
 @dataclass(frozen=True, slots=True)
@@ -1122,6 +1166,7 @@ class SequenceCoordinatorRegistry:
         ] = PrivateSegmentArtifactStore,
         artifact_inspector: ArtifactInspector = _default_artifact_inspector,
         geometry_receipt_claimant: GeometryReceiptClaimant = claim_input_geometry_receipt,
+        sequence_media_claimant: Callable[..., InputGeometryReceipt] = claim_input_geometry_source,
         clock: Callable[[], float] = time.monotonic,
         clock_ms: Callable[[], int] = lambda: time.time_ns() // 1_000_000,
         token_factory: Callable[[], str] = lambda: secrets.token_urlsafe(40),
@@ -1135,6 +1180,7 @@ class SequenceCoordinatorRegistry:
             or not callable(artifact_store_factory)
             or not callable(artifact_inspector)
             or not callable(geometry_receipt_claimant)
+            or not callable(sequence_media_claimant)
             or not callable(clock)
             or not callable(clock_ms)
             or not callable(token_factory)
@@ -1150,6 +1196,7 @@ class SequenceCoordinatorRegistry:
         self._artifact_store_factory = artifact_store_factory
         self._artifact_inspector = artifact_inspector
         self._geometry_receipt_claimant = geometry_receipt_claimant
+        self._sequence_media_claimant = sequence_media_claimant
         self._clock = clock
         self._clock_ms = clock_ms
         self._token_factory = token_factory
@@ -1530,6 +1577,25 @@ class SequenceCoordinatorRegistry:
                 state = self._managed_start_state(parent_sequence_id, request_fingerprint)
                 state.artifact_capacity_released = True
 
+    def _claim_managed_sequence_media(
+        self,
+        request: ManagedChildBindingRequestV1,
+    ) -> InputGeometryReceipt | None:
+        if request.sequence_task_mode is None:
+            return None
+        try:
+            claimed = claim_sequence_media_sources(
+                request.sequence_media_bindings,
+                request.observation.source_identities,
+                request.observation.media_binding_fingerprint,
+                self._sequence_media_claimant,
+            )
+        except SequenceMediaBindingError as exc:
+            raise ManagedSequenceServiceError(exc.code, exc.status) from exc
+        # Only global I2VA owns source geometry. Frame anchors in FL2VA/L2VA must not
+        # silently change their official template's geometry to that of a declared image.
+        return claimed[0] if request.sequence_task_mode.value == "i2va" and claimed else None
+
     def bind_managed_sequence_child(
         self,
         request: ManagedChildBindingRequestV1,
@@ -1557,11 +1623,17 @@ class SequenceCoordinatorRegistry:
             if len(self._runs) >= self._max_runs:
                 raise ManagedSequenceServiceError("child_binding_coordinator_capacity", 503)
 
+            # CRITICAL: claim every retained source before either branch can create child
+            # Production/ManagedRun authority. A changed/deleted image must never reach queue.
+            sequence_geometry = self._claim_managed_sequence_media(request)
+
             if (
                 request.source_authority is not None
                 or request.production_workspace_handle is not None
             ):
-                return self._bind_original_managed_child(request, resource, now)
+                return self._bind_original_managed_child(
+                    request, resource, now, sequence_geometry=sequence_geometry
+                )
 
             correlation = ExecutionCorrelation(
                 request.correlation.pending_correlation_id,
@@ -1631,7 +1703,7 @@ class SequenceCoordinatorRegistry:
                     (spec,),
                 )
                 state = create_generation_sequence_state(plan)
-                geometry_receipt: InputGeometryReceipt | None = None
+                geometry_receipt: InputGeometryReceipt | None = sequence_geometry
                 if observation.source_identity is not None:
                     geometry_receipt = self._geometry_receipt_claimant(
                         observation.source_identity.to_wire()
@@ -1768,6 +1840,8 @@ class SequenceCoordinatorRegistry:
         request: ManagedChildBindingRequestV1,
         resource: _ManagedStartResourceState,
         now: float,
+        *,
+        sequence_geometry: InputGeometryReceipt | None = None,
     ) -> ManagedChildBindingClaimV1:
         source = request.source_authority
         handle = request.production_workspace_handle
@@ -1841,7 +1915,7 @@ class SequenceCoordinatorRegistry:
             source.workspace, handle, sequence
         )
         geometry = (
-            None
+            sequence_geometry
             if observation.source_identity is None
             else self._geometry_receipt_claimant(observation.source_identity.to_wire())
         )
@@ -2288,6 +2362,9 @@ class SequenceCoordinatorRegistry:
         observation: PreparedGraphObservation,
     ) -> GenerationSequenceState:
         """Plan the one managed job a single-segment workspace executes."""
+
+        if observation.schema == SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA:
+            raise SequenceCoordinatorError("sequence_media_authority_unavailable", 409)
 
         if not single_segment_sequence(len(workspace.segments)):
             raise SequenceCoordinatorError("managed_workspace_shape", 422)
@@ -2875,6 +2952,26 @@ class SequenceCoordinatorRegistry:
         )
         return error.with_artifact_context(retry_disposition=retry_disposition)
 
+    def _check_managed_sequence_canvas(
+        self, ticket: _ArtifactVerificationTicket, shape: tuple[int, ...]
+    ) -> None:
+        with self._lock:
+            self._assert_artifact_ticket(ticket)
+            resource = self._managed_resource_for_child(ticket.entry.run_handle)
+            if resource is None or resource.original_authority is None:
+                return
+            if not resource.completed_children:
+                return
+            first_manifest = derive_segment_manifests(resource.original_authority.workspace)[0]
+            first = resource.completed_children.get(first_manifest.segment_id)
+            if first is None:
+                raise SequenceCoordinatorError("artifact_receipt_mismatch", 422)
+            # CRITICAL: the parent's first completed receipt owns height/width; frame counts
+            # may differ. Independent axis bounds accept 864x480 beside 640x640 siblings.
+            # Keep this comparison before storage/publication, including committed retries.
+            if shape[1:3] != first.receipt.shape[1:3]:
+                raise SequenceCoordinatorError("artifact_shape_mismatch", 422)
+
     def _artifact(
         self, payload: dict[str, object], now: float, ticket: _ArtifactVerificationTicket
     ) -> SequenceCoordinatorResponse:
@@ -2992,6 +3089,7 @@ class SequenceCoordinatorRegistry:
                 )
                 if type(observed) is not ObservedVideoArtifact:
                     raise SequenceCoordinatorError("artifact_media_invalid", 422)
+                self._check_managed_sequence_canvas(ticket, observed.shape)
                 if candidate.partial_receipt is None:
                     # CRITICAL: managed children share the complete original workspace; selecting
                     # the first manifest would silently mint every later output for segment one.
@@ -3052,6 +3150,7 @@ class SequenceCoordinatorRegistry:
             complete = candidate.completed_receipt
             if complete is None:  # pragma: no cover - guarded by the assignment above
                 raise RuntimeError("artifact completion invariant")
+            self._check_managed_sequence_canvas(ticket, complete.shape)
             self._check_artifact_ticket(ticket)
             preview_state = record_generation_success(
                 working,

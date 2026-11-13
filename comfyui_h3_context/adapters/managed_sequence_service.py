@@ -13,7 +13,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
-from typing import NoReturn, Protocol, cast
+from typing import NoReturn, Protocol, TypedDict, cast
 
 from comfyui_h3_context.core.canonical import (
     binary64_token,
@@ -25,6 +25,7 @@ from comfyui_h3_context.core.context_reporting import ContextReport
 from comfyui_h3_context.core.contracts import ProfileIdentity, TaskMode
 from comfyui_h3_context.core.managed_sequence import (
     MAX_COORDINATOR_RESPONSE_BYTES,
+    MAX_PREPARED_CONTEXT_RESPONSE_BYTES,
     EligibleSegmentExecutionV1,
     ManagedModeQualificationV1,
     ManagedModeQualificationV2,
@@ -72,6 +73,11 @@ from comfyui_h3_context.core.production_storyboard import (
 from comfyui_h3_context.core.registry import ReferenceAsset, build_reference_registry
 from comfyui_h3_context.core.segment_workspace import SegmentDuration, derive_segment_manifests
 
+from .comfyui_input_geometry import (
+    GeometryPreflightError,
+    InputGeometryReceipt,
+    claim_input_geometry_source,
+)
 from .comfyui_route_seam import (
     OriginRule,
     RoutePolicy,
@@ -89,7 +95,19 @@ from .composition_root import (
 from .production_context_materializer import (
     CanonicalProductionMaterializationSnapshot,
     ProductionCanonicalLoweringV1,
+    ProductionCanonicalLoweringV2,
     claim_canonical_production_materialization,
+)
+from .sequence_media_bindings import (
+    RetainedSequenceMediaBindings,
+    SequenceMediaBindingError,
+    SequenceMediaBindingSetV1,
+)
+from .sequence_media_observation import (
+    SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA,
+    SequenceMediaSourceIdentityV1,
+    decode_sequence_media_identities,
+    validate_sequence_media_observation,
 )
 
 MANAGED_SEQUENCE_ACTION_SCHEMA = "h3.context.managed_sequence_action.v1"
@@ -97,12 +115,15 @@ MANAGED_PREPARED_CONTEXT_ACTION_SCHEMA = "h3.context.managed_prepared_context_ac
 MANAGED_SEQUENCE_ACTION_ROUTE = "/h3-context/v1/managed-sequences"
 MANAGED_SEQUENCE_PROJECTION_ROUTE = "/h3-context/v1/managed-sequences/{parent_sequence_id}"
 MANAGED_SEQUENCE_RESULT_SCHEMA = "h3.context.managed_sequence_result.v1"
+MANAGED_SEQUENCE_RESULT_V2_SCHEMA = "h3.context.managed_sequence_result.v2"
+_SEQUENCE_MEDIA_FAILURE_CODES = frozenset({"sequence_media_changed", "sequence_media_unavailable"})
 MANAGED_SEQUENCE_READ_RESULT_SCHEMA = "h3.context.managed_sequence_read_result.v1"
 MANAGED_SEGMENT_MATERIALIZATION_CLAIM_SCHEMA = "h3.context.managed_segment_materialization_claim.v1"
 MANAGED_SEGMENT_MATERIALIZATION_CLAIM_V2_SCHEMA = (
     "h3.context.managed_segment_materialization_claim.v2"
 )
 MANAGED_PREPARED_CONTEXT_SCHEMA = "h3.context.managed_prepared_context.v1"
+MANAGED_PREPARED_CONTEXT_V2_SCHEMA = "h3.context.managed_prepared_context.v2"
 MANAGED_CHILD_BINDING_CLAIM_SCHEMA = "h3.context.managed_child_binding_claim.v1"
 MANAGED_SEQUENCE_CHILD_AUTHORITY_SCHEMA = "h3.context.managed_sequence_child_authority.v1"
 MANAGED_CHILD_BINDING_REQUEST_SCHEMA = "h3.context.managed_child_binding_request.v1"
@@ -258,11 +279,26 @@ class ManagedPreparedGraphObservationV1:
     source_identity: ManagedInputGeometryIdentityV1 | None
     timeout_ms: int
     native_anchor_node_id: str
+    source_identities: tuple[SequenceMediaSourceIdentityV1, ...] = field(default=(), kw_only=True)
+    media_binding_fingerprint: str | None = field(default=None, kw_only=True)
     schema: str = MANAGED_PREPARED_GRAPH_OBSERVATION_SCHEMA
 
     def __post_init__(self) -> None:
-        if self.schema != MANAGED_PREPARED_GRAPH_OBSERVATION_SCHEMA:
+        if self.schema not in {
+            MANAGED_PREPARED_GRAPH_OBSERVATION_SCHEMA,
+            SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA,
+        }:
             raise ManagedSequenceServiceError("prepared_graph_observation_schema", 400)
+        if self.schema == SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA:
+            if self.source_identity is not None:
+                raise ManagedSequenceServiceError("invalid_child_source_identity", 400)
+            decode_sequence_media_identities([row.to_wire() for row in self.source_identities])
+            if self.media_binding_fingerprint is not None:
+                _fingerprint(self.media_binding_fingerprint, "media_binding_fingerprint")
+            if bool(self.source_identities) != (self.media_binding_fingerprint is not None):
+                raise ManagedSequenceServiceError("invalid_child_source_identity", 400)
+        elif self.source_identities or self.media_binding_fingerprint is not None:
+            raise ManagedSequenceServiceError("invalid_child_source_identity", 400)
         if self.route not in _MANAGED_GRAPH_ROUTES:
             raise ManagedSequenceServiceError("prepared_graph_observation_route", 422)
         for value, field_name in (
@@ -299,6 +335,10 @@ class ManagedPreparedGraphObservationV1:
 
     @classmethod
     def from_wire(cls, value: object) -> ManagedPreparedGraphObservationV1:
+        is_sequence = (
+            type(value) is dict
+            and value.get("schema") == SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA
+        )
         wire = _closed_value(
             value,
             {
@@ -313,7 +353,11 @@ class ManagedPreparedGraphObservationV1:
                 "runtime_fingerprint",
                 "fingerprint_domain",
                 "expected_frames",
-                "source_identity",
+                *(
+                    {"source_identities", "media_binding_fingerprint"}
+                    if is_sequence
+                    else {"source_identity"}
+                ),
                 "timeout_ms",
                 "native_anchor_node_id",
             },
@@ -323,7 +367,7 @@ class ManagedPreparedGraphObservationV1:
         link_ids = wire["owned_link_ids"]
         if type(node_ids) is not list or type(link_ids) is not list:
             raise ManagedSequenceServiceError("invalid_child_owned_graph_identity", 400)
-        source = wire["source_identity"]
+        source = None if is_sequence else wire["source_identity"]
         return cls(
             schema=wire["schema"],  # type: ignore[arg-type]
             route=wire["route"],  # type: ignore[arg-type]
@@ -341,10 +385,16 @@ class ManagedPreparedGraphObservationV1:
             ),
             timeout_ms=wire["timeout_ms"],  # type: ignore[arg-type]
             native_anchor_node_id=wire["native_anchor_node_id"],  # type: ignore[arg-type]
+            source_identities=decode_sequence_media_identities(wire["source_identities"])
+            if is_sequence
+            else (),
+            media_binding_fingerprint=cast(str, wire["media_binding_fingerprint"])
+            if is_sequence
+            else None,
         )
 
     def to_wire(self) -> dict[str, object]:
-        return {
+        wire = {
             "schema": self.schema,
             "route": self.route,
             "graph_fingerprint": self.graph_fingerprint,
@@ -362,6 +412,13 @@ class ManagedPreparedGraphObservationV1:
             "timeout_ms": self.timeout_ms,
             "native_anchor_node_id": self.native_anchor_node_id,
         }
+        if self.schema == SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA:
+            wire.pop("source_identity")
+            wire.update(
+                source_identities=[row.to_wire() for row in self.source_identities],
+                media_binding_fingerprint=self.media_binding_fingerprint,
+            )
+        return wire
 
 
 @dataclass(frozen=True, slots=True)
@@ -420,6 +477,7 @@ class StartManagedSequenceRequestV1:
     expected_revision: int
     authorization_fingerprint: str
     schema: str = MANAGED_SEQUENCE_ACTION_SCHEMA
+    media_bindings: SequenceMediaBindingSetV1 | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if self.schema != MANAGED_SEQUENCE_ACTION_SCHEMA:
@@ -428,15 +486,23 @@ class StartManagedSequenceRequestV1:
         _identifier(self.parent_sequence_id, "parent_sequence_id")
         _revision(self.expected_revision)
         _fingerprint(self.authorization_fingerprint, "authorization_fingerprint")
+        if (
+            self.media_bindings is not None
+            and type(self.media_bindings) is not SequenceMediaBindingSetV1
+        ):
+            raise ManagedSequenceServiceError("sequence_media_binding_invalid", 422)
 
     def to_wire(self) -> dict[str, object]:
-        return {
+        wire = {
             "schema": self.schema,
             "request_id": self.request_id,
             "parent_sequence_id": self.parent_sequence_id,
             "expected_revision": self.expected_revision,
             "authorization_fingerprint": self.authorization_fingerprint,
         }
+        if self.media_bindings is not None:
+            wire["media_bindings"] = self.media_bindings.to_wire()
+        return wire
 
 
 @dataclass(frozen=True, slots=True)
@@ -634,6 +700,7 @@ class FailPreparedManagedSequenceChildRequestV1:
     segment_id: str
     eligible_execution_fingerprint: str
     failure_fingerprint: str
+    failure_code: str | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         _transition_wire(self.authority)
@@ -643,6 +710,11 @@ class FailPreparedManagedSequenceChildRequestV1:
             "eligible_execution_fingerprint",
         )
         _fingerprint(self.failure_fingerprint, "failure_fingerprint")
+        if self.failure_code is not None and (
+            type(self.failure_code) is not str
+            or self.failure_code not in _SEQUENCE_MEDIA_FAILURE_CODES
+        ):
+            raise ManagedSequenceServiceError("invalid_prepared_failure_code", 400)
 
     def to_wire(self) -> dict[str, object]:
         return _transition_wire(
@@ -650,6 +722,7 @@ class FailPreparedManagedSequenceChildRequestV1:
             segment_id=self.segment_id,
             eligible_execution_fingerprint=self.eligible_execution_fingerprint,
             failure_fingerprint=self.failure_fingerprint,
+            **({"failure_code": self.failure_code} if self.failure_code is not None else {}),
         )
 
 
@@ -989,17 +1062,47 @@ def _reject_json_constant(_: str) -> NoReturn:
     raise ValueError("non-finite JSON number")
 
 
-def _action_shape(value: object, *, depth: int = 0) -> int:
-    if depth > MAX_MANAGED_SEQUENCE_ACTION_DEPTH:
+def _action_shape(
+    value: object,
+    *,
+    depth: int = 0,
+    maximum_depth: int = MAX_MANAGED_SEQUENCE_ACTION_DEPTH,
+    binding_start: bool = False,
+    path: tuple[str, ...] = (),
+) -> int:
+    if depth > maximum_depth:
         raise ValueError("managed sequence JSON depth")
     if type(value) is dict:
         if len(value) > MAX_MANAGED_SEQUENCE_ACTION_NODES:
             raise ValueError("managed sequence object bound")
-        return 1 + sum(1 + _action_shape(item, depth=depth + 1) for item in value.values())
+        return 1 + sum(
+            1
+            + _action_shape(
+                item,
+                depth=depth + 1,
+                maximum_depth=(
+                    MAX_MANAGED_SEQUENCE_ACTION_DEPTH + 2
+                    if binding_start and path + (key,) == ("payload", "media_bindings")
+                    else maximum_depth
+                ),
+                binding_start=binding_start,
+                path=path + (key,),
+            )
+            for key, item in value.items()
+        )
     if type(value) is list:
         if len(value) > MAX_MANAGED_SEQUENCE_ACTION_ARRAY:
             raise ValueError("managed sequence array bound")
-        return 1 + sum(_action_shape(item, depth=depth + 1) for item in value)
+        return 1 + sum(
+            _action_shape(
+                item,
+                depth=depth + 1,
+                maximum_depth=maximum_depth,
+                binding_start=binding_start,
+                path=path,
+            )
+            for item in value
+        )
     if value is None or type(value) in {str, int, bool}:
         return 1
     raise ValueError("managed sequence scalar")
@@ -1049,7 +1152,15 @@ def decode_managed_sequence_action_json(payload: bytes) -> DecodedManagedSequenc
     request_id = _request_id(envelope["request_id"])
     action = _identifier(envelope["action"], "action")
     raw = envelope["payload"]
-    if _action_shape(value) > MAX_MANAGED_SEQUENCE_ACTION_NODES:
+    # IMPORTANT: only Start's closed private crop wire needs two more nesting levels. Other
+    # actions retain their original depth; all byte, array and aggregate node bounds stay fixed.
+    binding_start = (
+        envelope["schema"] == MANAGED_SEQUENCE_ACTION_SCHEMA
+        and action == "start_sequence"
+        and type(raw) is dict
+        and "media_bindings" in raw
+    )
+    if _action_shape(value, binding_start=binding_start) > MAX_MANAGED_SEQUENCE_ACTION_NODES:
         raise ValueError("managed sequence body shape")
 
     if envelope["schema"] == MANAGED_PREPARED_CONTEXT_ACTION_SCHEMA:
@@ -1101,13 +1212,25 @@ def decode_managed_sequence_action_json(payload: bytes) -> DecodedManagedSequenc
         )
         return DecodedManagedSequenceActionV1(action, authorize_request)
     if action == "start_sequence":
-        body = _closed_action_payload(raw, _PARENT_ACTION_FIELDS | {"qualification_fingerprint"})
+        fields = _PARENT_ACTION_FIELDS | {"qualification_fingerprint"}
+        if binding_start:
+            fields = fields | {"media_bindings"}
+        body = _closed_action_payload(raw, fields)
+        try:
+            media_bindings = (
+                SequenceMediaBindingSetV1.from_wire(body["media_bindings"])
+                if binding_start
+                else None
+            )
+        except SequenceMediaBindingError as exc:
+            raise ManagedSequenceServiceError(exc.code, exc.status) from exc
         authority_body = {key: body[key] for key in _PARENT_ACTION_FIELDS}
         start_request = StartManagedSequenceRequestV1(
             request_id=request_id,
             parent_sequence_id=authority_body["parent_sequence_id"],  # type: ignore[arg-type]
             expected_revision=authority_body["expected_revision"],  # type: ignore[arg-type]
             authorization_fingerprint=authority_body["authorization_fingerprint"],  # type: ignore[arg-type]
+            media_bindings=media_bindings,
         )
         return DecodedManagedSequenceActionV1(
             action,
@@ -1231,6 +1354,13 @@ def decode_managed_sequence_action_json(payload: bytes) -> DecodedManagedSequenc
     action_fields = fields_by_action.get(action)
     if action_fields is None:
         raise ManagedSequenceServiceError("unknown_action", 400)
+    if action == "fail_prepared_child" and type(raw) is dict and "failure_code" in raw:
+        if (
+            type(raw["failure_code"]) is not str
+            or raw["failure_code"] not in _SEQUENCE_MEDIA_FAILURE_CODES
+        ):
+            raise ManagedSequenceServiceError("invalid_prepared_failure_code", 400)
+        action_fields = action_fields | {"failure_code"}
     body = _closed_action_payload(raw, _PARENT_ACTION_FIELDS | action_fields)
     authority = _decoded_mutation_authority(body, request_id)
     specific = {key: body[key] for key in action_fields}
@@ -1459,7 +1589,12 @@ class ManagedPreparedContextV1:
     schema: str = MANAGED_PREPARED_CONTEXT_SCHEMA
 
     def __post_init__(self) -> None:
-        if self.schema != MANAGED_PREPARED_CONTEXT_SCHEMA:
+        expected_schema = (
+            MANAGED_PREPARED_CONTEXT_V2_SCHEMA
+            if type(self) is ManagedPreparedContextV2
+            else MANAGED_PREPARED_CONTEXT_SCHEMA
+        )
+        if self.schema != expected_schema:
             raise ManagedSequenceServiceError("prepared_context_schema", 500)
         _identifier(self.parent_sequence_id, "parent_sequence_id")
         _revision(self.parent_revision)
@@ -1494,9 +1629,15 @@ class ManagedPreparedContextV1:
             raise ManagedSequenceServiceError("prepared_context_prompt", 500)
         if type(self.task_mode) is not TaskMode or type(self.profile) is not ProfileIdentity:
             raise ManagedSequenceServiceError("prepared_context_contract", 500)
-        if (
-            self.canonical_lowering is not None
-            and type(self.canonical_lowering) is not ProductionCanonicalLoweringV1
+        if self.canonical_lowering is not None and type(self.canonical_lowering) not in {
+            ProductionCanonicalLoweringV1,
+            ProductionCanonicalLoweringV2,
+        }:
+            raise ManagedSequenceServiceError("prepared_context_canonical_lowering", 500)
+        if type(self.canonical_lowering) is ProductionCanonicalLoweringV2 and (
+            self.canonical_lowering.task_mode is not self.task_mode
+            or tuple(row.role for row in self.ordered_references)
+            != self.canonical_lowering.binding_roles
         ):
             raise ManagedSequenceServiceError("prepared_context_canonical_lowering", 500)
         if (
@@ -1549,6 +1690,71 @@ class ManagedPreparedContextV1:
 
 
 @dataclass(frozen=True, slots=True)
+class ManagedPreparedContextV2(ManagedPreparedContextV1):
+    """Private on-demand execution response; never retained in a projection or ledger."""
+
+    sequence_task_mode: TaskMode = field(kw_only=True)
+    media_bindings: SequenceMediaBindingSetV1 | None = field(repr=False, kw_only=True)
+    geometry_donor_asset_id: str | None = field(kw_only=True)
+    schema: str = MANAGED_PREPARED_CONTEXT_V2_SCHEMA
+
+    def __post_init__(self) -> None:
+        ManagedPreparedContextV1.__post_init__(self)
+        if self.sequence_task_mode not in {TaskMode.I2VA, TaskMode.L2VA, TaskMode.FL2VA}:
+            raise ManagedSequenceServiceError("prepared_context_sequence_mode", 500)
+        roles = {
+            TaskMode.T2VA: (),
+            TaskMode.I2VA: ("first_frame",),
+            TaskMode.L2VA: ("last_frame",),
+            TaskMode.FL2VA: ("first_frame", "last_frame"),
+        }
+        if (
+            self.task_mode not in roles
+            or self.profile.name.value != "h3_base"
+            or sorted(row.role.value for row in self.ordered_references)
+            != sorted(roles[self.task_mode])
+        ):
+            raise ManagedSequenceServiceError("prepared_context_media_bindings", 500)
+        if self.geometry_donor_asset_id is not None:
+            _identifier(self.geometry_donor_asset_id, "geometry_donor_asset_id")
+        if (self.sequence_task_mode is TaskMode.I2VA) != (self.geometry_donor_asset_id is not None):
+            raise ManagedSequenceServiceError("prepared_context_geometry_donor", 500)
+        expected = {row.asset_id for row in self.ordered_references}
+        if self.geometry_donor_asset_id is not None:
+            expected.add(self.geometry_donor_asset_id)
+        if not expected:
+            if self.media_bindings is not None:
+                raise ManagedSequenceServiceError("prepared_context_media_bindings", 500)
+        elif (
+            type(self.media_bindings) is not SequenceMediaBindingSetV1
+            or {row.asset_id for row in self.media_bindings.entries} != expected
+        ):
+            raise ManagedSequenceServiceError("prepared_context_media_bindings", 500)
+        if self.media_bindings is not None:
+            by_id = {row.asset_id: row for row in self.media_bindings.entries}
+            if any(
+                by_id[row.asset_id].role is not row.role or by_id[row.asset_id].kind is not row.kind
+                for row in self.ordered_references
+            ):
+                raise ManagedSequenceServiceError("prepared_context_media_bindings", 500)
+            if (
+                self.geometry_donor_asset_id is not None
+                and by_id[self.geometry_donor_asset_id].role.value != "first_frame"
+            ):
+                raise ManagedSequenceServiceError("prepared_context_geometry_donor", 500)
+
+    def to_wire(self) -> dict[str, object]:
+        return {
+            **ManagedPreparedContextV1.to_wire(self),
+            "sequence_task_mode": self.sequence_task_mode.value,
+            "media_bindings": None
+            if self.media_bindings is None
+            else self.media_bindings.to_wire(),
+            "geometry_donor_asset_id": self.geometry_donor_asset_id,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ManagedChildBindingRequestV1:
     context_workspace_handle: str
     execution: EligibleSegmentExecutionV1
@@ -1558,6 +1764,10 @@ class ManagedChildBindingRequestV1:
     observation: ManagedPreparedGraphObservationV1
     production_workspace_handle: str | None = field(default=None, kw_only=True)
     source_authority: object | None = field(default=None, repr=False, compare=False, kw_only=True)
+    sequence_task_mode: TaskMode | None = field(default=None, kw_only=True)
+    sequence_media_bindings: SequenceMediaBindingSetV1 | None = field(
+        default=None, repr=False, kw_only=True
+    )
     schema: str = MANAGED_CHILD_BINDING_REQUEST_SCHEMA
 
     def __post_init__(self) -> None:
@@ -1579,6 +1789,21 @@ class ManagedChildBindingRequestV1:
             raise ManagedSequenceServiceError("child_binding_correlation", 500)
         if type(self.observation) is not ManagedPreparedGraphObservationV1:
             raise ManagedSequenceServiceError("child_binding_observation", 500)
+        if self.sequence_task_mode is not None:
+            if self.sequence_task_mode not in {TaskMode.I2VA, TaskMode.L2VA, TaskMode.FL2VA}:
+                raise ManagedSequenceServiceError("child_binding_sequence_mode", 500)
+            if self.observation.schema != SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA:
+                raise ManagedSequenceServiceError("sequence_media_changed", 409)
+            validate_sequence_media_observation(
+                self.sequence_media_bindings,
+                self.observation.source_identities,
+                self.observation.media_binding_fingerprint,
+            )
+        elif (
+            self.sequence_media_bindings is not None
+            or self.observation.schema == SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA
+        ):
+            raise ManagedSequenceServiceError("sequence_media_changed", 409)
         if (
             self.graph_fingerprint != self.observation.graph_fingerprint
             or self.compiled_prompt_fingerprint != self.observation.compiled_prompt_fingerprint
@@ -1681,6 +1906,190 @@ class ManagedSequenceMutationResultV1:
 
 
 @dataclass(frozen=True, slots=True)
+class ManagedSequenceMutationResultV2(ManagedSequenceMutationResultV1):
+    sequence_task_mode: TaskMode = field(kw_only=True)
+    failure_code: str | None = field(default=None, kw_only=True)
+    schema: str = MANAGED_SEQUENCE_RESULT_V2_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != MANAGED_SEQUENCE_RESULT_V2_SCHEMA or self.sequence_task_mode not in {
+            TaskMode.I2VA,
+            TaskMode.L2VA,
+            TaskMode.FL2VA,
+        }:
+            raise ManagedSequenceServiceError("invalid_result_sequence_mode", 500)
+        if self.failure_code is not None and (
+            type(self.failure_code) is not str
+            or self.failure_code not in _SEQUENCE_MEDIA_FAILURE_CODES
+            or self.state is not ManagedSequenceStateV1.PAUSED_FAILURE
+        ):
+            raise ManagedSequenceServiceError("invalid_result_failure_code", 500)
+
+    def to_wire(self) -> dict[str, object]:
+        return {
+            **ManagedSequenceMutationResultV1.to_wire(self),
+            "sequence_task_mode": self.sequence_task_mode.value,
+            "failure_code": self.failure_code,
+        }
+
+
+class _MutationResultFields(TypedDict):
+    parent_sequence_id: str
+    authorization_fingerprint: str
+    read_authority_fingerprint: str
+    state: ManagedSequenceStateV1
+    revision: int
+    execution: EligibleSegmentExecutionV1 | None
+    child_authority: ManagedSequenceChildAuthorityV1 | None
+    context_workspace_handle: str | None
+    parent_expires_at_epoch_ms: int | None
+    replayed: bool
+
+
+class _PreparedContextFields(TypedDict):
+    parent_sequence_id: str
+    parent_revision: int
+    authorization_fingerprint: str
+    segment_id: str
+    eligible_execution_fingerprint: str
+    materialization_receipt_fingerprint: str
+    context_workspace_handle: str
+    context_report_id: str
+    context_report_revision: int
+    context_report_fingerprint: str
+    canonical_prompt: str
+    canonical_prompt_fingerprint: str
+    task_mode: TaskMode
+    duration_milliseconds: int
+    frame_count: int
+    profile: ProfileIdentity
+    profile_fingerprint: str
+    ordered_references: tuple[ReferenceAsset, ...]
+    reference_registry_fingerprint: str
+    native_binding_fingerprint: str
+    canonical_lowering: ProductionCanonicalLoweringV1 | None
+
+
+def decode_managed_sequence_result(
+    value: object,
+    *,
+    expected_sequence_mode: TaskMode,
+) -> ManagedSequenceMutationResultV1:
+    """Closed result decoder with an independently known parent-mode expectation."""
+    if type(expected_sequence_mode) is not TaskMode:
+        raise ManagedSequenceServiceError("invalid_result_sequence_mode", 400)
+    is_frame = expected_sequence_mode in {TaskMode.I2VA, TaskMode.L2VA, TaskMode.FL2VA}
+    fields = {
+        "schema",
+        "parent_sequence_id",
+        "authorization_fingerprint",
+        "read_authority_fingerprint",
+        "state",
+        "revision",
+        "execution",
+        "execution_fingerprint",
+        "child_authority",
+        "context_workspace_handle",
+        "parent_expires_at_epoch_ms",
+        "replayed",
+    }
+    if is_frame:
+        fields |= {"sequence_task_mode", "failure_code"}
+    wire = _closed_value(value, fields, "result")
+    if wire["schema"] != (
+        MANAGED_SEQUENCE_RESULT_V2_SCHEMA if is_frame else MANAGED_SEQUENCE_RESULT_SCHEMA
+    ):
+        raise ManagedSequenceServiceError("invalid_result_schema", 400)
+    execution = None
+    if wire["execution"] is not None:
+        execution_wire = _closed_value(
+            wire["execution"],
+            {
+                "schema",
+                "parent_sequence_id",
+                "parent_authorization_fingerprint",
+                "segment_id",
+                "slot_revision",
+                "attempt_epoch",
+                "materialization_receipt_fingerprint",
+                "predecessor_terminal_fingerprint",
+                "request_id",
+                "job_count",
+            },
+            "result_execution",
+        )
+        execution = EligibleSegmentExecutionV1(
+            parent_sequence_id=cast(str, execution_wire["parent_sequence_id"]),
+            parent_authorization_fingerprint=cast(
+                str, execution_wire["parent_authorization_fingerprint"]
+            ),
+            segment_id=cast(str, execution_wire["segment_id"]),
+            slot_revision=cast(int, execution_wire["slot_revision"]),
+            attempt_epoch=cast(int, execution_wire["attempt_epoch"]),
+            materialization_receipt_fingerprint=cast(
+                str, execution_wire["materialization_receipt_fingerprint"]
+            ),
+            predecessor_terminal_fingerprint=cast(
+                str | None, execution_wire["predecessor_terminal_fingerprint"]
+            ),
+            request_id=cast(str, execution_wire["request_id"]),
+            job_count=cast(int, execution_wire["job_count"]),
+            schema=cast(str, execution_wire["schema"]),
+        )
+    if wire["execution_fingerprint"] != (None if execution is None else execution.fingerprint):
+        raise ManagedSequenceServiceError("invalid_result_execution", 400)
+    child = None
+    if wire["child_authority"] is not None:
+        child_wire = _closed_value(
+            wire["child_authority"],
+            {"schema", "run_handle", "state_fingerprint", "job_id", "transaction_id"},
+            "result_child",
+        )
+        child = ManagedSequenceChildAuthorityV1(
+            run_handle=cast(str, child_wire["run_handle"]),
+            state_fingerprint=cast(str, child_wire["state_fingerprint"]),
+            job_id=cast(str, child_wire["job_id"]),
+            transaction_id=cast(str, child_wire["transaction_id"]),
+            schema=cast(str, child_wire["schema"]),
+        )
+    handle, expires = wire["context_workspace_handle"], wire["parent_expires_at_epoch_ms"]
+    if (
+        (
+            handle is not None
+            and (type(handle) is not str or _CONTEXT_HANDLE.fullmatch(handle) is None)
+        )
+        or (expires is not None and (type(expires) is not int or not 0 <= expires <= 2**53 - 1))
+        or type(wire["replayed"]) is not bool
+    ):
+        raise ManagedSequenceServiceError("invalid_result", 400)
+    values: _MutationResultFields = dict(
+        parent_sequence_id=_identifier(wire["parent_sequence_id"], "parent_sequence_id"),
+        authorization_fingerprint=_fingerprint(
+            wire["authorization_fingerprint"], "authorization_fingerprint"
+        ),
+        read_authority_fingerprint=_fingerprint(
+            wire["read_authority_fingerprint"], "read_authority_fingerprint"
+        ),
+        state=ManagedSequenceStateV1(wire["state"]),
+        revision=_revision(wire["revision"]),
+        execution=execution,
+        child_authority=child,
+        context_workspace_handle=handle,
+        parent_expires_at_epoch_ms=expires,
+        replayed=wire["replayed"],
+    )
+    if is_frame:
+        if wire["sequence_task_mode"] != expected_sequence_mode.value:
+            raise ManagedSequenceServiceError("invalid_result_sequence_mode", 400)
+        return ManagedSequenceMutationResultV2(
+            **values,
+            sequence_task_mode=expected_sequence_mode,
+            failure_code=cast(str | None, wire["failure_code"]),
+        )
+    return ManagedSequenceMutationResultV1(**values)
+
+
+@dataclass(frozen=True, slots=True)
 class ManagedSequenceReadResultV1:
     status: int
     etag: str
@@ -1740,6 +2149,7 @@ class _ServiceEntry:
     bound_child_cleanup_completed: bool = False
     start_resources: _HeldStartResources | None = None
     parent_expires_at_epoch_ms: int | None = None
+    media_binding_fingerprint: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -2130,6 +2540,8 @@ class ManagedSequenceService:
         self._epoch_clock_ms = epoch_clock_ms
         self._qualification_guard = qualification_guard
         self._publish_completion = publish_completion
+        self._media_source_claimant = claim_input_geometry_source
+        self._sequence_media = RetainedSequenceMediaBindings(clock=clock)
         self._entry: _ServiceEntry | None = None
         self._ledger: OrderedDict[str, _ReplayRow] = OrderedDict()
         self._lock = threading.RLock()
@@ -2181,6 +2593,8 @@ class ManagedSequenceService:
     ) -> None:
         self._validate_publication(result)
         self._ledger[request_id] = _ReplayRow(digest, result)
+        if result.state in {ManagedSequenceStateV1.CANCELLED, ManagedSequenceStateV1.SUCCEEDED}:
+            self._sequence_media.release(result.parent_sequence_id)
 
     def _validate_publication(self, result: ManagedSequenceMutationResultV1) -> None:
         if len(canonical_bytes(result.to_wire())) > MAX_MANAGED_PREPARED_CONTEXT_BYTES:
@@ -2195,9 +2609,20 @@ class ManagedSequenceService:
         execution: EligibleSegmentExecutionV1 | None = None,
         child_authority: ManagedSequenceChildAuthorityV1 | None = None,
         context_workspace_handle: str | None = None,
+        failure_code: str | None = None,
     ) -> ManagedSequenceMutationResultV1:
         sequence = entry.sequence
-        return ManagedSequenceMutationResultV1(
+        modes = {row.task_mode for row in sequence.authorization.segments}
+        mode = (
+            TaskMode.FL2VA
+            if TaskMode.FL2VA in modes or {TaskMode.I2VA, TaskMode.L2VA} <= modes
+            else TaskMode.I2VA
+            if TaskMode.I2VA in modes
+            else TaskMode.L2VA
+            if TaskMode.L2VA in modes
+            else TaskMode.T2VA
+        )
+        values: _MutationResultFields = dict(
             parent_sequence_id=sequence.authorization.sequence_id,
             authorization_fingerprint=sequence.authorization.fingerprint,
             read_authority_fingerprint=entry.read_authority_fingerprint,
@@ -2207,7 +2632,13 @@ class ManagedSequenceService:
             child_authority=child_authority,
             context_workspace_handle=context_workspace_handle,
             parent_expires_at_epoch_ms=entry.parent_expires_at_epoch_ms,
+            replayed=False,
         )
+        if mode is not TaskMode.T2VA:
+            return ManagedSequenceMutationResultV2(
+                **values, sequence_task_mode=mode, failure_code=failure_code
+            )
+        return ManagedSequenceMutationResultV1(**values)
 
     def _current(
         self,
@@ -2471,13 +2902,18 @@ class ManagedSequenceService:
         failure_code: str,
     ) -> ManagedSequenceMutationResultV1:
         candidate = self._fail_prepared_binding(entry, request, failure_code=failure_code)
-        result = self._result(replace(entry, sequence=candidate))
+        result = self._result(
+            replace(entry, sequence=candidate),
+            failure_code=failure_code if failure_code in _SEQUENCE_MEDIA_FAILURE_CODES else None,
+        )
         self._validate_publication(result)
         self._consume_candidate_rows(
             entry,
             request_id=request.request_id,
             candidate=candidate,
         )
+        # CRITICAL: commit the typed code with the paused result in the replay ledger;
+        # dropping it here makes the same request answer differently on replay.
         self._publish(request.request_id, digest, result)
         entry.sequence = candidate
         return result
@@ -2578,6 +3014,100 @@ class ManagedSequenceService:
             self._entry = entry
             return result
 
+    def _validate_start_media(
+        self,
+        entry: _ServiceEntry,
+        bindings: SequenceMediaBindingSetV1 | None,
+    ) -> SequenceMediaBindingSetV1 | None:
+        rows = entry.sequence.authorization.segments
+        frame_rows = tuple(
+            row for row in rows if row.task_mode in {TaskMode.I2VA, TaskMode.L2VA, TaskMode.FL2VA}
+        )
+        if not frame_rows:
+            if bindings is not None:
+                raise ManagedSequenceServiceError("sequence_media_binding_invalid", 422)
+            return None
+        if bindings is None:
+            raise ManagedSequenceServiceError("sequence_media_binding_missing", 422)
+        if self._materialize_segment is None:
+            raise ManagedSequenceServiceError("materializer_unavailable", 503)
+        assets: dict[str, ReferenceAsset] = {}
+        for row in frame_rows:
+            claim = self._materialize_segment(entry.source_authority, row.segment_id)
+            try:
+                if (
+                    type(claim) is not ManagedSegmentMaterializationClaimV2
+                    or claim.materialization_receipt_fingerprint
+                    != row.materialization_receipt_fingerprint
+                ):
+                    raise ManagedSequenceServiceError("sequence_media_binding_invalid", 422)
+                claim.materialization.assert_current()
+                for asset in claim.materialization.report.request.reference_registry.assets:
+                    previous = assets.get(asset.asset_id)
+                    if previous is not None and (previous.kind, previous.role) != (
+                        asset.kind,
+                        asset.role,
+                    ):
+                        raise ManagedSequenceServiceError("sequence_media_binding_invalid", 422)
+                    assets[asset.asset_id] = (
+                        replace(asset, connection_order=len(assets) + 1)
+                        if previous is None
+                        else previous
+                    )
+            finally:
+                if type(claim) in (
+                    ManagedSegmentMaterializationClaimV1,
+                    ManagedSegmentMaterializationClaimV2,
+                ):
+                    claim.release()
+        try:
+            registry = build_reference_registry(tuple(assets.values()))
+            bindings.validate_registry(registry, tuple(assets))
+            for binding in bindings.entries:
+                if (
+                    binding.role.value not in {"first_frame", "last_frame"}
+                    or binding.registry_endpoint.input_name != binding.role.value
+                ):
+                    raise SequenceMediaBindingError("sequence_media_binding_invalid")
+                claimed = self._media_source_claimant(
+                    binding.source_identity.to_wire(), locator=binding.locator
+                )
+                if type(claimed) is not InputGeometryReceipt or claimed != binding.source_identity:
+                    raise SequenceMediaBindingError("sequence_media_binding_invalid")
+        except SequenceMediaBindingError as exc:
+            raise ManagedSequenceServiceError(exc.code, exc.status) from exc
+        except GeometryPreflightError as exc:
+            missing = exc.code in {
+                "input_unavailable",
+                "host_input_unavailable",
+                "geometry_receipt_stale",
+            }
+            missing = missing or getattr(exc.__cause__, "code", None) == "input_unavailable"
+            code = "sequence_media_unavailable" if missing else "sequence_media_changed"
+            raise ManagedSequenceServiceError(code, 409) from exc
+        return bindings
+
+    @contextmanager
+    def _hold_start_media(
+        self,
+        parent: str,
+        bindings: SequenceMediaBindingSetV1 | None,
+        *,
+        expires_at: float,
+    ) -> Iterator[None]:
+        if bindings is None:
+            yield
+            return
+        try:
+            self._sequence_media.retain(parent, bindings, expires_at=expires_at)
+        except SequenceMediaBindingError as exc:
+            raise ManagedSequenceServiceError(exc.code, exc.status) from exc
+        try:
+            yield
+        except BaseException:
+            self._sequence_media.release(parent)
+            raise
+
     def start(
         self,
         request: StartManagedSequenceRequestV1,
@@ -2589,10 +3119,12 @@ class ManagedSequenceService:
             ManagedModeQualificationV2,
         ):
             raise ManagedSequenceServiceError("start_request_type", 400)
-        digest = self._request_digest(
-            "start_sequence",
-            {**request.to_wire(), "qualification_fingerprint": qualification.fingerprint},
-        )
+        start_wire = {**request.to_wire(), "qualification_fingerprint": qualification.fingerprint}
+        if request.media_bindings is not None:
+            # CRITICAL: canonical text normalizes Unicode; the private binding digest also
+            # pins raw locator spelling so a different filesystem path cannot replay Start.
+            start_wire["media_binding_fingerprint"] = request.media_bindings.fingerprint
+        digest = self._request_digest("start_sequence", start_wire)
         guard: AbstractContextManager[None] = nullcontext()
         if type(qualification) is ManagedModeQualificationV2:
             if self._qualification_guard is None:
@@ -2607,6 +3139,9 @@ class ManagedSequenceService:
                 request.authorization_fingerprint,
                 request.expected_revision,
             )
+            # CRITICAL: readiness certifies the recipe, not the canvas files. Claim the complete
+            # concrete binding set before run reservations/publication; refusal stays retryable.
+            media_bindings = self._validate_start_media(entry, request.media_bindings)
             try:
                 candidate = start_managed_sequence(
                     entry.sequence,
@@ -2645,62 +3180,74 @@ class ManagedSequenceService:
                 ),
                 expires_at_epoch_ms=parent_expires_at_epoch_ms,
             )
-            try:
-                resource_claim = self._reserve_start_resources(resource_request)
-            except ManagedSequenceServiceError:
-                raise
-            except Exception as exc:
-                raise ManagedSequenceServiceError("start_resource_reservation_failed", 503) from exc
-            if type(resource_claim) is not ManagedSequenceStartResourceClaimV1:
-                raise ManagedSequenceServiceError("start_resource_claim_type", 500)
-            held_resources = _HeldStartResources(resource_claim)
-            if resource_claim.request_fingerprint != resource_request.fingerprint:
+            with self._hold_start_media(
+                candidate.authorization.sequence_id,
+                media_bindings,
+                expires_at=lease.absolute_deadline,
+            ):
                 try:
-                    held_resources.release_once()
+                    resource_claim = self._reserve_start_resources(resource_request)
+                except ManagedSequenceServiceError:
+                    raise
                 except Exception as exc:
                     raise ManagedSequenceServiceError(
-                        "start_resource_compensation_failed", 503
+                        "start_resource_reservation_failed", 503
                     ) from exc
-                raise ManagedSequenceServiceError("resource_claim_drift", 500)
-            candidate_entry = replace(
-                entry,
-                start_resources=held_resources,
-                parent_expires_at_epoch_ms=parent_expires_at_epoch_ms,
-                sequence=candidate,
-            )
-            result = self._result(candidate_entry)
-            self._validate_publication(result)
-            try:
-                # The physical reservation already accounts for the retained authorize row. Start
-                # consumes the second parent-control row exactly once before the parent commits.
-                held_resources.consume_rows(request.request_id, 1)
-            except Exception as exc:
+                if type(resource_claim) is not ManagedSequenceStartResourceClaimV1:
+                    raise ManagedSequenceServiceError("start_resource_claim_type", 500)
+                held_resources = _HeldStartResources(resource_claim)
+                if resource_claim.request_fingerprint != resource_request.fingerprint:
+                    try:
+                        held_resources.release_once()
+                    except Exception as exc:
+                        raise ManagedSequenceServiceError(
+                            "start_resource_compensation_failed", 503
+                        ) from exc
+                    raise ManagedSequenceServiceError("resource_claim_drift", 500)
+                candidate_entry = replace(
+                    entry,
+                    start_resources=held_resources,
+                    parent_expires_at_epoch_ms=parent_expires_at_epoch_ms,
+                    sequence=candidate,
+                )
+                result = self._result(candidate_entry)
+                self._validate_publication(result)
                 try:
-                    held_resources.release_once()
-                except Exception as release_exc:
+                    # The reservation already accounts for the retained authorize row. Start
+                    # consumes the second control row exactly once before the parent commits.
+                    held_resources.consume_rows(request.request_id, 1)
+                except Exception as exc:
+                    try:
+                        held_resources.release_once()
+                    except Exception as release_exc:
+                        raise ManagedSequenceServiceError(
+                            "start_resource_compensation_failed", 503
+                        ) from release_exc
+                    if isinstance(exc, ManagedSequenceServiceError):
+                        raise
                     raise ManagedSequenceServiceError(
-                        "start_resource_compensation_failed", 503
-                    ) from release_exc
-                if isinstance(exc, ManagedSequenceServiceError):
-                    raise
-                raise ManagedSequenceServiceError("start_resource_consumption_failed", 503) from exc
-            try:
-                # CRITICAL: reserve/consume callbacks run before the Production guard. Holding
-                # that registry across coordinator callbacks reverses their existing lock order.
-                with guard:
-                    self._publish(request.request_id, digest, result)
-                    entry.start_resources = held_resources
-                    entry.parent_expires_at_epoch_ms = parent_expires_at_epoch_ms
-                    entry.sequence = candidate
-            except Exception:
+                        "start_resource_consumption_failed", 503
+                    ) from exc
                 try:
-                    held_resources.release_once()
+                    # CRITICAL: reserve/consume callbacks run before the Production guard. Holding
+                    # that registry across coordinator callbacks reverses their existing lock order.
+                    with guard:
+                        self._publish(request.request_id, digest, result)
+                        entry.start_resources = held_resources
+                        entry.media_binding_fingerprint = (
+                            None if media_bindings is None else media_bindings.fingerprint
+                        )
+                        entry.parent_expires_at_epoch_ms = parent_expires_at_epoch_ms
+                        entry.sequence = candidate
                 except Exception:
-                    raise ManagedSequenceServiceError(
-                        "start_resource_compensation_failed", 503
-                    ) from None
-                raise
-            return result
+                    try:
+                        held_resources.release_once()
+                    except Exception:
+                        raise ManagedSequenceServiceError(
+                            "start_resource_compensation_failed", 503
+                        ) from None
+                    raise
+                return result
 
     def prepare_child(
         self, request: PrepareManagedSequenceChildRequestV1
@@ -2801,8 +3348,8 @@ class ManagedSequenceService:
             entry.held_materialization = held
             return result
 
-    @staticmethod
     def _prepared_context(
+        self,
         entry: _ServiceEntry,
         claim: ManagedSegmentMaterializationClaimV2,
         execution: EligibleSegmentExecutionV1,
@@ -2832,7 +3379,7 @@ class ManagedSequenceService:
             or execution.materialization_receipt_fingerprint != receipt.fingerprint
         ):
             raise ManagedSequenceServiceError("prepared_context_drift", 409)
-        result = ManagedPreparedContextV1(
+        values: _PreparedContextFields = dict(
             parent_sequence_id=entry.sequence.authorization.sequence_id,
             parent_revision=entry.sequence.revision,
             authorization_fingerprint=entry.sequence.authorization.fingerprint,
@@ -2855,7 +3402,44 @@ class ManagedSequenceService:
             native_binding_fingerprint=receipt.native_binding_fingerprint,
             canonical_lowering=snapshot.canonical_lowering,
         )
-        if len(canonical_bytes(result.to_wire())) > MAX_COORDINATOR_RESPONSE_BYTES:
+        result: ManagedPreparedContextV1
+        if entry.media_binding_fingerprint is not None:
+            try:
+                retained = self._sequence_media.get(entry.sequence.authorization.sequence_id)
+            except SequenceMediaBindingError as exc:
+                raise ManagedSequenceServiceError(exc.code, exc.status) from exc
+            if retained.fingerprint != entry.media_binding_fingerprint:
+                raise ManagedSequenceServiceError("sequence_media_changed", 409)
+            roles = {row.role.value for row in retained.entries}
+            sequence_mode = (
+                TaskMode.FL2VA
+                if roles == {"first_frame", "last_frame"}
+                else TaskMode.I2VA
+                if roles == {"first_frame"}
+                else TaskMode.L2VA
+            )
+            donor = (
+                next(row.asset_id for row in retained.entries if row.role.value == "first_frame")
+                if sequence_mode is TaskMode.I2VA
+                else None
+            )
+            selected = {row.asset_id for row in registry.assets}
+            if donor is not None:
+                selected.add(donor)
+            selected_bindings = tuple(row for row in retained.entries if row.asset_id in selected)
+            result = ManagedPreparedContextV2(
+                **values,
+                sequence_task_mode=sequence_mode,
+                geometry_donor_asset_id=donor,
+                media_bindings=SequenceMediaBindingSetV1(selected_bindings)
+                if selected_bindings
+                else None,
+            )
+        else:
+            result = ManagedPreparedContextV1(**values)
+        # IMPORTANT: prepared prompts admit 4096 Unicode characters plus private media bindings.
+        # The coordinator's 8 KiB control-message cap rejects valid CJK prompts; keep it separate.
+        if len(canonical_bytes(result.to_wire())) > MAX_PREPARED_CONTEXT_RESPONSE_BYTES:
             raise ManagedSequenceServiceError("response_size", 500)
         return result
 
@@ -2989,6 +3573,16 @@ class ManagedSequenceService:
             candidate: ManagedSequenceV1 | None = None
             failure_code: str | None = None
             try:
+                sequence_task_mode = None
+                sequence_media_bindings = None
+                if entry.media_binding_fingerprint is not None:
+                    prepared_context = self._prepared_context(
+                        entry, cast(ManagedSegmentMaterializationClaimV2, held.claim), execution
+                    )
+                    if type(prepared_context) is not ManagedPreparedContextV2:
+                        raise ManagedSequenceServiceError("sequence_media_unavailable", 409)
+                    sequence_task_mode = prepared_context.sequence_task_mode
+                    sequence_media_bindings = prepared_context.media_bindings
                 claim = self._bind_child(
                     ManagedChildBindingRequestV1(
                         context_workspace_handle=held.claim.context_workspace_handle,
@@ -3007,6 +3601,8 @@ class ManagedSequenceService:
                             if type(entry.source_authority) is ProductionAutomaticPlanAuthorityV2
                             else None
                         ),
+                        sequence_task_mode=sequence_task_mode,
+                        sequence_media_bindings=sequence_media_bindings,
                     )
                 )
                 if type(claim) is not ManagedChildBindingClaimV1:
@@ -3030,6 +3626,12 @@ class ManagedSequenceService:
                 )
             except ManagedSequenceError:
                 failure_code = "child_binding_rejected"
+            except (ManagedSequenceServiceError, SequenceMediaBindingError) as exc:
+                failure_code = (
+                    exc.code
+                    if exc.code in _SEQUENCE_MEDIA_FAILURE_CODES
+                    else "child_binding_failed"
+                )
             except Exception:
                 failure_code = "child_binding_failed"
             try:
@@ -3135,6 +3737,11 @@ class ManagedSequenceService:
                 authority.authorization_fingerprint,
                 authority.expected_revision,
             )
+            if request.failure_code is not None and all(
+                segment.task_mode is TaskMode.T2VA
+                for segment in entry.sequence.authorization.segments
+            ):
+                raise ManagedSequenceServiceError("invalid_prepared_failure_code", 400)
             self._expire_before_mutation(entry)
             held = entry.held_materialization
             if (
@@ -3154,7 +3761,11 @@ class ManagedSequenceService:
                 )
             except ManagedSequenceError as exc:
                 raise self._translate(exc) from exc
-            result = self._result(replace(entry, sequence=candidate))
+            # CRITICAL: this client-asserted code selects display copy only. Never use it
+            # as authority for authorization, revision, retry, recovery, child or queue decisions.
+            result = self._result(
+                replace(entry, sequence=candidate), failure_code=request.failure_code
+            )
             self._validate_publication(result)
             self._consume_candidate_rows(
                 entry,

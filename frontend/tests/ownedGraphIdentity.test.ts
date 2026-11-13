@@ -218,3 +218,85 @@ describe("M23-37 owned projection under host slot normalization", () => {
     );
   });
 });
+
+describe("native crop widget persistence", () => {
+  const cropWorkflow = () => {
+    const graph = workflow();
+    graph.nodes[2].type = "ImageCropV2";
+    graph.nodes[2].widgets_values = [
+      { x: 160, y: 96, width: 608, height: 352 },
+    ];
+    return graph;
+  };
+  const normalized = () => {
+    const graph = cropWorkflow();
+    graph.nodes[2].widgets_values.push(0, 0, 512, 512);
+    return graph;
+  };
+
+  it("preserves authored crop identity when native workflow serialization adds non-API numeric helpers", () => {
+    expect(observeOwnedGraph(normalized(), reference).fingerprint).toBe(
+      observeOwnedGraph(cropWorkflow(), reference).fingerprint,
+    );
+  });
+
+  it.each(["x", "y", "width", "height"])(
+    "still rejects an authored region %s change",
+    (field) => {
+      const graph = normalized();
+      graph.nodes[2].widgets_values[0][field] += 1;
+      expect(observeOwnedGraph(graph, reference).fingerprint).not.toBe(
+        observeOwnedGraph(cropWorkflow(), reference).fingerprint,
+      );
+    },
+  );
+
+  it.each([
+    [0],
+    [0, 0, 512],
+    [0, 0, 512, 512, 0],
+    [0, 0, "private-extra", 512],
+    [0, 0, Number.NaN, 512],
+    [0, 0, Number.POSITIVE_INFINITY, 512],
+  ])("keeps unknown helper suffix %j inside identity", (...suffix) => {
+    const graph = cropWorkflow();
+    graph.nodes[2].widgets_values.push(...suffix);
+    expect(observeOwnedGraph(graph, reference).fingerprint).not.toBe(
+      observeOwnedGraph(cropWorkflow(), reference).fingerprint,
+    );
+  });
+
+  it("keeps extra authored region fields inside identity", () => {
+    const graph = normalized();
+    graph.nodes[2].widgets_values[0].unexpected = 1;
+    expect(observeOwnedGraph(graph, reference).fingerprint).not.toBe(
+      observeOwnedGraph(cropWorkflow(), reference).fingerprint,
+    );
+  });
+
+  it.each(["all", "one"] as const)(
+    "keeps a sparse native helper suffix with %s holes inside identity",
+    (holes) => {
+      const graph = cropWorkflow();
+      const values = graph.nodes[2].widgets_values;
+      values.length = 5;
+      if (holes === "one") {
+        values[1] = 0;
+        values[2] = 0;
+        values[4] = 512;
+      }
+      expect(observeOwnedGraph(graph, reference).fingerprint).not.toBe(
+        observeOwnedGraph(cropWorkflow(), reference).fingerprint,
+      );
+    },
+  );
+
+  it("does not normalize helper-shaped suffixes on other node types", () => {
+    const before = workflow(),
+      after = workflow();
+    after.nodes[2].widgets_values.push(0, 0, 512, 512);
+    expect(observeOwnedGraph(after, reference).fingerprint).not.toBe(
+      observeOwnedGraph(before, reference).fingerprint,
+    );
+  });
+});

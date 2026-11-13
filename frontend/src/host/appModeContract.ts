@@ -2,6 +2,15 @@
 // pure validation and identity helpers every App Mode module shares ( split).
 
 import { sha256Text } from "../contracts/canonicalFingerprint";
+import { AppModeError } from "./appModeError";
+export { AppModeError, type AppModeCompileStep } from "./appModeError";
+import type { PreparedSequenceMedia } from "./preparedSequenceMedia";
+import { validatePreparedCanonicalStart } from "./preparedCanonicalStart";
+export {
+  validatePreparedCanonicalStart,
+  validateProductionCanonicalLowering,
+} from "./preparedCanonicalStart";
+import { isBoundedPrivateCanonicalPrompt } from "./privateCanonicalPrompt";
 import { isSafeCompiledMetadata } from "./compiledMetadata";
 import { referenceCapacity } from "./referenceSelection";
 import { validateImageCrops, type ImageCrops } from "./imageCropContract";
@@ -71,57 +80,40 @@ export type AppModeTaskMode = (typeof APP_MODE_TASK_MODES)[number];
 
 export const PRODUCTION_CANONICAL_LOWERING_SCHEMA =
   "h3.context.production_canonical_lowering.v1" as const;
+export const PRODUCTION_FRAME_CANONICAL_LOWERING_SCHEMA =
+  "h3.context.production_canonical_lowering.v2" as const;
 
-export type ProductionCanonicalLowering = Readonly<{
-  schema: typeof PRODUCTION_CANONICAL_LOWERING_SCHEMA;
+type CanonicalLoweringFields = Readonly<{
   canonicalPrompt: string;
   baseReportFingerprint: string;
   baseReportRevision: number;
   overrideRevision: number;
   reason: "Materialize approved Production segment prompt";
 }>;
-
-export function validateProductionCanonicalLowering(
-  value: ProductionCanonicalLowering,
-  inputs: AppModeInputs,
-): void {
-  if (
-    value === null ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    Object.getPrototypeOf(value) !== Object.prototype
-  )
-    throw new AppModeError(
-      "invalid_request",
-      "the prepared canonical prompt authority is invalid",
-    );
-  const keys = Object.keys(value).sort();
-  const expected = [
-    "baseReportFingerprint",
-    "baseReportRevision",
-    "canonicalPrompt",
-    "overrideRevision",
-    "reason",
-    "schema",
-  ].sort();
-  if (
-    keys.length !== expected.length ||
-    keys.some((key, index) => key !== expected[index]) ||
-    value.schema !== PRODUCTION_CANONICAL_LOWERING_SCHEMA ||
-    value.canonicalPrompt !== inputs.user_intent ||
-    value.canonicalPrompt.length === 0 ||
-    value.canonicalPrompt.length > 4096 ||
-    !/^sha256:[0-9a-f]{64}$/.test(value.baseReportFingerprint) ||
-    value.baseReportRevision !== 0 ||
-    value.overrideRevision !== 1 ||
-    value.reason !== "Materialize approved Production segment prompt" ||
-    inputs.task_mode !== "t2va"
-  )
-    throw new AppModeError(
-      "invalid_request",
-      "the prepared canonical prompt authority is invalid",
-    );
-}
+export type ProductionCanonicalLowering = CanonicalLoweringFields &
+  (
+    | Readonly<{ schema: typeof PRODUCTION_CANONICAL_LOWERING_SCHEMA }>
+    | Readonly<{
+        schema: typeof PRODUCTION_FRAME_CANONICAL_LOWERING_SCHEMA;
+        taskMode: "i2va" | "l2va" | "fl2va";
+        bindingRoles: readonly ("first_frame" | "last_frame")[];
+      }>
+  );
+export type ProductionCanonicalLoweringRecipe =
+  | Omit<
+      Extract<
+        ProductionCanonicalLowering,
+        { schema: typeof PRODUCTION_CANONICAL_LOWERING_SCHEMA }
+      >,
+      "canonicalPrompt"
+    >
+  | Omit<
+      Extract<
+        ProductionCanonicalLowering,
+        { schema: typeof PRODUCTION_FRAME_CANONICAL_LOWERING_SCHEMA }
+      >,
+      "canonicalPrompt"
+    >;
 
 export const APP_MODE_MODE_CAPABILITIES = [
   {
@@ -359,6 +351,8 @@ export type AppModeStartOptions = {
   onHostLoadBeforeCompile?: () => void;
   /** Runner-reserved authority for the exact reproducible Production lowering. */
   preparedCanonicalPrompt?: ProductionCanonicalLowering;
+  /** Runner-reserved, volatile source bindings for one frame-parent child. */
+  preparedSequenceMedia?: PreparedSequenceMedia;
   /** Optional backend-issued identities that must match before host ownership begins. */
   expectedIdentity?: {
     graphFingerprint: string;
@@ -394,26 +388,6 @@ export type AppModeStartOptions = {
   ) => Promise<InputGeometryReceipt>;
 };
 
-export function validatePreparedCanonicalStart(
-  inputs: AppModeInputs,
-  options: AppModeStartOptions,
-): void {
-  const authority = options.preparedCanonicalPrompt;
-  if (authority === undefined) return;
-  // IMPORTANT: this authority is runner-reserved; accepting it on an adopted
-  // canvas or without managed ownership would let ordinary starts bypass the prepared claim.
-  if (
-    options.prepareManaged === undefined ||
-    options.useExisting === true ||
-    options.connectExisting !== undefined
-  )
-    throw new AppModeError(
-      "invalid_request",
-      "prepared canonical prompts require one managed materialization owner",
-    );
-  validateProductionCanonicalLowering(authority, inputs);
-}
-
 export type AppModeCompiledPrompt = {
   output: Record<string, unknown>;
   workflow: unknown;
@@ -440,9 +414,10 @@ export function contentFreeBootstrapWorkflow() {
 
 export const PREPARED_GRAPH_OBSERVATION_SCHEMA =
   "h3.context.prepared_graph_observation.v4" as const;
+export const SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA =
+  "h3.context.prepared_graph_observation.v5" as const;
 
 export type PreparedGraphObservation = Readonly<{
-  schema: typeof PREPARED_GRAPH_OBSERVATION_SCHEMA;
   route: "new" | "replace" | "existing";
   graph_fingerprint: string;
   compiled_prompt_fingerprint: string;
@@ -453,10 +428,22 @@ export type PreparedGraphObservation = Readonly<{
   runtime_fingerprint: string;
   fingerprint_domain: "output_producing_graph";
   expected_frames: number;
-  source_identity: InputGeometryReceipt | null;
   timeout_ms: number;
   native_anchor_node_id: string;
-}>;
+}> &
+  (
+    | Readonly<{
+        schema: typeof PREPARED_GRAPH_OBSERVATION_SCHEMA;
+        source_identity: InputGeometryReceipt | null;
+        source_identities?: never;
+        media_binding_fingerprint?: never;
+      }>
+    | (Readonly<{
+        schema: typeof SEQUENCE_PREPARED_GRAPH_OBSERVATION_SCHEMA;
+        source_identity?: never;
+      }> &
+        import("./preparedSequenceObservation").SequenceMediaSourceObservation)
+  );
 
 export type ManagedAppModePreflight = Readonly<{
   bootstrap: AppModeCompiledPrompt;
@@ -638,93 +625,6 @@ export function anchorMissingReason(
   });
 }
 
-function freezeRefusalReason(
-  reason: AppModeRefusalReason,
-): AppModeRefusalReason {
-  // CRITICAL: only this closed vocabulary may cross into UI state. Never retain
-  // host exception text, paths, model names or media identities as refusal data.
-  if (reason.kind === "generation_admission_refused")
-    return Object.freeze({
-      kind: reason.kind,
-      admissionReason: reason.admissionReason,
-      unsatisfiedSlots: Object.freeze([...reason.unsatisfiedSlots]),
-    });
-  if (reason.kind === "anchor_missing")
-    return Object.freeze({
-      kind: reason.kind,
-      requiredNode: reason.requiredNode,
-    });
-  if (reason.kind === "queue_rejected")
-    return Object.freeze({
-      kind: reason.kind,
-      classTypes: Object.freeze([...reason.classTypes]),
-      errorTypes: Object.freeze([...reason.errorTypes]),
-    });
-  return Object.freeze({ kind: reason.kind });
-}
-
-export class AppModeError extends Error {
-  readonly code:
-    | "incompatible_seam"
-    | "incompatible_graph"
-    | "dirty_graph"
-    | "invalid_request"
-    | "reference_capacity_exceeded"
-    | "compile_failed"
-    | "queue_failed"
-    | "execution_failed"
-    | "execution_interrupted"
-    | "ambiguous_host_ownership"
-    | "cancelled"
-    | "stale_graph"
-    | "rollback_failed";
-  readonly source:
-    "request" | "seam" | "graph" | "compile" | "queue" | "transaction";
-  readonly recovery: "retry" | "inspect" | "use_native";
-  readonly reason?: AppModeRefusalReason;
-
-  constructor(
-    code: AppModeError["code"],
-    message: string,
-    reason?: AppModeRefusalReason,
-  ) {
-    // Keep provider/graph errors out of the UI and logs; only stable codes and
-    // bounded, user-safe messages cross the sidebar seam.
-    super(`${code}: ${message}`);
-    this.name = "AppModeError";
-    this.code = code;
-    this.reason =
-      reason === undefined ? undefined : freezeRefusalReason(reason);
-    this.source =
-      code === "incompatible_seam"
-        ? "seam"
-        : code === "incompatible_graph" || code === "dirty_graph"
-          ? "graph"
-          : code === "compile_failed"
-            ? "compile"
-            : code === "queue_failed"
-              ? "queue"
-              : code === "execution_failed" ||
-                  code === "execution_interrupted" ||
-                  code === "stale_graph" ||
-                  code === "rollback_failed" ||
-                  code === "ambiguous_host_ownership"
-                ? "transaction"
-                : "request";
-    this.recovery =
-      reason?.kind === "queue_rejected"
-        ? "inspect"
-        : reason?.kind === "queue_response_invalid"
-          ? "use_native"
-          : code === "dirty_graph" || code === "incompatible_graph"
-            ? "inspect"
-            : code === "incompatible_seam" ||
-                code === "ambiguous_host_ownership"
-              ? "use_native"
-              : "retry";
-  }
-}
-
 export function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -873,6 +773,13 @@ export function isBindableDurationSeconds(value: unknown): boolean {
 }
 
 export function validateCommonInputs(inputs: AppModeInputs): void {
+  validateCommonInputsForRoute(inputs, false);
+}
+
+function validateCommonInputsForRoute(
+  inputs: AppModeInputs,
+  privateSequence: boolean,
+): void {
   if (!APP_MODE_TASK_MODES.includes(inputs.task_mode))
     throw new AppModeError(
       "invalid_request",
@@ -881,7 +788,9 @@ export function validateCommonInputs(inputs: AppModeInputs): void {
   if (
     typeof inputs.user_intent !== "string" ||
     inputs.user_intent.trim().length === 0 ||
-    inputs.user_intent.length > 4096
+    (privateSequence
+      ? !isBoundedPrivateCanonicalPrompt(inputs.user_intent)
+      : inputs.user_intent.length > 4096)
   )
     throw new AppModeError(
       "invalid_request",
@@ -912,7 +821,26 @@ export function validateCommonInputs(inputs: AppModeInputs): void {
 
 /** Validate a request that will materialize repository-owned media bindings. */
 export function validateInputs(inputs: AppModeInputs): void {
-  validateCommonInputs(inputs);
+  validateMaterializedInputs(inputs, false);
+}
+
+/** Select private counting only after exact retained and canonical ownership validation. */
+export function validatePreparedMaterializationInputs(
+  inputs: AppModeInputs,
+  options: AppModeStartOptions,
+): void {
+  validatePreparedCanonicalStart(inputs, options);
+  validateMaterializedInputs(
+    inputs,
+    options.preparedSequenceMedia !== undefined,
+  );
+}
+
+function validateMaterializedInputs(
+  inputs: AppModeInputs,
+  privateSequence: boolean,
+): void {
+  validateCommonInputsForRoute(inputs, privateSequence);
   validateImageCrops(inputs, false);
   const first = inputs.first_frame_source;
   const last = inputs.last_frame_source;

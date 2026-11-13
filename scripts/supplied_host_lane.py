@@ -33,7 +33,7 @@ MAX_CANDIDATE_FILES = 512
 MAX_REPORT_STRING = 400
 MAX_HTTP_BYTES = 2 * 1_048_576
 MAX_M25_52_TIMELINE_CAPTURE_BYTES = 192 * 1_024
-ELIGIBLE_SUFFIXES = frozenset({".py", ".json", ".typed", ".ttf", ".js", ".css"})
+ELIGIBLE_SUFFIXES = frozenset({".py", ".json", ".typed", ".ttf", ".otf", ".js", ".css"})
 ROW_CONTROL_ALLOWLIST = frozenset(
     {
         "H3_CONTEXT_DEPLOYMENT_URL",

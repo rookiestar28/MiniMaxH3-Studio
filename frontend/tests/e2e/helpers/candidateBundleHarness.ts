@@ -5,21 +5,34 @@ import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 export const CANDIDATE_BUNDLE_PATH_ENV = "H3_CONTEXT_CANDIDATE_BUNDLE_PATH";
 export const CANDIDATE_BUNDLE_SHA256_ENV = "H3_CONTEXT_CANDIDATE_BUNDLE_SHA256";
 export const CANDIDATE_BACKEND_HOST_ROOT_ENV = "H3_CONTEXT_HOST_ROOT";
-// The integrated NLE/audio/output runtime exceeds 1 MiB. Keep admission bounded
-// while accepting the complete single-entry bundle, not a reduced test build.
-const MAX_CANDIDATE_BUNDLE_BYTES = 2 * 1_048_576;
+// IMPORTANT: admit the complete pinned runtime (dev 3,877,770 bytes; merged frame sequences
+// 3,915,785 bytes). A smaller bound rejects exact candidates before host setup; the owning unit
+// tripwire checks the shipped manifest size. Keep SHA-256 equality as the content guard.
+export const MAX_CANDIDATE_BUNDLE_BYTES = 4 * 1_048_576;
 // Keep this above the shipped package census while retaining a hard traversal
 // bound. The package crossed 256 when the governed contract inventories grew.
 const MAX_CANDIDATE_BACKEND_FILES = 512;
 const MAX_CANDIDATE_BACKEND_DIRECTORIES = 64;
 const MAX_CANDIDATE_BACKEND_FILE_BYTES = 1_048_576;
-const MAX_CANDIDATE_BACKEND_TOTAL_BYTES = 16 * 1_048_576;
+// The twelve pinned faces total 49,586,384 bytes; retain the package-wide 128 MiB bound.
+const MAX_CANDIDATE_BACKEND_TOTAL_BYTES = 128 * 1_048_576;
+const MAX_CANDIDATE_FONT_BYTES = 12 * 1_048_576;
 const CANDIDATE_BACKEND_PACKAGE = "comfyui_h3_context";
 // IMPORTANT: this must match the repository directory installed under ComfyUI/custom_nodes.
 const INSTALLED_CUSTOM_NODE_DIRECTORY = "ComfyUI-MiniMaxH3-Context";
 const CANDIDATE_BACKEND_EXTENSIONS = new Set([".json", ".py", ".typed"]);
 const CANDIDATE_BACKEND_PACKAGED_FONT_PATHS = new Set([
   "fonts/LICENSE-OFL-1.1.txt",
+  "fonts/LICENSE-NotoSansCJK-OFL-1.1.txt",
+  "fonts/NotoSansTC-Regular.otf",
+  "fonts/NotoSansTC-Bold.otf",
+  "fonts/NotoSansSC-Regular.otf",
+  "fonts/NotoSansSC-Bold.otf",
+  "fonts/NotoSansJP-Regular.otf",
+  "fonts/NotoSansJP-Bold.otf",
+  "fonts/NotoSansKR-Regular.otf",
+  "fonts/NotoSansKR-Bold.otf",
+
   "fonts/NotoSans-Bold.ttf",
   "fonts/NotoSans-BoldItalic.ttf",
   "fonts/NotoSans-Italic.ttf",
@@ -155,7 +168,7 @@ function candidateBackendInventory(
         visit(absolutePath, relativePath);
         continue;
       }
-      // CRITICAL: packaged font parity is limited to this fixed path set. Allowing the .ttf or
+      // CRITICAL: packaged font parity is limited to this fixed path set. Allowing the .ttf, .otf or
       // .txt extension generally would admit unrelated opaque assets into the executable host copy.
       const allowedCandidateFile =
         CANDIDATE_BACKEND_EXTENSIONS.has(extname(entry.name)) ||
@@ -165,7 +178,13 @@ function candidateBackendInventory(
       const status = backendStatus(absolutePath, "candidate_inventory_unsafe");
       if (!status.isFile() || status.isSymbolicLink())
         backendMismatch("candidate_inventory_unsafe");
-      if (status.size > MAX_CANDIDATE_BACKEND_FILE_BYTES)
+      if (
+        status.size >
+        (CANDIDATE_BACKEND_PACKAGED_FONT_PATHS.has(relativePath) &&
+        /\.(otf|ttf)$/.test(relativePath)
+          ? MAX_CANDIDATE_FONT_BYTES
+          : MAX_CANDIDATE_BACKEND_FILE_BYTES)
+      )
         backendMismatch("candidate_inventory_unsafe");
       totalBytes += status.size;
       if (
@@ -212,7 +231,13 @@ function installedBackendFile(
       continue;
     }
     if (!status.isFile()) return { kind: "missing" };
-    if (status.size > MAX_CANDIDATE_BACKEND_FILE_BYTES)
+    if (
+      status.size >
+      (CANDIDATE_BACKEND_PACKAGED_FONT_PATHS.has(relativePath) &&
+      /\.(otf|ttf)$/.test(relativePath)
+        ? MAX_CANDIDATE_FONT_BYTES
+        : MAX_CANDIDATE_BACKEND_FILE_BYTES)
+    )
       backendMismatch("installed_runtime_unsafe");
   }
   try {

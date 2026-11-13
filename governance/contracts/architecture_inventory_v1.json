@@ -396,6 +396,8 @@
         "adapters.retained_asset_store",
         "adapters.retained_asset_use",
         "adapters.seam_observation_media",
+        "adapters.sequence_media_bindings",
+        "adapters.sequence_media_observation",
         "adapters.workspace_state_service"
       ],
       "runtime_cycle": false
@@ -1941,10 +1943,10 @@
   ],
   "edge_kind_totals": {
     "function_local": 114,
-    "module_level": 1773,
+    "module_level": 1799,
     "type_checking": 128
   },
-  "fingerprint": "sha256:5e2e8a711dcdbca2a38d555b646840d06914c1a17118200e448c2b5bdc096e34",
+  "fingerprint": "sha256:85b1ddc6961f47068660f0251c896ed6c4299380db3018beaa1c18d36c76d782",
   "forbidden_imports": [],
   "layer_inversions": [],
   "modules": [
@@ -1985,13 +1987,20 @@
       ],
       "owning_tests": [
         "tests/test_architecture_inventory.py",
+        "tests/test_authoring_font_derivations.py",
         "tests/test_authoring_fonts.py",
         "tests/test_authoring_workspace.py",
         "tests/test_av_reconstruction_transport.py",
+        "tests/test_cjk_fonts.py",
         "tests/test_comfyui_media_runtime.py",
         "tests/test_continuity_handoff.py",
+        "tests/test_durable_state_long_paths.py",
         "tests/test_editor_recovery_route.py",
+        "tests/test_frame_mode_sequence_start.py",
+        "tests/test_frame_mode_sequences.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_import_fixture_media_source.py",
+        "tests/test_keyframe_match_media.py",
         "tests/test_m23_18_input_geometry.py",
         "tests/test_m23_31_join_invariants.py",
         "tests/test_m23_47_composition_root.py",
@@ -2032,11 +2041,19 @@
         "tests/test_project_document_route.py",
         "tests/test_provider_connection.py",
         "tests/test_qualified_perception.py",
+        "tests/test_render_native_path_operands.py",
+        "tests/test_render_path_refusal.py",
         "tests/test_renderer_qualification_subjects.py",
+        "tests/test_resolved_font_admission.py",
         "tests/test_retained_asset_native_boundaries.py",
         "tests/test_retained_asset_route.py",
         "tests/test_retained_asset_service.py",
         "tests/test_seam_observation_media.py",
+        "tests/test_sequence_media_maximum_envelope.py",
+        "tests/test_sequence_media_observation.py",
+        "tests/test_sequence_media_prebind_failure.py",
+        "tests/test_sequence_media_results.py",
+        "tests/test_store_long_paths.py",
         "tests/test_title_glyph_admission.py",
         "tests/test_workspace_route_workers.py",
         "tests/test_workspace_state_route.py"
@@ -2129,7 +2146,7 @@
       "disposition": "movable",
       "inbound": 1,
       "layer": "adapters",
-      "lines": 548,
+      "lines": 551,
       "module": "adapters.authoring_derivative_source",
       "outbound": 14,
       "owning_rules": [
@@ -2150,7 +2167,7 @@
       "disposition": "movable",
       "inbound": 7,
       "layer": "adapters",
-      "lines": 732,
+      "lines": 948,
       "module": "adapters.authoring_fonts",
       "outbound": 1,
       "owning_rules": [
@@ -2159,7 +2176,9 @@
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_authoring_font_derivations.py",
         "tests/test_authoring_fonts.py",
+        "tests/test_cjk_fonts.py",
         "tests/test_import_fixture_diagnostics.py",
         "tests/test_m25_20_conformance_cases.py",
         "tests/test_m25_74_derivative_rework_counts.py",
@@ -2173,6 +2192,7 @@
         "tests/test_m25_render_job_leases.py",
         "tests/test_m25_render_source_currentness.py",
         "tests/test_renderer_qualification_subjects.py",
+        "tests/test_resolved_font_admission.py",
         "tests/test_title_decorations.py",
         "tests/test_title_glyph_admission.py"
       ],
@@ -2288,14 +2308,15 @@
       "disposition": "movable",
       "inbound": 2,
       "layer": "adapters",
-      "lines": 587,
+      "lines": 593,
       "module": "adapters.authoring_output_service",
       "outbound": 11,
       "owning_rules": [
         "direct_module"
       ],
       "owning_tests": [
-        "tests/test_m25_20_render_stage_rules.py"
+        "tests/test_m25_20_render_stage_rules.py",
+        "tests/test_resolved_font_admission.py"
       ],
       "reasons": []
     },
@@ -2303,13 +2324,14 @@
       "disposition": "movable",
       "inbound": 3,
       "layer": "adapters",
-      "lines": 419,
+      "lines": 423,
       "module": "adapters.authoring_render_executor",
       "outbound": 11,
       "owning_rules": [
         "direct_module",
         "importlib_literal",
-        "qualification_subject"
+        "qualification_subject",
+        "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_m25_29_production_authoring_import.py",
@@ -2320,7 +2342,9 @@
         "tests/test_m25_authoring_render_graph.py",
         "tests/test_m25_authoring_render_jobs.py",
         "tests/test_m25_native_renderer.py",
-        "tests/test_renderer_qualification_subjects.py"
+        "tests/test_render_native_path_operands.py",
+        "tests/test_renderer_qualification_subjects.py",
+        "tests/test_resolved_font_admission.py"
       ],
       "reasons": []
     },
@@ -2374,13 +2398,14 @@
       "disposition": "movable",
       "inbound": 3,
       "layer": "adapters",
-      "lines": 471,
+      "lines": 477,
       "module": "adapters.authoring_render_probe",
       "outbound": 5,
       "owning_rules": [
         "direct_module",
         "importlib_literal",
-        "qualification_subject"
+        "qualification_subject",
+        "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_m25_77_clip_audio_amplitude.py",
@@ -2388,6 +2413,7 @@
         "tests/test_m25_authoring_render_jobs.py",
         "tests/test_m25_authoring_render_probe.py",
         "tests/test_m25_native_renderer.py",
+        "tests/test_render_native_path_operands.py",
         "tests/test_renderer_qualification_subjects.py"
       ],
       "reasons": []
@@ -2396,13 +2422,14 @@
       "disposition": "movable",
       "inbound": 6,
       "layer": "adapters",
-      "lines": 787,
+      "lines": 793,
       "module": "adapters.authoring_render_process",
       "outbound": 3,
       "owning_rules": [
         "direct_module",
         "importlib_literal",
-        "qualification_subject"
+        "qualification_subject",
+        "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_m25_45_render_companion_ownership.py",
@@ -2411,6 +2438,7 @@
         "tests/test_m25_authoring_render_jobs.py",
         "tests/test_m25_authoring_render_process.py",
         "tests/test_m25_native_renderer.py",
+        "tests/test_render_native_path_operands.py",
         "tests/test_renderer_qualification_subjects.py"
       ],
       "reasons": []
@@ -2419,18 +2447,20 @@
       "disposition": "movable",
       "inbound": 4,
       "layer": "adapters",
-      "lines": 688,
+      "lines": 693,
       "module": "adapters.authoring_render_service",
       "outbound": 11,
       "owning_rules": [
         "direct_module",
         "importlib_literal",
-        "qualification_subject"
+        "qualification_subject",
+        "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_m25_authoring_output_service.py",
         "tests/test_m25_authoring_render_jobs.py",
         "tests/test_m25_native_renderer.py",
+        "tests/test_render_path_refusal.py",
         "tests/test_renderer_qualification_subjects.py"
       ],
       "reasons": []
@@ -2439,7 +2469,7 @@
       "disposition": "movable",
       "inbound": 6,
       "layer": "adapters",
-      "lines": 678,
+      "lines": 711,
       "module": "adapters.authoring_render_source",
       "outbound": 14,
       "owning_rules": [
@@ -2466,6 +2496,7 @@
         "tests/test_m25_render_planner.py",
         "tests/test_m25_render_source_currentness.py",
         "tests/test_renderer_qualification_subjects.py",
+        "tests/test_resolved_font_admission.py",
         "tests/test_title_decorations.py"
       ],
       "reasons": []
@@ -2474,13 +2505,14 @@
       "disposition": "movable",
       "inbound": 6,
       "layer": "adapters",
-      "lines": 514,
+      "lines": 589,
       "module": "adapters.authoring_render_store",
       "outbound": 5,
       "owning_rules": [
         "direct_module",
         "importlib_literal",
-        "qualification_subject"
+        "qualification_subject",
+        "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_m25_29_production_authoring_import.py",
@@ -2490,7 +2522,10 @@
         "tests/test_m25_authoring_render_executor.py",
         "tests/test_m25_authoring_render_jobs.py",
         "tests/test_m25_native_renderer.py",
-        "tests/test_renderer_qualification_subjects.py"
+        "tests/test_render_native_path_operands.py",
+        "tests/test_render_path_refusal.py",
+        "tests/test_renderer_qualification_subjects.py",
+        "tests/test_store_long_paths.py"
       ],
       "reasons": []
     },
@@ -2509,7 +2544,8 @@
         "tests/test_architecture_inventory.py",
         "tests/test_m25_45_loopback_media_runner.py",
         "tests/test_m25_native_renderer.py",
-        "tests/test_renderer_qualification_subjects.py"
+        "tests/test_renderer_qualification_subjects.py",
+        "tests/test_title_style_presets.py"
       ],
       "reasons": []
     },
@@ -2545,6 +2581,7 @@
         "tests/test_m25_render_job_leases.py",
         "tests/test_m25_render_source_currentness.py",
         "tests/test_renderer_qualification_subjects.py",
+        "tests/test_resolved_font_admission.py",
         "tests/test_retained_asset_restore.py",
         "tests/test_sidebar_workspace_adapter.py"
       ],
@@ -2745,7 +2782,8 @@
         "direct_module"
       ],
       "owning_tests": [
-        "tests/test_m25_42_disconnected_route_responses.py"
+        "tests/test_m25_42_disconnected_route_responses.py",
+        "tests/test_resolved_font_admission.py"
       ],
       "reasons": []
     },
@@ -2883,14 +2921,15 @@
       "disposition": "movable",
       "inbound": 3,
       "layer": "adapters",
-      "lines": 707,
+      "lines": 719,
       "module": "adapters.comfyui_generation_profile",
-      "outbound": 8,
+      "outbound": 10,
       "owning_rules": [
         "direct_module",
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_generation_profile_adapter.py",
         "tests/test_m23_47_route_seam.py",
         "tests/test_m26_04_qualification_producer.py",
@@ -2903,19 +2942,24 @@
     },
     {
       "disposition": "movable",
-      "inbound": 3,
+      "inbound": 6,
       "layer": "adapters",
-      "lines": 607,
+      "lines": 619,
       "module": "adapters.comfyui_input_geometry",
       "outbound": 5,
       "owning_rules": [
         "direct_module"
       ],
       "owning_tests": [
+        "tests/test_frame_mode_sequence_start.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_m23_15_sequence_coordinator.py",
         "tests/test_m23_18_input_geometry.py",
         "tests/test_m23_29_observed_admission.py",
-        "tests/test_managed_artifact_runtime.py"
+        "tests/test_managed_artifact_runtime.py",
+        "tests/test_managed_sequence_canvas.py",
+        "tests/test_sequence_media_bindings.py",
+        "tests/test_sequence_media_observation.py"
       ],
       "reasons": []
     },
@@ -3061,9 +3105,12 @@
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_coordinator_artifact_concurrency.py",
         "tests/test_editor_recovery.py",
         "tests/test_editor_recovery_service.py",
+        "tests/test_frame_sequence_readiness_start.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_import_fixture_media_source.py",
         "tests/test_m17_14_production_closeout.py",
         "tests/test_m23_15_sequence_coordinator.py",
@@ -3087,6 +3134,7 @@
         "tests/test_managed_artifact_runtime.py",
         "tests/test_managed_child_response.py",
         "tests/test_managed_generation_publication_bridge.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_media_preview.py",
         "tests/test_native_source_admission_producer.py",
         "tests/test_product_shell_node.py",
@@ -3191,15 +3239,16 @@
       "disposition": "movable",
       "inbound": 2,
       "layer": "adapters",
-      "lines": 4069,
+      "lines": 4168,
       "module": "adapters.comfyui_sequence_coordinator",
-      "outbound": 27,
+      "outbound": 29,
       "owning_rules": [
         "direct_module",
         "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_coordinator_artifact_concurrency.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_m23_15_sequence_coordinator.py",
         "tests/test_m23_15_sequence_coordinator_route.py",
         "tests/test_m23_29_observed_admission.py",
@@ -3216,7 +3265,10 @@
         "tests/test_managed_artifact_scopes.py",
         "tests/test_managed_child_response.py",
         "tests/test_managed_generation_publication_bridge.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_managed_sequence_expiry_recovery.py",
+        "tests/test_sequence_media_bindings.py",
+        "tests/test_sequence_media_observation.py",
         "tests/test_workspace_route_workers.py"
       ],
       "reasons": []
@@ -3236,7 +3288,12 @@
         "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_authoring_workspace.py",
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_comfyui_assisted_draft.py",
+        "tests/test_frame_canonical_lowering.py",
+        "tests/test_frame_mode_sequence_start.py",
+        "tests/test_frame_mode_sequences.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_instruction_refinement.py",
         "tests/test_m17_14_production_closeout.py",
         "tests/test_m23_15_sequence_coordinator.py",
@@ -3258,6 +3315,7 @@
         "tests/test_m26_08_reference_bearing_planning.py",
         "tests/test_managed_artifact_runtime.py",
         "tests/test_managed_generation_publication_bridge.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_media_preview.py",
         "tests/test_native_mode_qualification.py",
         "tests/test_product_shell_node.py",
@@ -3329,6 +3387,7 @@
       "owning_tests": [
         "tests/test_comfyui_media_runtime.py",
         "tests/test_editor_recovery_route.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_m23_18_input_geometry.py",
         "tests/test_m23_31_join_invariants.py",
         "tests/test_m23_47_composition_root.py",
@@ -3369,14 +3428,16 @@
       "disposition": "movable",
       "inbound": 4,
       "layer": "adapters",
-      "lines": 697,
+      "lines": 708,
       "module": "adapters.durable_state_store",
       "outbound": 6,
       "owning_rules": [
         "direct_module",
-        "importlib_literal"
+        "importlib_literal",
+        "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_durable_state_long_paths.py",
         "tests/test_durable_state_store.py",
         "tests/test_workspace_state_service.py"
       ],
@@ -3414,7 +3475,7 @@
     },
     {
       "disposition": "movable",
-      "inbound": 5,
+      "inbound": 6,
       "layer": "adapters",
       "lines": 242,
       "module": "adapters.executable_admission",
@@ -3447,6 +3508,21 @@
     },
     {
       "disposition": "movable",
+      "inbound": 0,
+      "layer": "adapters",
+      "lines": 193,
+      "module": "adapters.keyframe_match_media",
+      "outbound": 3,
+      "owning_rules": [
+        "submodule_as_name"
+      ],
+      "owning_tests": [
+        "tests/test_keyframe_match_media.py"
+      ],
+      "reasons": []
+    },
+    {
+      "disposition": "movable",
       "inbound": 4,
       "layer": "adapters",
       "lines": 565,
@@ -3465,7 +3541,7 @@
       "disposition": "movable",
       "inbound": 4,
       "layer": "adapters",
-      "lines": 615,
+      "lines": 617,
       "module": "adapters.managed_artifact_scopes",
       "outbound": 5,
       "owning_rules": [
@@ -3496,9 +3572,9 @@
       "disposition": "movable",
       "inbound": 1,
       "layer": "adapters",
-      "lines": 312,
+      "lines": 342,
       "module": "adapters.managed_mode_qualification",
-      "outbound": 13,
+      "outbound": 15,
       "owning_rules": [
         "direct_module",
         "submodule_as_name"
@@ -3552,15 +3628,18 @@
       "disposition": "movable",
       "inbound": 3,
       "layer": "adapters",
-      "lines": 4023,
+      "lines": 4634,
       "module": "adapters.managed_sequence_service",
-      "outbound": 13,
+      "outbound": 16,
       "owning_rules": [
         "direct_module",
         "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_coordinator_artifact_concurrency.py",
+        "tests/test_frame_mode_sequence_start.py",
+        "tests/test_frame_mode_sequences.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_m23_15_sequence_coordinator.py",
         "tests/test_m23_47_route_seam.py",
         "tests/test_m26_02_version_joins.py",
@@ -3572,8 +3651,13 @@
         "tests/test_m26_04_service_recovery_regressions.py",
         "tests/test_managed_child_response.py",
         "tests/test_managed_generation_publication_bridge.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_managed_sequence_expiry_recovery.py",
-        "tests/test_production_import.py"
+        "tests/test_production_import.py",
+        "tests/test_sequence_media_maximum_envelope.py",
+        "tests/test_sequence_media_observation.py",
+        "tests/test_sequence_media_prebind_failure.py",
+        "tests/test_sequence_media_results.py"
       ],
       "reasons": []
     },
@@ -3664,7 +3748,7 @@
       "disposition": "movable",
       "inbound": 12,
       "layer": "adapters",
-      "lines": 1466,
+      "lines": 1472,
       "module": "adapters.media_runtime_resolution",
       "outbound": 6,
       "owning_rules": [
@@ -3683,7 +3767,7 @@
     },
     {
       "disposition": "movable",
-      "inbound": 16,
+      "inbound": 17,
       "layer": "adapters",
       "lines": 824,
       "module": "adapters.media_subprocess",
@@ -3697,6 +3781,7 @@
         "tests/test_av_reconstruction_store.py",
         "tests/test_av_seam_media.py",
         "tests/test_av_seam_pipeline.py",
+        "tests/test_keyframe_match_media.py",
         "tests/test_m17_14_production_closeout.py",
         "tests/test_m25_49_filmstrip.py",
         "tests/test_m25_52_audio_peaks.py",
@@ -3876,7 +3961,7 @@
       "disposition": "movable",
       "inbound": 3,
       "layer": "adapters",
-      "lines": 701,
+      "lines": 766,
       "module": "adapters.production_context_materializer",
       "outbound": 19,
       "owning_rules": [
@@ -3884,13 +3969,18 @@
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_frame_canonical_lowering.py",
+        "tests/test_frame_mode_sequence_start.py",
+        "tests/test_frame_mode_sequences.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_m24_05_authority_migration.py",
         "tests/test_m26_03_context_materializer.py",
         "tests/test_m26_03_planning_atomicity.py",
         "tests/test_m26_03_planning_service.py",
         "tests/test_m26_03_prepared_context.py",
         "tests/test_m26_08_reference_bearing_planning.py",
-        "tests/test_managed_generation_publication_bridge.py"
+        "tests/test_managed_generation_publication_bridge.py",
+        "tests/test_managed_sequence_canvas.py"
       ],
       "reasons": []
     },
@@ -3919,6 +4009,8 @@
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_canonical_global_label_binding.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_m26_03_planning_routes.py",
         "tests/test_m26_03_planning_service.py",
         "tests/test_m26_04_qualification_producer.py",
@@ -3940,12 +4032,16 @@
         "direct_module"
       ],
       "owning_tests": [
+        "tests/test_canonical_global_label_binding.py",
+        "tests/test_frame_canonical_lowering.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_m26_03_context_materializer.py",
         "tests/test_m26_03_planning_atomicity.py",
         "tests/test_m26_03_planning_source.py",
         "tests/test_m26_03_prepared_context.py",
         "tests/test_m26_07_storyboard_source_bridge.py",
-        "tests/test_m26_08_reference_bearing_planning.py"
+        "tests/test_m26_08_reference_bearing_planning.py",
+        "tests/test_managed_sequence_canvas.py"
       ],
       "reasons": []
     },
@@ -4148,15 +4244,17 @@
     },
     {
       "disposition": "movable",
-      "inbound": 1,
+      "inbound": 2,
       "layer": "adapters",
       "lines": 235,
       "module": "adapters.seam_observation_media",
       "outbound": 4,
       "owning_rules": [
+        "direct_module",
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_keyframe_match_media.py",
         "tests/test_seam_observation_media.py"
       ],
       "reasons": []
@@ -4165,7 +4263,7 @@
       "disposition": "movable",
       "inbound": 28,
       "layer": "adapters",
-      "lines": 2094,
+      "lines": 2116,
       "module": "adapters.segment_artifact_store",
       "outbound": 3,
       "owning_rules": [
@@ -4200,7 +4298,44 @@
         "tests/test_production_import.py",
         "tests/test_renderer_qualification_subjects.py",
         "tests/test_retained_asset_source.py",
-        "tests/test_segment_artifact_store.py"
+        "tests/test_segment_artifact_store.py",
+        "tests/test_store_long_paths.py"
+      ],
+      "reasons": []
+    },
+    {
+      "disposition": "movable",
+      "inbound": 3,
+      "layer": "adapters",
+      "lines": 338,
+      "module": "adapters.sequence_media_bindings",
+      "outbound": 5,
+      "owning_rules": [
+        "direct_module",
+        "importlib_literal",
+        "submodule_as_name"
+      ],
+      "owning_tests": [
+        "tests/test_frame_mode_sequence_start.py",
+        "tests/test_managed_sequence_canvas.py",
+        "tests/test_sequence_media_bindings.py",
+        "tests/test_sequence_media_maximum_envelope.py",
+        "tests/test_sequence_media_observation.py"
+      ],
+      "reasons": []
+    },
+    {
+      "disposition": "movable",
+      "inbound": 2,
+      "layer": "adapters",
+      "lines": 127,
+      "module": "adapters.sequence_media_observation",
+      "outbound": 3,
+      "owning_rules": [
+        "direct_module"
+      ],
+      "owning_tests": [
+        "tests/test_sequence_media_observation.py"
       ],
       "reasons": []
     },
@@ -4274,8 +4409,10 @@
         "direct_module"
       ],
       "owning_tests": [
+        "tests/test_frame_canonical_lowering.py",
         "tests/test_m24_05_native_declaration.py",
-        "tests/test_m26_03_context_materializer.py"
+        "tests/test_m26_03_context_materializer.py",
+        "tests/test_managed_sequence_canvas.py"
       ],
       "reasons": []
     },
@@ -4291,6 +4428,7 @@
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_frame_canonical_lowering.py",
         "tests/test_m24_05_native_declaration.py",
         "tests/test_m25_authoring_initialization.py",
         "tests/test_m25_authoring_media_leases.py",
@@ -4327,6 +4465,7 @@
         "tests/test_base_evaluation.py",
         "tests/test_base_planning.py",
         "tests/test_canonical.py",
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_comfyui_assisted_draft.py",
         "tests/test_comparative_evaluation.py",
         "tests/test_compatibility.py",
@@ -4352,7 +4491,9 @@
         "tests/test_fidelity_scorecard.py",
         "tests/test_fingerprint_domain.py",
         "tests/test_fixed_h3_generation.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_full_reference_evaluation.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_full_reference_integration.py",
         "tests/test_full_reference_timeline.py",
         "tests/test_full_rendering.py",
@@ -4392,11 +4533,13 @@
         "tests/test_managed_artifact_runtime.py",
         "tests/test_managed_artifact_scopes.py",
         "tests/test_managed_generation_publication_bridge.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_media_security.py",
         "tests/test_model_adapters.py",
         "tests/test_native_behaviour_oracles.py",
         "tests/test_native_composition.py",
         "tests/test_native_h3_adapter.py",
+        "tests/test_native_keyframe_structure.py",
         "tests/test_native_mode_matrix.py",
         "tests/test_native_mode_qualification.py",
         "tests/test_native_source_compatibility.py",
@@ -4458,6 +4601,7 @@
         "tests/test_source_drift_checkpoint.py",
         "tests/test_source_profiled_prompt.py",
         "tests/test_speaker_perception.py",
+        "tests/test_store_long_paths.py",
         "tests/test_task_mode_retention_classifier.py",
         "tests/test_temporal_event_alignment.py",
         "tests/test_temporal_visual_analysis.py",
@@ -4699,7 +4843,7 @@
       "disposition": "movable",
       "inbound": 5,
       "layer": "core",
-      "lines": 670,
+      "lines": 675,
       "module": "core.authoring_media",
       "outbound": 2,
       "owning_rules": [
@@ -4734,7 +4878,7 @@
       "disposition": "movable",
       "inbound": 4,
       "layer": "core",
-      "lines": 276,
+      "lines": 277,
       "module": "core.authoring_output_protocol",
       "outbound": 1,
       "owning_rules": [
@@ -4746,7 +4890,9 @@
         "tests/test_m25_authoring_output_routes.py",
         "tests/test_m25_authoring_output_schema.py",
         "tests/test_m25_authoring_output_service.py",
-        "tests/test_platform_native_api_access.py"
+        "tests/test_platform_native_api_access.py",
+        "tests/test_render_path_refusal.py",
+        "tests/test_resolved_font_admission.py"
       ],
       "reasons": []
     },
@@ -4774,7 +4920,7 @@
       "disposition": "movable",
       "inbound": 12,
       "layer": "core",
-      "lines": 415,
+      "lines": 416,
       "module": "core.authoring_render_jobs",
       "outbound": 2,
       "owning_rules": [
@@ -4792,6 +4938,7 @@
         "tests/test_m25_authoring_render_receipts.py",
         "tests/test_m25_native_renderer.py",
         "tests/test_m25_render_job_leases.py",
+        "tests/test_render_path_refusal.py",
         "tests/test_renderer_qualification_subjects.py"
       ],
       "reasons": []
@@ -4949,7 +5096,7 @@
     },
     {
       "disposition": "movable",
-      "inbound": 140,
+      "inbound": 142,
       "layer": "core",
       "lines": 293,
       "module": "core.canonical",
@@ -4973,6 +5120,8 @@
         "tests/test_canonical_cross_language.py",
         "tests/test_comfyui_assisted_draft.py",
         "tests/test_continuity_handoff.py",
+        "tests/test_frame_canonical_lowering.py",
+        "tests/test_frame_mode_sequences.py",
         "tests/test_local_reconstruction.py",
         "tests/test_m17_14_production_closeout.py",
         "tests/test_m21_02_vlm_binding_contact_sheet.py",
@@ -5003,11 +5152,14 @@
         "tests/test_production_storyboard.py",
         "tests/test_recompute_closure.py",
         "tests/test_renderer_qualification_subjects.py",
+        "tests/test_resolved_font_admission.py",
         "tests/test_retained_asset_restore.py",
         "tests/test_selective_rerun.py",
         "tests/test_semantic_proposal_execution.py",
         "tests/test_semantic_proposal_producer.py",
         "tests/test_semantic_proposal_transaction.py",
+        "tests/test_sequence_media_bindings.py",
+        "tests/test_sequence_media_maximum_envelope.py",
         "tests/test_sidebar_workspace.py",
         "tests/test_sidebar_workspace_adapter.py",
         "tests/test_timeline_authoring.py",
@@ -5032,6 +5184,7 @@
       ],
       "owning_tests": [
         "tests/test_dialogue_speakers.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_m26_07_storyboard_source_bridge.py",
         "tests/test_pipeline_nodes.py"
       ],
@@ -5168,10 +5321,12 @@
         "tests/test_m25_timeline_history_v2.py",
         "tests/test_nle_timeline_fixture.py",
         "tests/test_renderer_qualification_subjects.py",
+        "tests/test_resolved_font_admission.py",
         "tests/test_retained_asset_restore.py",
         "tests/test_semantic_parity.py",
         "tests/test_title_decorations.py",
         "tests/test_title_glyph_admission.py",
+        "tests/test_title_style_presets.py",
         "tests/test_wipe_render_schedule.py",
         "tests/test_wipe_sampling_boundaries.py",
         "tests/test_wipe_sampling_observer.py",
@@ -5215,6 +5370,7 @@
         "tests/test_audit_override.py",
         "tests/test_base_planning.py",
         "tests/test_canonical.py",
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_constrained_semantic_planning.py",
         "tests/test_constraints.py",
         "tests/test_context_reporting.py",
@@ -5242,6 +5398,7 @@
         "tests/test_m26_03_planning_service.py",
         "tests/test_m26_03_planning_source.py",
         "tests/test_m26_07_storyboard_source_bridge.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_perception_tracking.py",
         "tests/test_rendering.py",
         "tests/test_request_node.py",
@@ -5377,7 +5534,7 @@
     },
     {
       "disposition": "movable",
-      "inbound": 123,
+      "inbound": 125,
       "layer": "core",
       "lines": 348,
       "module": "core.contracts",
@@ -5399,6 +5556,7 @@
         "tests/test_base_evaluation.py",
         "tests/test_base_planning.py",
         "tests/test_canonical.py",
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_comfyui_assisted_draft.py",
         "tests/test_constrained_semantic_planning.py",
         "tests/test_constraints.py",
@@ -5415,7 +5573,10 @@
         "tests/test_execution_coordinator.py",
         "tests/test_failure_containment.py",
         "tests/test_feasible_av_timeline_planner.py",
+        "tests/test_frame_canonical_lowering.py",
+        "tests/test_frame_mode_sequence_start.py",
         "tests/test_full_reference_evaluation.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_full_reference_integration.py",
         "tests/test_full_reference_timeline.py",
         "tests/test_full_rendering.py",
@@ -5464,6 +5625,7 @@
         "tests/test_m26_08_reference_bearing_planning.py",
         "tests/test_m26_managed_generation_publication.py",
         "tests/test_managed_artifact_runtime.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_media_admission.py",
         "tests/test_media_security.py",
         "tests/test_model_adapters.py",
@@ -5521,6 +5683,8 @@
         "tests/test_semantic_intents.py",
         "tests/test_semantic_proposal_producer.py",
         "tests/test_semantic_proposal_transaction.py",
+        "tests/test_sequence_media_observation.py",
+        "tests/test_sequence_media_results.py",
         "tests/test_sidebar_workspace.py",
         "tests/test_sidebar_workspace_adapter.py",
         "tests/test_source_profiled_prompt.py",
@@ -5656,6 +5820,7 @@
         "direct_module"
       ],
       "owning_tests": [
+        "tests/test_durable_state_long_paths.py",
         "tests/test_durable_state_store.py",
         "tests/test_editor_recovery_route.py",
         "tests/test_recovery_metadata_readers.py",
@@ -5730,6 +5895,7 @@
         "tests/test_failure_containment.py",
         "tests/test_fixed_h3_generation.py",
         "tests/test_full_reference_evaluation.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_full_reference_timeline.py",
         "tests/test_full_rendering.py",
         "tests/test_graph_binding.py",
@@ -5845,6 +6011,7 @@
         "tests/test_full_reference_timeline.py",
         "tests/test_image_observation.py",
         "tests/test_m26_03_context_materializer.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_reference_role_resolution.py",
         "tests/test_semantic_enrichment.py",
         "tests/test_semantic_proposal_transaction.py",
@@ -6187,6 +6354,7 @@
         "hub_symbol"
       ],
       "owning_tests": [
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_context_reporting.py",
         "tests/test_downstream_producer_nodes.py",
         "tests/test_full_reference_timeline.py",
@@ -6199,6 +6367,7 @@
         "tests/test_m24_05_readiness_ownership.py",
         "tests/test_m24_05_scoped_intent.py",
         "tests/test_m26_03_context_materializer.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_rendering.py",
         "tests/test_semantic_intents.py",
         "tests/test_semantic_proposal_producer.py",
@@ -6455,9 +6624,9 @@
     },
     {
       "disposition": "movable",
-      "inbound": 3,
+      "inbound": 4,
       "layer": "core",
-      "lines": 2101,
+      "lines": 2112,
       "module": "core.managed_sequence",
       "outbound": 3,
       "owning_rules": [
@@ -6465,6 +6634,8 @@
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_frame_mode_sequence_start.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_m23_15_sequence_coordinator.py",
         "tests/test_m26_03_prepared_context.py",
         "tests/test_m26_04_managed_sequence.py",
@@ -6475,7 +6646,10 @@
         "tests/test_m26_04_service_recovery_regressions.py",
         "tests/test_managed_child_response.py",
         "tests/test_managed_generation_publication_bridge.py",
-        "tests/test_managed_sequence_expiry_recovery.py"
+        "tests/test_managed_sequence_expiry_recovery.py",
+        "tests/test_sequence_media_maximum_envelope.py",
+        "tests/test_sequence_media_prebind_failure.py",
+        "tests/test_sequence_media_results.py"
       ],
       "reasons": []
     },
@@ -6563,7 +6737,7 @@
       "disposition": "movable",
       "inbound": 5,
       "layer": "core",
-      "lines": 325,
+      "lines": 331,
       "module": "core.native_composition",
       "outbound": 10,
       "owning_rules": [
@@ -6572,6 +6746,25 @@
       "owning_tests": [
         "tests/test_native_composition.py",
         "tests/test_native_composition_edges.py",
+        "tests/test_native_source_compatibility.py"
+      ],
+      "reasons": []
+    },
+    {
+      "disposition": "movable",
+      "inbound": 3,
+      "layer": "core",
+      "lines": 95,
+      "module": "core.native_guide",
+      "outbound": 2,
+      "owning_rules": [
+        "direct_module",
+        "importlib_literal"
+      ],
+      "owning_tests": [
+        "tests/test_frame_sequence_readiness_start.py",
+        "tests/test_m26_04_qualification_producer.py",
+        "tests/test_native_keyframe_structure.py",
         "tests/test_native_source_compatibility.py"
       ],
       "reasons": []
@@ -6591,7 +6784,10 @@
       "owning_tests": [
         "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_comfyui_assisted_draft.py",
+        "tests/test_frame_canonical_lowering.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_instruction_refinement.py",
         "tests/test_m17_14_production_closeout.py",
         "tests/test_m17_17_ref2va_soundtrack_ownership.py",
@@ -6607,6 +6803,7 @@
         "tests/test_m26_07_storyboard_source_bridge.py",
         "tests/test_m26_08_reference_bearing_planning.py",
         "tests/test_managed_artifact_runtime.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_native_behaviour_oracles.py",
         "tests/test_native_composition.py",
         "tests/test_native_composition_edges.py",
@@ -6618,11 +6815,44 @@
         "tests/test_production_import.py",
         "tests/test_production_workbench.py",
         "tests/test_public_manifest_v2.py",
+        "tests/test_reachability.py",
         "tests/test_ref2va_reference_contract.py",
         "tests/test_sidebar_workspace.py",
         "tests/test_sidebar_workspace_adapter.py",
         "tests/test_source_drift_checkpoint.py",
         "tests/test_workflow_fixtures.py"
+      ],
+      "reasons": []
+    },
+    {
+      "disposition": "need_evidence",
+      "inbound": 1,
+      "layer": "core",
+      "lines": 166,
+      "module": "core.native_keyframe_baseline",
+      "outbound": 0,
+      "owning_rules": [],
+      "owning_tests": [],
+      "reasons": [
+        "no test imports this module directly or through a hub symbol"
+      ]
+    },
+    {
+      "disposition": "movable",
+      "inbound": 3,
+      "layer": "core",
+      "lines": 113,
+      "module": "core.native_keyframe_structure",
+      "outbound": 2,
+      "owning_rules": [
+        "direct_module",
+        "importlib_literal"
+      ],
+      "owning_tests": [
+        "tests/test_frame_sequence_readiness_start.py",
+        "tests/test_m26_04_qualification_producer.py",
+        "tests/test_native_keyframe_structure.py",
+        "tests/test_native_source_compatibility.py"
       ],
       "reasons": []
     },
@@ -6648,13 +6878,15 @@
       "disposition": "movable",
       "inbound": 4,
       "layer": "core",
-      "lines": 87,
+      "lines": 132,
       "module": "core.native_source_compatibility",
-      "outbound": 4,
+      "outbound": 6,
       "owning_rules": [
         "direct_module"
       ],
       "owning_tests": [
+        "tests/test_frame_sequence_readiness_start.py",
+        "tests/test_m26_04_qualification_producer.py",
         "tests/test_native_composition_edges.py",
         "tests/test_native_source_compatibility.py"
       ],
@@ -6675,9 +6907,9 @@
     },
     {
       "disposition": "movable",
-      "inbound": 2,
+      "inbound": 4,
       "layer": "core",
-      "lines": 777,
+      "lines": 780,
       "module": "core.native_t2va_structure",
       "outbound": 1,
       "owning_rules": [
@@ -6685,6 +6917,7 @@
         "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_native_keyframe_structure.py",
         "tests/test_native_source_compatibility.py",
         "tests/test_native_t2va_structure.py"
       ],
@@ -6798,6 +7031,7 @@
         "tests/test_m24_05_readiness_ownership.py",
         "tests/test_m26_03_context_materializer.py",
         "tests/test_m26_03_planning_service.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_native_h3_adapter.py",
         "tests/test_native_mode_qualification.py",
         "tests/test_normalization.py",
@@ -7160,6 +7394,8 @@
         "direct_module"
       ],
       "owning_tests": [
+        "tests/test_canonical_global_label_binding.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_m26_02_duration_constraints.py",
         "tests/test_m26_02_semantic_preservation.py",
         "tests/test_m26_02_version_joins.py",
@@ -7187,6 +7423,9 @@
         "direct_module"
       ],
       "owning_tests": [
+        "tests/test_frame_mode_sequence_start.py",
+        "tests/test_frame_sequence_readiness_start.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_m24_05_authority_migration.py",
         "tests/test_m26_02_version_joins.py",
         "tests/test_m26_03_context_materializer.py",
@@ -7218,7 +7457,7 @@
       "disposition": "movable",
       "inbound": 5,
       "layer": "core",
-      "lines": 1467,
+      "lines": 1511,
       "module": "core.production_semantics",
       "outbound": 5,
       "owning_rules": [
@@ -7226,6 +7465,7 @@
       ],
       "owning_tests": [
         "tests/test_dialogue_speakers.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_m26_02_semantic_contract.py",
         "tests/test_m26_02_semantic_preservation.py",
         "tests/test_m26_03_planning_source.py",
@@ -7239,13 +7479,16 @@
       "disposition": "movable",
       "inbound": 8,
       "layer": "core",
-      "lines": 2263,
+      "lines": 2311,
       "module": "core.production_storyboard",
       "outbound": 8,
       "owning_rules": [
-        "direct_module"
+        "direct_module",
+        "submodule_as_name"
       ],
       "owning_tests": [
+        "tests/test_canonical_global_label_binding.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_m26_02_semantic_preservation.py",
         "tests/test_m26_02_version_joins.py",
         "tests/test_m26_03_context_materializer.py",
@@ -7276,7 +7519,10 @@
         "hub_symbol"
       ],
       "owning_tests": [
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_coordinator_artifact_concurrency.py",
+        "tests/test_frame_sequence_readiness_start.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_import_fixture_media_source.py",
         "tests/test_m17_14_production_closeout.py",
         "tests/test_m23_15_sequence_coordinator.py",
@@ -7295,6 +7541,7 @@
         "tests/test_m26_08_reference_bearing_planning.py",
         "tests/test_managed_artifact_runtime.py",
         "tests/test_managed_generation_publication_bridge.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_media_preview.py",
         "tests/test_product_shell_node.py",
         "tests/test_production_assembly_lifecycle.py",
@@ -7721,7 +7968,7 @@
       "disposition": "movable",
       "inbound": 4,
       "layer": "core",
-      "lines": 636,
+      "lines": 638,
       "module": "core.reachability",
       "outbound": 3,
       "owning_rules": [
@@ -7902,7 +8149,7 @@
     },
     {
       "disposition": "movable",
-      "inbound": 34,
+      "inbound": 35,
       "layer": "core",
       "lines": 391,
       "module": "core.registry",
@@ -7923,6 +8170,7 @@
         "tests/test_directive_semantics.py",
         "tests/test_downstream_producer_nodes.py",
         "tests/test_feasible_av_timeline_planner.py",
+        "tests/test_frame_canonical_lowering.py",
         "tests/test_full_reference_timeline.py",
         "tests/test_full_rendering.py",
         "tests/test_hierarchical_evidence_reduction.py",
@@ -7947,6 +8195,7 @@
         "tests/test_m25_render_source_currentness.py",
         "tests/test_m26_03_context_materializer.py",
         "tests/test_m26_04_qualification_producer.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_native_behaviour_oracles.py",
         "tests/test_native_h3_adapter.py",
         "tests/test_native_mode_qualification.py",
@@ -7965,6 +8214,7 @@
         "tests/test_security_corpus.py",
         "tests/test_semantic_proposal_producer.py",
         "tests/test_semantic_proposal_transaction.py",
+        "tests/test_sequence_media_maximum_envelope.py",
         "tests/test_sidebar_workspace_adapter.py",
         "tests/test_task_mode_retention_classifier.py",
         "tests/test_temporal_event_alignment.py",
@@ -8044,7 +8294,7 @@
       "disposition": "movable",
       "inbound": 9,
       "layer": "core",
-      "lines": 1251,
+      "lines": 1257,
       "module": "core.render_planner",
       "outbound": 3,
       "owning_rules": [
@@ -8061,7 +8311,8 @@
         "tests/test_m25_render_job_leases.py",
         "tests/test_m25_render_planner.py",
         "tests/test_m25_render_source_currentness.py",
-        "tests/test_renderer_qualification_subjects.py"
+        "tests/test_renderer_qualification_subjects.py",
+        "tests/test_resolved_font_admission.py"
       ],
       "reasons": []
     },
@@ -8069,18 +8320,20 @@
       "disposition": "movable",
       "inbound": 7,
       "layer": "core",
-      "lines": 1286,
+      "lines": 1321,
       "module": "core.rendering",
       "outbound": 8,
       "owning_rules": [
         "direct_module",
-        "hub_symbol"
+        "hub_symbol",
+        "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_base_planning.py",
         "tests/test_dialogue_language.py",
         "tests/test_dialogue_speakers.py",
         "tests/test_full_reference_evaluation.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_full_rendering.py",
         "tests/test_linting.py",
         "tests/test_m24_05_authority_migration.py",
@@ -8165,17 +8418,22 @@
       "disposition": "movable",
       "inbound": 20,
       "layer": "core",
-      "lines": 145,
+      "lines": 178,
       "module": "core.safe_paths",
       "outbound": 0,
       "owning_rules": [
         "direct_module",
-        "qualification_subject"
+        "qualification_subject",
+        "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_m23_15_sequence_coordinator.py",
+        "tests/test_m25_authoring_render_executor.py",
         "tests/test_m25_native_renderer.py",
-        "tests/test_renderer_qualification_subjects.py"
+        "tests/test_render_native_path_operands.py",
+        "tests/test_render_path_refusal.py",
+        "tests/test_renderer_qualification_subjects.py",
+        "tests/test_store_long_paths.py"
       ],
       "reasons": []
     },
@@ -8243,6 +8501,7 @@
         "tests/test_m26_completed_assembly_qualification.py",
         "tests/test_m26_managed_generation_publication.py",
         "tests/test_managed_child_response.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_media_preview.py",
         "tests/test_production_import.py",
         "tests/test_production_workbench.py",
@@ -8276,6 +8535,7 @@
         "tests/test_m26_managed_generation_publication.py",
         "tests/test_managed_child_response.py",
         "tests/test_managed_generation_publication_bridge.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_media_preview.py",
         "tests/test_pipeline_transaction.py",
         "tests/test_product_shell_node.py",
@@ -8673,7 +8933,9 @@
       "owning_tests": [
         "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_comfyui_assisted_draft.py",
+        "tests/test_full_reference_frame_ownership.py",
         "tests/test_m17_17_ref2va_soundtrack_ownership.py",
         "tests/test_m21_03_sidebar_diagnostic_parameters.py",
         "tests/test_m24_05_native_declaration.py",
@@ -8959,7 +9221,10 @@
       "owning_tests": [
         "tests/test_assisted_hard_content.py",
         "tests/test_assisted_prompt_proposal.py",
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_comfyui_assisted_draft.py",
+        "tests/test_frame_canonical_lowering.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_generation_sequence.py",
         "tests/test_instruction_refinement.py",
         "tests/test_m17_14_production_closeout.py",
@@ -8980,6 +9245,7 @@
         "tests/test_managed_artifact_runtime.py",
         "tests/test_managed_child_response.py",
         "tests/test_managed_generation_publication_bridge.py",
+        "tests/test_managed_sequence_canvas.py",
         "tests/test_media_preview.py",
         "tests/test_native_composition.py",
         "tests/test_native_mode_qualification.py",
@@ -9029,6 +9295,7 @@
         "hub_symbol"
       ],
       "owning_tests": [
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_retirement_eligibility.py",
         "tests/test_ui_projection_lifecycle.py",
         "tests/test_validation_lifecycle.py"
@@ -9355,11 +9622,13 @@
         "tests/test_assisted_prompt_proposal.py",
         "tests/test_audit_override.py",
         "tests/test_base_assistant_subgraph.py",
+        "tests/test_canonical_global_label_binding.py",
         "tests/test_capability_manifest.py",
         "tests/test_comfyui_assisted_draft.py",
         "tests/test_dialogue_language.py",
         "tests/test_dialogue_speakers.py",
         "tests/test_downstream_producer_nodes.py",
+        "tests/test_frame_sequence_readiness_start.py",
         "tests/test_full_reference_integration.py",
         "tests/test_host_queue_validation.py",
         "tests/test_local_reconstruction.py",
@@ -9372,6 +9641,7 @@
         "tests/test_m25_35_production_membership.py",
         "tests/test_m26_03_planning_service.py",
         "tests/test_m26_03_planning_source.py",
+        "tests/test_m26_04_qualification_producer.py",
         "tests/test_m26_07_storyboard_source_bridge.py",
         "tests/test_m26_08_reference_bearing_planning.py",
         "tests/test_managed_artifact_runtime.py",

@@ -17,6 +17,7 @@ from ..core.canonical import canonical_bytes
 from ..core.private_storage_layout import MANAGED_ARTIFACT_SUBTREE, MIB, private_subtree_path
 from ..core.safe_paths import (
     UnsafePathError,
+    _native_io_path,
     ensure_directory,
     validate_directory,
     validate_regular_file,
@@ -189,7 +190,8 @@ def _acquire_lock(path: Path, expected: bytes, budget: _Budget | None = None) ->
     if budget is not None:
         budget.check()
     admitted = validate_regular_file(path, maximum_bytes=1024)
-    before = admitted.lstat()
+    # CRITICAL: stat the logical lock in native spelling; validation does not rewrite its Path.
+    before = _native_io_path(admitted).lstat()
     if before.st_nlink != 1:
         raise ArtifactStoreError("unsafe_scope_lock")
     descriptor = (
@@ -234,7 +236,7 @@ def _acquire_lock(path: Path, expected: bytes, budget: _Budget | None = None) ->
         if (
             payload != expected
             or _identity(os.fstat(descriptor)) != _identity(opened)
-            or _identity(admitted.lstat()) != _identity(opened)
+            or _identity(_native_io_path(admitted).lstat()) != _identity(opened)
         ):
             raise ArtifactStoreError("unsafe_scope_lock")
         return descriptor
@@ -259,7 +261,7 @@ def _read_metadata(path: Path, budget: _Budget | None = None) -> tuple[bytes, os
 
 
 def _create_or_admit(path: Path, payload: bytes) -> None:
-    if path.exists():
+    if _native_io_path(path).exists():
         return
     try:
         _write_new_file(path, payload)

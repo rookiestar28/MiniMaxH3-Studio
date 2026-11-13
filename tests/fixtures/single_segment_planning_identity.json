@@ -1,0 +1,62 @@
+{
+    "v1.fl2va":  {
+                     "admission":  "sha256:95b53bbfddaa23b3edff783f6cef4f951aa39a8525b3aedf9325c77878251351",
+                     "context":  "sha256:eec9b448fb8e7ef84f19a5d6ad94d53044de12036f8e70c5f0620e7c994616ab",
+                     "prompt_sha256":  "sha256:76263ba58f311040f5dea780d9923abe1769e610ece063d6064d99c6ae134795",
+                     "proposal":  "sha256:bf1ac763e71463661c94f93efed0614998e0ba3889aa1637d2f01f674c6db596"
+                 },
+    "v1.i2va":  {
+                    "admission":  "sha256:47e5400c535d45f1d8430902f1685f775e15fec05cb40d453c08d74b7cbda9f0",
+                    "context":  "sha256:44abb9322e4d193a6e7fdd495d4f3899afd07b913e395d022298ad6be772c61c",
+                    "prompt_sha256":  "sha256:aba8963e65020ce1db422c735128b02c29bd5bd5704b2985a547a06c20dbad41",
+                    "proposal":  "sha256:04228933683bd9b1ed36a64f5c9b1f6646366e885adcf96c29888ff31ae3e7d6"
+                },
+    "v1.l2va":  {
+                    "admission":  "sha256:a89360f48fe1ac44271e25f0639141878ef25c99e13a25cf22a3f7e74236fcb7",
+                    "context":  "sha256:ee293c1ffb2e036c8e16ecd5d758136a17147c031d29a360c58af008d8fe4efc",
+                    "prompt_sha256":  "sha256:503064e059178b32bc694d89eb755148d4243afd5c579b7662318bb981841411",
+                    "proposal":  "sha256:e838ff764a54fe0b795161eaff53e2b4cd2eef9a93e70afaf4938c87bca3dbb1"
+                },
+    "v1.ref2va":  {
+                      "admission":  "sha256:7a2c8b6010c13260df84c753351a3961297b477ba21df9acb038c9e2eaf794d9",
+                      "context":  "sha256:37031b2bec8982bf4b2c3e3d0d9c55ae1353334fbe98084ec647dd9e2f5539b1",
+                      "prompt_sha256":  "sha256:a2cb61a927c9ab2c432ffb471e83dea61157019f61e8c85fbe3401a57ed91271",
+                      "proposal":  "sha256:7732d0e2a39d337fb838e0e50f8bbb6a8f1777f728f3cccb238a4ecfe4164c62"
+                  },
+    "v1.t2va":  {
+                    "admission":  "sha256:c52b10b05220de910e042741d5024b86591d49fdecd9f6724364d4b1a504a114",
+                    "context":  "sha256:58cbd7e85dffaeeec8b1901c68c552c817c8c075c6bb87653810473144c4fdf0",
+                    "prompt_sha256":  "sha256:9279b9eb892faab2dd0331654b0f0d5d4301076383caa4c3644996734cb503de",
+                    "proposal":  "sha256:96d731ecd3db59e819c0b8df750ffe4552397e1ab94a9aab47760e71c201f169"
+                },
+    "v2.fl2va":  {
+                     "admission":  "sha256:0350978d452e8454284337715b025df0c95e092f79fb240397e2a147cc13a5c3",
+                     "context":  "sha256:990bb33e84e3765e42dfc845481488524897e847471d1a815a9ff487fca5345d",
+                     "prompt_sha256":  "sha256:83dbad3f275edfb3443045e916224856872bfe4fb9b161bd0a31a88e3295c84d",
+                     "proposal":  "sha256:f90cbe147d5d22c358b6f1edba419e4103b87838701a46787b7cf213f803c53d"
+                 },
+    "v2.i2va":  {
+                    "admission":  "sha256:1d8365199107558f81aa8f567fbf4df05d5750df2a3e7de62720d81263a31aa9",
+                    "context":  "sha256:2a21dec55645813135a946457dfd1f59d409cee78e84698efc7435629f02de9c",
+                    "prompt_sha256":  "sha256:227133daf0c52606b372c40f6b4fecb05bd9b3776ffd09bd5ee560ea77d922cd",
+                    "proposal":  "sha256:26f4c38d4b4e50850182462298fdc3a842c5ade3d64a410cf1c25d0a9b674943"
+                },
+    "v2.l2va":  {
+                    "admission":  "sha256:b303229db8d6ed3d8e99722d1f04d69e997ab33eeac39ee18ff526b4f44fb741",
+                    "context":  "sha256:6f9ead425770e11ebc65cc019814549be8bff0983f271055323fb243ee3904cd",
+                    "prompt_sha256":  "sha256:e2e33617835a5ff81b730ee41269d758a5d92a4987a4e09488f9798d62398bad",
+                    "proposal":  "sha256:8944b7d9392b8c7aafebf82c576a278edb98e759453a712682292f52918e824b"
+                },
+    "v2.ref2va":  {
+                      "admission":  "sha256:0c2f72d4448b2e0093dd8ce6250f09b6a0b1db48b25b74f94e0cf442084193fb",
+                      "context":  "sha256:72ebce000d68638d78fc2e447735f45b46b0fed692091bcf9ecc9880862cbdaa",
+                      "prompt_sha256":  "sha256:cd929a56c979486f1c06744bb69098ab100cc7c3ad9463965a71d8579fba7245",
+                      "proposal":  "sha256:6556dbdf25269f994ed8cfa1a8474915019b6a35ee6e631c9199f7ee03765933"
+                  },
+    "v2.t2va":  {
+                    "admission":  "sha256:523b051afb36a3a8a1b11be0c752d71283c57f96ee0ec20bff77d41ea8af183d",
+                    "context":  "sha256:d50c99600ce58702331ef9a57588a04e08ab57d0e7f3e9f7b73f588804edae34",
+                    "prompt_sha256":  "sha256:bbfa1691c23688b8c8f0356bebda59f76b8a94fb4ff270518425609c26f92aa4",
+                    "proposal":  "sha256:08e62cf75ad00cc0a4840e05ba77373839645d0c56c2edceda70ebb7cc2772c2"
+                }
+}

@@ -1317,7 +1317,7 @@ def test_every_start_edge_trim_lands_on_a_declared_source_landmark() -> None:
 
 
 def test_the_font_rows_name_the_packaged_font_and_differ_by_their_own_content() -> None:
-    """All three must stay renderable, so the leaf is carried by the content, not by the asset.
+    """All three name the bundled asset; only the unsupported leaf is refused by its content.
 
     A row that renamed the asset to something the packaging does not provide would be refused by
     the render planner as `font_asset_unsupported` -- a true statement, but not the one the corpus
@@ -1332,7 +1332,7 @@ def test_the_font_rows_name_the_packaged_font_and_differ_by_their_own_content() 
         contents[leaf] = title["text"]["content"]
     assert len(set(contents.values())) == 3, contents
     # The unsupported leaf has to actually carry a codepoint the packaged coverage excludes.
-    assert "\u4e2d" in contents["unsupported_glyph"]
+    assert "\u1200" in contents["unsupported_glyph"]
 
 
 def _clip_of(wire: dict[str, Any], clip_id: str) -> dict[str, Any]:
@@ -1467,7 +1467,8 @@ def test_the_refused_draft_row_submits_the_trim_a_draft_submits_and_is_refused()
 def test_the_unsupported_glyph_row_declares_the_refusal_the_resolver_actually_raises() -> None:
     """A row that says the product draws a glyph it has no face for is a false claim.
 
-    The row's content is `A中`, and nothing in the packaged manifest covers U+4E2D. The composition
+    The row's content is `Aሀ`, and no packaged face covers the single BMP Lo codepoint U+1200.
+    The composition
     decoder never looks at coverage, so declaring this a rendering row -- or an `invalid_contract`
     refusal -- would have it pass on an authority that cannot see its subject. The refusal comes
     from the packaged font resolver, where the render plan's font facts are bound, which is why the

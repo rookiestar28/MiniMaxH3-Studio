@@ -5,9 +5,224 @@ import { createQualifiedBasePrompt } from "../../support/qualifiedBasePrompt";
 import { syntheticTemplate } from "../../support/templateFixture";
 import { sidebarCopy } from "../../../src/i18n/catalog";
 import { createManagedJournal } from "../../../src/state/managedJournal";
+import {
+  nativeFrameSelection,
+  nativeFrameParityFields,
+  prepareNativeFrameCanvas,
+  waitForNativeFrameStartup,
+  type NativeFramePrompt,
+} from "../host/frameModeSequence";
+import { createNativeCompileDiagnostics } from "../host/nativeCompileDiagnostics";
 
 const managedPromptId = syntheticPromptUuid(201);
 const secondManagedPromptId = syntheticPromptUuid(202);
+
+function nativeParityPrompt(renamed = false): NativeFramePrompt {
+  const prompt: NativeFramePrompt = {
+    request: {
+      class_type: "comfyui_h3_context.H3Context.Request",
+      inputs: { user_intent: "A synthetic blue cube turns slowly." },
+    },
+    unet: {
+      class_type: "UNETLoader",
+      inputs: {
+        unet_name: "synthetic-model.safetensors",
+        weight_dtype: "default",
+      },
+    },
+    lora: {
+      class_type: "LoraLoaderModelOnly",
+      inputs: {
+        model: ["unet", 0],
+        lora_name: "synthetic-lora.safetensors",
+        strength_model: 1,
+      },
+    },
+    clip: {
+      class_type: "CLIPLoader",
+      inputs: {
+        clip_name: "synthetic-clip.safetensors",
+        type: "synthetic",
+        device: "default",
+      },
+    },
+    vae: {
+      class_type: "VAELoader",
+      inputs: { vae_name: "synthetic-vae.safetensors" },
+    },
+    noise: { class_type: "RandomNoise", inputs: { noise_seed: 17 } },
+    size: {
+      class_type: "SyntheticDimensions",
+      inputs: { width: 640, height: 640, literal: { __value__: ["unet", 0] } },
+    },
+    anchor: {
+      class_type: "MiniMaxH3ImageToVideo",
+      inputs: { width: ["size", 0], height: ["size", 1] },
+    },
+  };
+  if (!renamed) return prompt;
+  return Object.fromEntries(
+    Object.entries(prompt)
+      .reverse()
+      .map(([id, node]) => [
+        `renamed-${id}`,
+        {
+          class_type: node.class_type,
+          inputs: Object.fromEntries(
+            Object.entries(node.inputs)
+              .reverse()
+              .map(([key, value]) => [
+                key,
+                Array.isArray(value)
+                  ? [`renamed-${value[0]}`, value[1]]
+                  : value,
+              ]),
+          ),
+        },
+      ]),
+  );
+}
+
+test("native parity preserves equivalent compiled selections across graph identifiers and input order", () => {
+  expect(nativeFrameSelection(nativeParityPrompt(true))).toEqual(
+    nativeFrameSelection(nativeParityPrompt()),
+  );
+});
+
+test("native parity retains genuine model seed intent geometry and output-slot differences", () => {
+  const original = nativeFrameSelection(nativeParityPrompt());
+  for (const [id, key, value] of [
+    ["unet", "unet_name", "different-model.safetensors"],
+    ["unet", "weight_dtype", "fp8"],
+    ["lora", "strength_model", 0.5],
+    ["lora", "model", ["unet", 1]],
+    ["clip", "device", "cpu"],
+    ["noise", "noise_seed", 18],
+    ["request", "user_intent", "A synthetic green sphere moves."],
+    ["size", "width", 864],
+    ["size", "height", 480],
+    ["anchor", "width", ["size", 1]],
+  ] as const) {
+    const changed = nativeParityPrompt();
+    changed[id]!.inputs[key] = value;
+    expect(nativeFrameSelection(changed)).not.toEqual(original);
+  }
+  const duplicate = nativeParityPrompt();
+  duplicate.secondLora = structuredClone(duplicate.lora!);
+  duplicate.secondLora.inputs.strength_model = 0.25;
+  const reversed = Object.fromEntries(Object.entries(duplicate).reverse());
+  expect(JSON.stringify(nativeFrameSelection(reversed))).toBe(
+    JSON.stringify(nativeFrameSelection(duplicate)),
+  );
+  expect(nativeFrameSelection(duplicate)).not.toEqual(original);
+  const reordered = nativeParityPrompt(true);
+  expect(JSON.stringify(nativeFrameSelection(reordered))).toBe(
+    JSON.stringify(original),
+  );
+  const numeric = nativeParityPrompt();
+  numeric["17"] = numeric.size!;
+  delete numeric.size;
+  numeric.anchor!.inputs.width = [17, 0];
+  numeric.anchor!.inputs.height = [17, 1];
+  expect(nativeFrameSelection(numeric)).toEqual(original);
+  const literal = nativeParityPrompt();
+  literal.anchor!.inputs.width = structuredClone(original.width);
+  expect(nativeFrameSelection(literal)).not.toEqual(original);
+});
+
+test("native parity refuses malformed dangling cyclic and exhausted dependencies", () => {
+  for (const link of [
+    ["absent", 0],
+    ["size", -1],
+    ["size", 0.5],
+    ["size"],
+    [true, 0],
+  ]) {
+    const changed = nativeParityPrompt();
+    changed.anchor!.inputs.width = link;
+    expect(() => nativeFrameSelection(changed)).toThrow(
+      "invalid native parity graph",
+    );
+  }
+  const cyclic = nativeParityPrompt();
+  cyclic.unet!.inputs.loop = ["lora", 0];
+  expect(() => nativeFrameSelection(cyclic)).toThrow(
+    "invalid native parity graph",
+  );
+  const deep = nativeParityPrompt();
+  for (let i = 0; i < 70; i += 1)
+    deep[`chain${i}`] = {
+      class_type: "SyntheticPass",
+      inputs: { value: [`chain${i + 1}`, 0] },
+    };
+  deep.chain70 = { class_type: "SyntheticPass", inputs: { value: 640 } };
+  deep.anchor!.inputs.width = ["chain0", 0];
+  expect(() => nativeFrameSelection(deep)).toThrow(
+    "invalid native parity graph",
+  );
+  const huge = nativeParityPrompt();
+  huge.unet!.inputs.unet_name = "a".repeat(1024 * 1024 + 1);
+  expect(() => nativeFrameSelection(huge)).toThrow(
+    "invalid native parity graph",
+  );
+  const hugeSeedClass = nativeParityPrompt();
+  hugeSeedClass.noise!.class_type = "s".repeat(1024 * 1024 + 1);
+  expect(() => nativeFrameSelection(hugeSeedClass)).toThrow(
+    "invalid native parity graph",
+  );
+  const aggregateSeedClasses = nativeParityPrompt();
+  for (let i = 0; i < 65; i += 1)
+    aggregateSeedClasses[`extraNoise${i}`] = {
+      class_type: "s".repeat(16 * 1024),
+      inputs: { noise_seed: 17 },
+    };
+  expect(() => nativeFrameSelection(aggregateSeedClasses)).toThrow(
+    "invalid native parity graph",
+  );
+  const literalCycle: Record<string, unknown> = {};
+  literalCycle.self = literalCycle;
+  const cyclicValue = nativeParityPrompt();
+  cyclicValue.unet!.inputs.literal = literalCycle;
+  expect(() => nativeFrameSelection(cyclicValue)).toThrow(
+    "invalid native parity graph",
+  );
+});
+
+test("native parity evidence exposes only the exact five equality booleans", () => {
+  const expected = nativeFrameSelection(nativeParityPrompt());
+  const same = nativeFrameParityFields(
+    expected,
+    nativeFrameSelection(nativeParityPrompt(true)),
+  );
+  expect(same).toEqual({
+    intent: true,
+    models: true,
+    seeds: true,
+    width: true,
+    height: true,
+  });
+  const changed = nativeParityPrompt();
+  changed.noise!.inputs.noise_seed = 18;
+  expect(
+    nativeFrameParityFields(expected, nativeFrameSelection(changed)),
+  ).toEqual({
+    intent: true,
+    models: true,
+    seeds: false,
+    width: true,
+    height: true,
+  });
+  expect(Object.keys(same)).toEqual([
+    "intent",
+    "models",
+    "seeds",
+    "width",
+    "height",
+  ]);
+  expect(Object.values(same).every((value) => typeof value === "boolean")).toBe(
+    true,
+  );
+});
 
 type HarnessSnapshot = Readonly<{
   queueCount: number;
@@ -628,6 +843,361 @@ test("existing managed generation never inherits a relocated materialize notice"
     /h3-app-mode-generation-blocker/,
   );
 });
+
+async function setupNativeStartup(page: Page, overlay = true) {
+  await page.route("http://startup.invalid/**", (route) =>
+    route.fulfill({
+      body: overlay
+        ? '<div data-testid="app-loading-overlay">Synthetic startup</div>'
+        : "<div></div>",
+      contentType: "text/html",
+    }),
+  );
+  await page.goto("http://startup.invalid/");
+  await page.evaluate(() => {
+    const app = { extensionManager: {}, graph: { source: null } };
+    (window as any).app = app;
+    (window as any).comfyAPI = { app: { app } };
+  });
+}
+
+test("native startup waits before source creation through late restore", async ({
+  page,
+}) => {
+  await setupNativeStartup(page);
+  const armRestore = (createEarly: boolean) =>
+    page.evaluate((early) => {
+      const app = (window as any).app;
+      const overlay = document.querySelector<HTMLElement>(
+        '[data-testid="app-loading-overlay"]',
+      )!;
+      overlay.style.display = "block";
+      if (early) app.graph.source = { expected: true };
+      setTimeout(() => {
+        app.graph.source = null;
+        overlay.style.display = "none";
+      }, 50);
+    }, createEarly);
+  await armRestore(true);
+  await waitForNativeFrameStartup(page, 2000);
+  const oldRetained = await page.evaluate(
+    () => (window as any).app.graph.source?.expected === true,
+  );
+  // The old ordering must fail retention after the same real browser restore.
+  expect(oldRetained).toBe(false);
+  await armRestore(false);
+  await waitForNativeFrameStartup(page, 2000);
+  await page.evaluate(() => {
+    (window as any).app.graph.source = { expected: true };
+  });
+  expect(
+    await page.evaluate(
+      () => (window as any).app.graph.source?.expected === true,
+    ),
+  ).toBe(true);
+});
+
+test("native startup refuses missing or busy overlay and absent or mismatched authority", async ({
+  page,
+}) => {
+  await setupNativeStartup(page, false);
+  await expect(waitForNativeFrameStartup(page, 100)).rejects.toMatchObject({
+    name: "TimeoutError",
+  });
+  await page.evaluate(() => {
+    const overlay = document.createElement("div");
+    overlay.dataset.testid = "app-loading-overlay";
+    overlay.textContent = "Synthetic startup";
+    document.body.append(overlay);
+  });
+  await expect(waitForNativeFrameStartup(page, 100)).rejects.toMatchObject({
+    name: "TimeoutError",
+  });
+  await page.evaluate(() => {
+    (window as any).app.extensionManager = undefined;
+  });
+  await expect(waitForNativeFrameStartup(page, 100)).rejects.toMatchObject({
+    name: "TimeoutError",
+  });
+  await page.evaluate(() => {
+    (window as any).app = { extensionManager: {} };
+  });
+  await expect(waitForNativeFrameStartup(page, 100)).rejects.toMatchObject({
+    name: "TimeoutError",
+  });
+  expect(
+    await page.evaluate(() => (window as any).comfyAPI.app.app.graph.source),
+  ).toBeNull();
+});
+
+test("native startup preserves failure identity and bounds URL and frame completion", async ({
+  page,
+}) => {
+  await setupNativeStartup(page);
+  const marker = {};
+  let seen: unknown;
+  try {
+    await waitForNativeFrameStartup(
+      {
+        url: () => "http://startup.invalid/",
+        waitForFunction: async () => {
+          throw marker;
+        },
+      } as unknown as Page,
+      100,
+    );
+  } catch (error) {
+    seen = error;
+  }
+  expect(seen).toBe(marker);
+  await page.goto("http://startup.invalid/?workflow=synthetic");
+  await expect(waitForNativeFrameStartup(page, 100)).rejects.toBeInstanceOf(
+    TypeError,
+  );
+  await setupNativeStartup(page);
+  await page.evaluate(() => {
+    document.querySelector<HTMLElement>(
+      '[data-testid="app-loading-overlay"]',
+    )!.style.display = "none";
+    window.requestAnimationFrame = () => 1;
+  });
+  let frameFailure: unknown;
+  try {
+    await waitForNativeFrameStartup(page, 200);
+  } catch (error) {
+    frameFailure = error;
+  }
+  expect(frameFailure).toBeInstanceOf(Error);
+  expect(frameFailure).toMatchObject({ name: "Error" });
+  expect((frameFailure as Error).message.split("\n")[0]).toBe(
+    "page.evaluate: Error: native startup frame deadline expired",
+  );
+});
+
+test("native startup refuses a late final evaluate success at the shared deadline", async () => {
+  const originalNow = Date.now;
+  let clock = 0;
+  let sourceCreationAdmitted = false;
+  let failure: unknown;
+  try {
+    Date.now = () => clock;
+    await waitForNativeFrameStartup(
+      {
+        url: () => "http://startup.invalid/",
+        waitForFunction: async () => undefined,
+        locator: () => ({ waitFor: async () => undefined }),
+        evaluate: async () => {
+          clock = 101;
+        },
+      } as unknown as Page,
+      100,
+    );
+    sourceCreationAdmitted = true;
+  } catch (error) {
+    failure = error;
+  } finally {
+    Date.now = originalNow;
+  }
+  expect(sourceCreationAdmitted).toBe(false);
+  expect(failure).toMatchObject({ message: "native startup deadline expired" });
+});
+
+for (const deferred of [false, true]) {
+  test(`native preparation waits for real routed L2VA compilation deferred=${deferred}`, async ({
+    page,
+  }) => {
+    const text = sidebarCopy("en");
+    const intent = "Prepare a synthetic last-frame native canvas.";
+    const source = {
+      class_type: "LoadImage",
+      inputs: { image: "synthetic-last.png" },
+    };
+    const output = createQualifiedBasePrompt(
+      {
+        task_mode: "l2va",
+        user_intent: intent,
+        duration_milliseconds: 8000,
+        frame_count: 192,
+        last_frame_source: "11",
+      },
+      { last_frame: source },
+      { sharedDurationSource: true },
+    );
+    await page.route("**/templates/video_minimax_h3_i2v.json", (route) =>
+      route.fulfill({ json: syntheticTemplate("video_minimax_h3_i2v") }),
+    );
+    await page.goto("/?mode=managed-entry&initialGraph=dirty");
+    const shell = page.locator("#managed-entry-sidebar");
+    await expect(
+      shell.locator('[data-shell-status="interactive"]'),
+    ).toBeVisible();
+    await page.evaluate(
+      async ({ output, source, deferred }) => {
+        const fixtureUrl = performance
+          .getEntriesByType("resource")
+          .map((entry) => entry.name)
+          .find((url) =>
+            new URL(url).pathname.endsWith(
+              "/tests/fixtures/entryHostModules.ts",
+            ),
+          );
+        if (fixtureUrl === undefined)
+          throw new Error("the existing entry fixture module was not observed");
+        const fixture = await import(/* @vite-ignore */ fixtureUrl);
+        const shell = document.querySelector("#managed-entry-sidebar")!;
+        const control = document.createElement("button");
+        control.id = "release-native-source-compile";
+        control.textContent = "Release synthetic source compilation";
+        let release: (() => void) | undefined;
+        control.addEventListener("click", () => release?.());
+        document.body.append(control);
+        shell.setAttribute("data-native-preparation-presses", "0");
+        shell.setAttribute("data-native-preparation-compiles", "0");
+        shell.addEventListener("click", (event) => {
+          if (
+            event.target instanceof Element &&
+            event.target.closest('[data-h3-focus-key="app-submit"]')
+          )
+            shell.setAttribute(
+              "data-native-preparation-presses",
+              String(
+                Number(shell.getAttribute("data-native-preparation-presses")) +
+                  1,
+              ),
+            );
+        });
+        fixture.setGraph({
+          last_node_id: 11,
+          last_link_id: 0,
+          nodes: [
+            {
+              id: 11,
+              type: "LoadImage",
+              widgets_values: ["synthetic-last.png", "image"],
+            },
+          ],
+          links: [],
+          groups: [],
+          config: {},
+          extra: {},
+          version: 0.4,
+        });
+        fixture.registeredExtension().nodeCreated();
+        let calls = 0;
+        fixture.setGraphToPromptHandler(async () => {
+          calls += 1;
+          shell.setAttribute("data-native-preparation-compiles", String(calls));
+          if (calls === 1) {
+            if (deferred)
+              await new Promise<void>((resolve) => {
+                release = resolve;
+              });
+            return { output: { "11": source }, workflow: {} };
+          }
+          return { output, workflow: {} };
+        });
+      },
+      { output, source, deferred },
+    );
+    await shell
+      .locator('[data-h3-focus-key="app-task-mode"]')
+      .selectOption("l2va");
+    await expect(
+      shell.locator('[data-h3-focus-key="app-last-frame"] option[value="11"]'),
+    ).toHaveCount(1);
+    await shell
+      .locator('[data-h3-focus-key="app-last-frame"]')
+      .selectOption("11");
+    await shell.locator('[data-h3-focus-key="app-intent"]').fill(intent);
+    await shell.locator('[data-h3-focus-key="app-duration-seconds"]').fill("8");
+    await expect(shell.locator('[data-h3-focus-key="app-submit"]')).toHaveText(
+      text.replaceAppMode,
+    );
+    await expect(
+      shell.locator('[data-h3-focus-key="app-submit"]'),
+    ).toBeEnabled();
+    const compiler = await page.evaluateHandle(async () => {
+      const fixtureUrl = performance
+        .getEntriesByType("resource")
+        .map((entry) => entry.name)
+        .find((url) =>
+          new URL(url).pathname.endsWith("/tests/fixtures/entryHostModules.ts"),
+        );
+      if (fixtureUrl === undefined)
+        throw new Error("the existing entry fixture module was not observed");
+      const fixture = await import(/* @vite-ignore */ fixtureUrl);
+      return fixture.app as { graphToPrompt?: (...args: unknown[]) => unknown };
+    });
+    const observer = await page.evaluateHandle(
+      createNativeCompileDiagnostics,
+      compiler,
+    );
+    await compiler.dispose();
+    let compileTrace:
+      | ReturnType<ReturnType<typeof createNativeCompileDiagnostics>["finish"]>
+      | undefined;
+    let outcome = "pending";
+    const prepared = prepareNativeFrameCanvas(
+      shell,
+      async () => (await snapshot(page)).queueCount,
+    );
+    const observed = prepared.then(
+      (result) => {
+        outcome = "ready";
+        return { result };
+      },
+      () => {
+        outcome = "refused";
+        return { result: undefined };
+      },
+    );
+    try {
+      if (deferred) {
+        // IMPORTANT: hold the real source compile, not a hand-authored DOM state;
+        // an old census must not settle preparation or trigger a second Replace.
+        await expect(shell).toHaveAttribute(
+          "data-native-preparation-compiles",
+          "1",
+        );
+        await expect(
+          shell.locator('[data-shell-status="working"]'),
+        ).toBeVisible();
+        expect(outcome).toBe("pending");
+        expect(
+          (await observer.evaluate((trace) => trace.snapshot())).calls[0]
+            ?.completion,
+        ).toBe("pending");
+        await expect(shell).toHaveAttribute(
+          "data-native-preparation-presses",
+          "1",
+        );
+        expect((await snapshot(page)).queueCount).toBe(0);
+        await page.locator("#release-native-source-compile").click();
+      }
+      const { result } = await observed;
+      expect(outcome).toBe("ready");
+      expect(result?.submitPresses).toBe(1);
+      expect(result?.terminalState).toMatch(
+        /^interactive:(canvas_ready|native_preference)$/,
+      );
+    } finally {
+      compileTrace = await observer.evaluate((trace) => trace.finish());
+      await observer.dispose();
+    }
+    expect(compileTrace.restoration).toBe("restored");
+    expect(compileTrace.callCount).toBe(2);
+    expect(compileTrace.calls[0]?.shape?.selectedLoadImage).toBe(true);
+    expect(JSON.stringify(compileTrace)).not.toMatch(
+      /synthetic-last|synthetic-private/,
+    );
+    await expect(shell).toHaveAttribute("data-native-preparation-presses", "1");
+    await expect(shell).toHaveAttribute(
+      "data-native-preparation-compiles",
+      "2",
+    );
+    expect((await snapshot(page)).queueCount).toBe(0);
+  });
+}
 
 async function prepareUnchosenImageCanvas(
   page: Page,

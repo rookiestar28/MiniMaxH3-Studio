@@ -428,7 +428,13 @@ class AuthoringOutputRegistry:
             except RenderServiceError as exc:
                 code = (
                     exc.code
-                    if exc.code in {"resource_limit", "idempotency_conflict", "runtime_unavailable"}
+                    if exc.code
+                    in {
+                        "resource_limit",
+                        "idempotency_conflict",
+                        "runtime_unavailable",
+                        "path_too_deep",
+                    }
                     else "unavailable"
                 )
                 raise OutputProtocolError(code) from None

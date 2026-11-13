@@ -31,23 +31,26 @@ describe("packaged title glyph admission", () => {
       "en",
       "Text",
       "Italic",
-      "The bundled title font cannot render some of these characters. Use supported Latin, Greek or Cyrillic characters.",
+      "The bundled title font cannot render some of these characters. Use supported Latin, Greek, Cyrillic or CJK characters.",
+      "These characters support regular and bold only. Turn off italic for this text.",
     ],
     [
       "zh-TW",
       "文字",
       "斜體",
-      "封裝的標題字型無法顯示其中部分字元。請使用支援的拉丁文、希臘文或西里爾文字元。",
+      "封裝的標題字型無法顯示其中部分字元。請使用支援的拉丁文、希臘文、西里爾文或中日韓字元。",
+      "這段文字僅支援一般與粗體。請關閉斜體。",
     ],
     [
       "zh-CN",
       "文字",
       "斜体",
-      "随附的标题字体无法显示其中部分字符。请使用支持的拉丁文、希腊文或西里尔文字符。",
+      "随附的标题字体无法显示其中部分字符。请使用支持的拉丁文、希腊文、西里尔文或中日韩字符。",
+      "这段文字仅支持常规和粗体。请关闭斜体。",
     ],
   ] as const)(
     "keeps content/style drafts and blocks every commit path in %s",
-    (locale, tab, italic, message) => {
+    (locale, tab, italic, message, italicMessage) => {
       const original = snapshotFixture(SMOKE_SHAPE, 11);
       const snapshot = {
         ...original,
@@ -76,7 +79,7 @@ describe("packaged title glyph admission", () => {
       const apply = view.container.querySelector<HTMLButtonElement>(
         '[data-h3-nle-control="text.content"]',
       )!;
-      for (const content of ["中文", "한국어", "😀"]) {
+      for (const content of ["中文😀", "한국어😀", "😀"]) {
         fireEvent.change(input, { target: { value: content } });
         expect(apply.disabled).toBe(true);
         expect(screen.getByRole("alert").textContent).toBe(message);
@@ -92,7 +95,7 @@ describe("packaged title glyph admission", () => {
         '[data-h3-nle-control="text.style"]',
       )!;
       expect(styleApply.disabled).toBe(true);
-      expect(screen.getByRole("alert").textContent).toBe(message);
+      expect(screen.getByRole("alert").textContent).toBe(italicMessage);
       expect(
         (screen.getByRole("checkbox", { name: italic }) as HTMLInputElement)
           .checked,

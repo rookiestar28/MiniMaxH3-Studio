@@ -75,6 +75,7 @@ _ERROR_STATUSES: Final = {
     "not_ready": 409,
     "resource_limit": 429,
     "runtime_unavailable": 503,
+    "path_too_deep": 503,
     "preview_unavailable": 503,
     "internal_error": 500,
 }

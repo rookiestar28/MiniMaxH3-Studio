@@ -237,7 +237,7 @@ const byteLimits: Readonly<Record<AuthoringMediaDerivativeKind, number>> = {
   filmstrip: 512 * 1024,
   audio_peaks: 64 * 1024,
   image_proxy: 16 * 1024 * 1024,
-  packaged_font_face: 1024 * 1024,
+  packaged_font_face: 12 * 1024 * 1024, // Largest bundled OTF: 8,543,168 bytes.
 };
 const kinds = Object.freeze(
   Object.keys(mediaTypes) as AuthoringMediaDerivativeKind[],
@@ -662,7 +662,10 @@ export function decodeAuthoringMediaLeaseSuccess(
   if (!["create", "renew", "transfer"].includes(wire.operation as string))
     throw new Error("authoring media lease success operation is invalid");
   const derivativeKind = exactKind(wire.derivativeKind);
-  if (wire.mediaType !== mediaTypes[derivativeKind])
+  if (
+    wire.mediaType !== mediaTypes[derivativeKind] &&
+    !(derivativeKind === "packaged_font_face" && wire.mediaType === "font/otf")
+  )
     throw new Error("mediaType is invalid");
   if (
     !audioDispositions.includes(

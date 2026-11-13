@@ -1293,3 +1293,82 @@ def test_cli_binds_git_ancestry_exact_scope_report_ignore_and_clean_dev(
     arguments[arguments.index(candidate)] = drift_candidate
     assert main(arguments) == 1
     assert "exact frozen two paths" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("region", ["TC", "SC", "JP", "KR"])
+def test_cjk_advisory_identity_is_closed(tmp_path: Path, region: str) -> None:
+    revision = "523d033d6cb47f4a80c58a35753646f5c3608a78"  # pragma: allowlist secret
+    package = {
+        "name": f"Noto Sans {region}",
+        "versionInfo": "NotoSansCJK-v2.004",
+        "comment": "bundled_font_runtime",
+        "primaryPackagePurpose": "LIBRARY",
+        "externalRefs": [
+            {
+                "referenceType": "purl",
+                "referenceLocator": f"pkg:github/notofonts/noto-cjk@{revision}",
+            }
+        ],
+    }
+    path = tmp_path / "regional.json"
+    calls = []
+
+    def transport(_url: str, body: bytes, _timeout: float, _maximum: int) -> bytes:
+        calls.append(json.loads(body))
+        return b'{"results": [{"vulns": []}]}'
+
+    path.write_text(json.dumps({"packages": [package]}), encoding="utf-8")
+    query_osv(path, transport=transport)
+    assert calls == [{"queries": [{"commit": revision}]}]
+    for field, value in (
+        ("name", "Foreign Font"),
+        ("versionInfo", "NotoSansCJK-v2.005"),
+        ("comment", "host_owned_not_bundled"),
+    ):
+        calls.clear()
+        path.write_text(json.dumps({"packages": [{**package, field: value}]}), encoding="utf-8")
+        assert query_osv(path, transport=transport)["status"] == "BLOCKED"
+        assert not calls
+
+
+def test_regional_cjk_families_share_one_query_but_duplicate_packages_still_refuse(
+    tmp_path: Path,
+) -> None:
+    revision = "523d033d6c-b47f4a80c5-8a35753646-f5c3608a78".replace("-", "")
+    packages = [
+        {
+            "name": f"Noto Sans {region}",
+            "versionInfo": "NotoSansCJK-v2.004",
+            "comment": "bundled_font_runtime",
+            "primaryPackagePurpose": "LIBRARY",
+            "externalRefs": [
+                {
+                    "referenceType": "purl",
+                    "referenceLocator": f"pkg:github/notofonts/noto-cjk@{revision}",
+                }
+            ],
+        }
+        for region in ("TC", "SC", "JP", "KR")
+    ]
+    path = tmp_path / "regional-families.json"
+    calls = []
+
+    def transport(_url: str, body: bytes, _timeout: float, _maximum: int) -> bytes:
+        calls.append(json.loads(body))
+        return b'{"results": [{"vulns": []}]}'
+
+    path.write_text(json.dumps({"packages": packages}), encoding="utf-8")
+    result = query_osv(path, transport=transport)
+    assert result["status"] == "PASS"
+    assert calls == [{"queries": [{"commit": revision}]}]
+    assert result["query_count"] == 1
+    ordinary = {
+        "name": "demo",
+        "versionInfo": "1.0",
+        "externalRefs": [{"referenceType": "purl", "referenceLocator": "pkg:pypi/demo@1.0"}],
+    }
+    for repeated in ([*packages, packages[0]], [ordinary, ordinary]):
+        calls.clear()
+        path.write_text(json.dumps({"packages": repeated}), encoding="utf-8")
+        assert query_osv(path, transport=transport)["status"] == "BLOCKED"
+        assert not calls

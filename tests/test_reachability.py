@@ -37,6 +37,28 @@ def test_host_media_inputs_use_an_external_host_owned_reachability_source() -> N
 
 
 class ReachabilityTests(unittest.TestCase):
+    def test_native_reachability_matches_adapter_dispatch(self) -> None:
+        from test_native_h3_adapter import _keyframe_report, _report, _single_keyframe_report
+
+        from comfyui_h3_context.core.native_h3 import build_native_h3_wiring
+
+        reports = (
+            _report(),
+            _single_keyframe_report(TaskMode.I2VA),
+            _single_keyframe_report(TaskMode.L2VA),
+            _keyframe_report(),
+            _report(TaskMode.REF2VA, with_references=True),
+        )
+        self.assertEqual({report.request.task_mode for report in reports}, set(TaskMode))
+        manifest = build_default_reachability_manifest()
+        for report in reports:
+            wiring = build_native_h3_wiring(report)
+            with self.subTest(mode=wiring.task_mode.value):
+                entry = require_task_mode(
+                    manifest, ReachabilityStage.NATIVE_GENERATION, wiring.task_mode
+                )
+                self.assertIs(entry.disposition, ReachabilityDisposition.REACHABLE)
+
     def test_schema_and_wire_fingerprint_are_deterministic(self) -> None:
         schema = json.loads(
             (ROOT / "governance/contracts/reachability_v1.schema.json").read_text(encoding="utf-8")
@@ -66,10 +88,7 @@ class ReachabilityTests(unittest.TestCase):
                     and item.binding_node_id is None
                 )
                 self.assertEqual(entry.disposition.value, expected)
-        self.assertEqual(
-            fixture["negative_failures"]["i2va.native_generation"],
-            "unsupported_native_task_mode",
-        )
+        self.assertEqual(fixture["negative_failures"], {})
         registry = H3ReferenceRegistryNode().build_registry(
             first_frame=object(),
             last_frame=object(),
@@ -128,15 +147,10 @@ class ReachabilityTests(unittest.TestCase):
                 self.assertIs(entry.disposition, ReachabilityDisposition.INJECTED_ONLY)
                 self.assertFalse(entry.normal_use)
 
-        for mode in (TaskMode.T2VA, TaskMode.FL2VA, TaskMode.REF2VA):
+        for mode in TaskMode:
             with self.subTest(stage="native_generation", mode=mode):
                 route = require_task_mode(manifest, ReachabilityStage.NATIVE_GENERATION, mode)
                 self.assertIs(route.disposition, ReachabilityDisposition.REACHABLE)
-        for mode in (TaskMode.I2VA, TaskMode.L2VA):
-            with self.subTest(stage="native_generation", mode=mode):
-                with self.assertRaises(ReachabilityError) as context:
-                    require_task_mode(manifest, ReachabilityStage.NATIVE_GENERATION, mode)
-                self.assertEqual(str(context.exception), "unsupported_native_task_mode")
 
     def test_new_public_producers_are_reachable_or_explicitly_unavailable(self) -> None:
         manifest = build_default_reachability_manifest()

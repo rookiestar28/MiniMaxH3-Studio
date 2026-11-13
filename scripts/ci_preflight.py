@@ -34,6 +34,12 @@ MEDIA_TEST_BOOTSTRAP_COMMAND = (
     "sudo apt-get install --yes --no-install-recommends ffmpeg\n"
     "ffmpeg -version\nffprobe -version"
 )
+# The repository-root interpreter that frontend unit tests start
+# (frontend/tests/cjkTitleFonts.test.ts).
+FRONTEND_INTERPRETER_COMMAND = (
+    "python -m venv .venv\n.venv/bin/python -m pip install --disable-pip-version-check -e ."
+)
+FRONTEND_UNIT_COMMAND = "pnpm --dir frontend run test"
 UPLOAD_ARTIFACT_SHA = (
     "cf430e030ddbb5b0abf93d22962f4752f3646cd9"  # pragma: allowlist secret - public action commit
 )
@@ -379,6 +385,36 @@ def validate_workflow(workflow: dict[str, Any], package_manager: str = "pnpm@11.
                     )
                     if not minimum < partition < consumer:
                         raise ValueError("backend partition must be verified before execution")
+        # CRITICAL: each Hosted job is a separate machine. A unit test that starts <root>/.venv
+        # needs this job to make it; a local or shared checkout always has one, so only this
+        # check catches its absence before a Hosted run fails.
+        frontend = jobs["frontend"]
+        front_steps = frontend["steps"]
+        setup_python = [
+            i for i, row in enumerate(front_steps) if "actions/setup-python@" in row.get("uses", "")
+        ]
+        interpreter = [
+            i
+            for i, row in enumerate(front_steps)
+            if row.get("run", "").strip() == FRONTEND_INTERPRETER_COMMAND
+        ]
+        unit = [i for i, row in enumerate(front_steps) if row.get("run") == FRONTEND_UNIT_COMMAND]
+        backend_python = next(
+            row["uses"]
+            for row in jobs["backend"]["steps"]
+            if "actions/setup-python@" in row.get("uses", "")
+        )
+        if (
+            len(setup_python) != 1
+            or len(interpreter) != 1
+            or len(unit) != 1
+            or frontend.get("runs-on") != "ubuntu-latest"
+            or front_steps[setup_python[0]]["uses"] != backend_python
+            or front_steps[setup_python[0]].get("with", {}).get("python-version") != "3.10"
+            or set(front_steps[interpreter[0]]) - {"name", "run", "shell"}
+            or not setup_python[0] < interpreter[0] < unit[0]
+        ):
+            raise ValueError("frontend unit-test interpreter bootstrap")
         conformance = jobs["conformance"]["steps"]
         setup = next(
             i for i, row in enumerate(conformance) if "actions/setup-python@" in row.get("uses", "")

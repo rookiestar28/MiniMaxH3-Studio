@@ -35,6 +35,7 @@ def test_checkout_newlines_preserve_verified_font_package_identity(
     shutil.copytree(source / "fonts", tmp_path / "fonts")
     for name, selected in (
         ("LICENSE-OFL-1.1.txt", crlf in {"license", "both"}),
+        ("LICENSE-NotoSansCJK-OFL-1.1.txt", crlf in {"license", "both"}),
         ("font_manifest_v1.json", crlf in {"manifest", "both"}),
     ):
         if selected:
@@ -48,7 +49,9 @@ def test_checkout_newlines_preserve_verified_font_package_identity(
         assert face.read_verified_bytes() == original_face.read_verified_bytes()
 
 
-@pytest.mark.parametrize("name", ["LICENSE-OFL-1.1.txt", "font_manifest_v1.json"])
+@pytest.mark.parametrize(
+    "name", ["LICENSE-OFL-1.1.txt", "LICENSE-NotoSansCJK-OFL-1.1.txt", "font_manifest_v1.json"]
+)
 def test_raw_checkout_size_is_bounded_before_newline_normalization(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:
@@ -97,10 +100,11 @@ def test_non_eol_manifest_change_still_changes_the_package_identity(tmp_path: Pa
     assert manifest.package_fingerprint != baseline.package_fingerprint
 
 
-def test_default_windows_git_filters_preserve_both_pinned_font_texts(tmp_path: Path) -> None:
+def test_default_windows_git_filters_preserve_all_pinned_font_texts(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     names = (
         "comfyui_h3_context/fonts/LICENSE-OFL-1.1.txt",
+        "comfyui_h3_context/fonts/LICENSE-NotoSansCJK-OFL-1.1.txt",
         "comfyui_h3_context/fonts/font_manifest_v1.json",
     )
     env = {key: value for key, value in os.environ.items() if not key.upper().startswith("GIT_")}
@@ -131,7 +135,12 @@ def test_real_packaged_manifest_verifies_artifacts_license_build_and_cmaps() -> 
 
     assert manifest.schema_version == FONT_MANIFEST_SCHEMA
     assert manifest.profile_id == FONT_MANIFEST_PROFILE_ID
-    assert manifest.fallback_order == ("h3.font.noto_sans.v1",)
+    assert manifest.fallback_order == tuple(
+        [
+            "h3.font.noto_sans.v1",
+            *[f"h3.font.noto_sans_{region}.v1" for region in ("tc", "sc", "jp", "kr")],
+        ]
+    )
     assert set(manifest.faces_by_style) == EXPECTED_FACE_KEYS
     assert manifest.package_fingerprint.startswith("sha256:")
     assert manifest.manifest_fingerprint.startswith("sha256:")
@@ -176,7 +185,7 @@ def test_unknown_font_or_style_is_a_typed_blocker() -> None:
         assert raised.value.code == code
 
 
-def test_uncovered_cjk_is_a_typed_blocker_without_system_font_fallback() -> None:
+def test_uncovered_emoji_is_a_typed_blocker_without_system_font_fallback() -> None:
     manifest = load_packaged_font_manifest()
 
     with pytest.raises(AuthoringFontError) as raised:
@@ -185,12 +194,17 @@ def test_uncovered_cjk_is_a_typed_blocker_without_system_font_fallback() -> None
             "h3.font.noto_sans.v1",
             700,
             "normal",
-            "中文",
+            "😀",
         )
 
     assert raised.value.code == "font_glyph_unsupported"
-    assert "U+4E2D" in str(raised.value)
-    assert manifest.fallback_order == ("h3.font.noto_sans.v1",)
+    assert "U+1F600" in str(raised.value)
+    assert manifest.fallback_order == tuple(
+        [
+            "h3.font.noto_sans.v1",
+            *[f"h3.font.noto_sans_{region}.v1" for region in ("tc", "sc", "jp", "kr")],
+        ]
+    )
 
 
 def test_resolved_font_repr_never_contains_the_private_install_path() -> None:

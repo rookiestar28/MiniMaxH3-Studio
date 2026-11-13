@@ -1082,7 +1082,9 @@ function AppModeEntry({
       if (activeStage === "media") onChooseNative?.();
       else if (activeStage === "understand") setActiveStage("audit");
       else if (activeStage === "audit") setActiveStage("execute");
-      else submit();
+      // IMPORTANT: Execute must explicitly adopt an admitted existing canvas;
+      // omitting the route makes the controller correctly refuse it as dirty_graph.
+      else submit(useExistingAction ? { useExisting: true } : undefined);
     };
     return (
       <div className="h3-app-stage-panel-content">

@@ -13,7 +13,17 @@ import type { AssemblyOutputProfileId } from "../contracts/productionWorkbenchCo
 import { deriveNleSurfaceCapability } from "../contracts/nleSurfaceCapability";
 import type { ManagedReadinessSelection } from "../contracts/managedQualificationCodec";
 import { readActiveWorkflow } from "../host/canvasOwnedWrite";
-import { probeFetchApi, serializeGraph } from "../host/hostSeams";
+import {
+  probeFetchApi,
+  probeGraphToPrompt,
+  serializeGraph,
+} from "../host/hostSeams";
+import {
+  graphFingerprint,
+  isSafeCompiledPromptEnvelope,
+} from "../host/appModeContract";
+import { captureQualifiedSequenceMediaBindings } from "../host/sequenceMediaCapture";
+import { SequenceMediaBindingError } from "../host/sequenceMediaBindings";
 import {
   buildQualifiedManagedStartIntent,
   planStartHoldsResolvedByQualification,
@@ -52,6 +62,7 @@ import {
   type NleWorkspaceState,
 } from "../state/nleWorkspaceState";
 import { UNSCOPED } from "../state/sidebarRetention";
+import { deriveSequenceUi } from "./nleSequenceUi";
 import { createNleWorkspaceImport } from "./nleWorkspaceImport";
 import { createNleOwnerRenewal } from "./nleOwnerRenewal";
 import { createNleWorkspacePlanning } from "./nleWorkspacePlanning";
@@ -75,49 +86,6 @@ export const UNBOUND_OWNED_GRAPH_REFERENCE: OwnedGraphReference = Object.freeze(
 export const NLE_SEQUENCE_POLL_INTERVAL_MS = 2_000;
 export const NLE_LAUNCHER_FOCUS_KEY = "nle-open-overlay" as const;
 export const NLE_CLOSE_FOCUS_KEY = "nle-close-overlay" as const;
-
-type SequenceUiInputs = Readonly<{
-  attached: boolean;
-  parentState: string | null;
-  activeSegmentId: string | null;
-  activeQueuePromptId: string | null;
-  failure: string | null;
-}>;
-
-function deriveSequenceUi(
-  previous: NleSequenceUiState,
-  snapshot: SequenceUiInputs,
-): NleSequenceUiState {
-  if (snapshot.parentState === null)
-    return previous === "starting" ? "starting" : "idle";
-  if (
-    snapshot.parentState === "succeeded" ||
-    snapshot.parentState === "cancelled"
-  )
-    return "finished";
-  if (snapshot.parentState === "paused_failure") return "failed";
-  if (snapshot.parentState === "paused_unknown_ownership")
-    return "paused_unknown_ownership";
-  if (snapshot.parentState === "paused_client_absent")
-    return previous === "resume_ready" ||
-      previous === "current_segment_completed" ||
-      previous === "current_segment_still_owned"
-      ? previous
-      : "safe_to_leave";
-  if (snapshot.attached) {
-    if (previous === "detaching") return "detaching";
-    return snapshot.activeQueuePromptId !== null
-      ? "detach_ready"
-      : "attached_current_child";
-  }
-  return previous === "reattach_reconciling" ||
-    previous === "current_segment_completed" ||
-    previous === "current_segment_still_owned" ||
-    previous === "resume_ready" ||
-    previous === "recovery_unavailable_or_expired"
-    ? previous
-    : "safe_to_leave";
-}
 
 export function createNleWorkspaceSession(ctx: ShellRuntime) {
   const { session, deps, actions } = ctx;
@@ -645,6 +613,7 @@ export function createNleWorkspaceSession(ctx: ShellRuntime) {
       sequence: Object.freeze({
         ...previous,
         ui,
+        diagnostics: snapshot.diagnostics ?? previous.diagnostics,
         parentSequenceId:
           snapshot.parentSequenceId ?? previous.parentSequenceId,
         recoveryExpiresAtEpochMs:
@@ -723,9 +692,73 @@ export function createNleWorkspaceSession(ctx: ShellRuntime) {
         busy: true,
       }),
     });
+    let capturingMedia = false;
     try {
+      const context = contextProjection();
+      const mode = context?.task_mode;
+      if (
+        context !== undefined &&
+        (mode === "i2va" || mode === "l2va" || mode === "fl2va")
+      ) {
+        capturingMedia = true;
+        const graph = deps.app.graph;
+        const visible = serializeGraph(deps.app);
+        const compile = probeGraphToPrompt(deps.app);
+        if (visible.status !== "ready" || compile.status !== "ready")
+          throw new SequenceMediaBindingError("sequence_media_unavailable");
+        const fingerprint = graphFingerprint(visible.value);
+        const compiled = await compile.value();
+        if (!isSafeCompiledPromptEnvelope(compiled))
+          throw new SequenceMediaBindingError("sequence_media_unavailable");
+        const roles =
+          mode === "i2va"
+            ? ["first_frame"]
+            : mode === "l2va"
+              ? ["last_frame"]
+              : ["first_frame", "last_frame"];
+        const assets = roles.map((role) => {
+          const candidate = context.reference_candidates.find(
+            (row) => row.asset_id === `${role}_1` && row.kind === "image",
+          );
+          if (candidate === undefined)
+            throw new SequenceMediaBindingError("sequence_media_unavailable");
+          return { asset_id: candidate.asset_id, kind: candidate.kind, role };
+        });
+        // CRITICAL: Generate captures the imported Context's concrete sources exactly once.
+        // Readiness and polling cannot consume receipts, and edits during observation cannot
+        // authorize a stale canvas or silently switch to a different Context/plan.
+        const bindings = await captureQualifiedSequenceMediaBindings(
+          visible.value,
+          compiled,
+          context.correlation.execution_node_id,
+          assets,
+          (request) => deps.inputGeometryClient.observe(request),
+        );
+        const current = serializeGraph(deps.app);
+        if (
+          deps.app.graph !== graph ||
+          current.status !== "ready" ||
+          graphFingerprint(current.value) !== fingerprint ||
+          contextProjection() !== context ||
+          state().planning.plan !== plan ||
+          state().readiness.readiness !== readiness.readiness
+        )
+          throw new SequenceMediaBindingError("sequence_media_changed");
+        intent = { ...intent, sequenceTaskMode: mode, mediaBindings: bindings };
+      }
+      capturingMedia = false;
       await actions.startManagedSerialSequence(intent, sequenceBindings());
-    } catch {
+    } catch (error) {
+      if (capturingMedia) {
+        const failure =
+          error instanceof SequenceMediaBindingError &&
+          error.category !== "sequence_media_unavailable"
+            ? "sequence_media_changed"
+            : "sequence_media_unavailable";
+        patch({
+          sequence: Object.freeze({ ...state().sequence, ui: "idle", failure }),
+        });
+      }
       // The session recorded the safe failure code in its snapshot.
     } finally {
       syncSequenceFromRunner({ busy: false });
@@ -926,13 +959,52 @@ export function createNleWorkspaceSession(ctx: ShellRuntime) {
             parentSequenceId: read.projection.parentSequenceId,
             projection: read.projection,
             etag: read.etag,
+            failure:
+              read.projection.state === "succeeded" ||
+              read.projection.state === "cancelled"
+                ? null
+                : (snapshot.failure ?? previous.failure),
           }),
         });
       }
     } catch {
       // A failed read leaves the last accepted projection in place; it never infers an outcome.
     } finally {
-      if (pollAbort === abort) pollAbort = undefined;
+      if (pollAbort === abort) {
+        const snapshot = actions.managedSerialSequenceSnapshot();
+        const previous = state().sequence;
+        // IMPORTANT: unchanged or missing projection data must not hide a known local failure;
+        // a failed GET never creates an outcome or overrides an authoritative terminal parent.
+        if (
+          snapshot.failure !== null &&
+          snapshot.parentState === "active" &&
+          snapshot.parentSequenceId === pointer.parentSequenceId &&
+          (previous.projection === null ||
+            previous.projection.parentSequenceId ===
+              pointer.parentSequenceId) &&
+          (previous.projection?.state ?? snapshot.parentState) === "active"
+        )
+          patch({
+            sequence: Object.freeze({
+              ...previous,
+              ui: "failed",
+              failure: snapshot.failure,
+            }),
+          });
+        const current = state().sequence;
+        if (
+          snapshot.diagnostics !== undefined &&
+          JSON.stringify(current.diagnostics) !==
+            JSON.stringify(snapshot.diagnostics)
+        )
+          patch({
+            sequence: Object.freeze({
+              ...current,
+              diagnostics: snapshot.diagnostics,
+            }),
+          });
+        pollAbort = undefined;
+      }
     }
   }
 

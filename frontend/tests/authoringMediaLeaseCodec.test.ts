@@ -61,6 +61,28 @@ const success = {
 };
 
 describe("M25-13 authoring media lease codec", () => {
+  it("admits the measured OTF face and keeps font MIME and byte bounds closed", () => {
+    const otf = {
+      ...success,
+      derivativeKind: "packaged_font_face",
+      mediaType: "font/otf",
+      byteCount: 8_543_168,
+      audioDisposition: "absent",
+    };
+    expect(decodeAuthoringMediaLeaseSuccess(otf).mediaType).toBe("font/otf");
+    expect(() =>
+      decodeAuthoringMediaLeaseSuccess({
+        ...otf,
+        byteCount: 12 * 1024 * 1024 + 1,
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeAuthoringMediaLeaseSuccess({ ...otf, mediaType: "font/woff2" }),
+    ).toThrow();
+    expect(() =>
+      decodeAuthoringMediaLeaseSuccess({ ...success, mediaType: "font/otf" }),
+    ).toThrow();
+  });
   it.each([64, 65, 256, 257, 362, 512])(
     "retains complete admitted source spans and final thumbnails at %i frames",
     (frames) => {

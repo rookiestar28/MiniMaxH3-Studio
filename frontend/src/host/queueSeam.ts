@@ -1,3 +1,5 @@
+import { copyCompiledPromptData } from "./compiledPromptData";
+
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SAFE_DIAGNOSTIC_TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$/;
@@ -154,7 +156,49 @@ function nodeErrorVocabulary(nodeErrors: Record<string, unknown>): Readonly<{
  * already-fingerprinted execution identity.
  */
 export function cloneQueueEnvelope<T>(value: T): T | undefined {
-  return safeClone(value);
+  const cloned = safeClone(value);
+  if (cloned !== undefined) return cloned;
+  try {
+    // CRITICAL: the first clone preserves every previously accepted host envelope.
+    // Only compiled output may use the proxy-data fallback; workflow snapshots stay strict.
+    const envelope = plainRecord(value);
+    if (envelope === undefined) return undefined;
+    const keys = Reflect.ownKeys(envelope);
+    if (
+      keys.length !== 2 ||
+      !keys.every((key) => key === "output" || key === "workflow")
+    )
+      return undefined;
+    const output = Object.getOwnPropertyDescriptor(envelope, "output");
+    const workflow = Object.getOwnPropertyDescriptor(envelope, "workflow");
+    if (
+      output === undefined ||
+      output.enumerable !== true ||
+      !("value" in output) ||
+      plainRecord(output.value) === undefined ||
+      workflow === undefined ||
+      workflow.enumerable !== true ||
+      !("value" in workflow)
+    )
+      return undefined;
+    // CRITICAL: the envelope clone already failed; retrying output's structuredClone
+    // could invoke a getter in this fallback instead of refusing its descriptor.
+    // CRITICAL: rebuild in the source's own key order. The host returns
+    // `{ workflow, output }` (ComfyUI frontend 1.57.1 executionUtil.ts:206) and the
+    // queue identity is order-sensitive JSON, so a literal `{ output, workflow }`
+    // changes the fingerprint and refuses every cropped Start.
+    const isolatedOutput = copyCompiledPromptData(output.value);
+    if (isolatedOutput === undefined) return undefined;
+    const isolatedWorkflow = safeClone(workflow.value);
+    if (isolatedWorkflow === undefined && workflow.value !== undefined)
+      return undefined;
+    const isolated: Record<string, unknown> = {};
+    for (const key of keys as ("output" | "workflow")[])
+      isolated[key] = key === "output" ? isolatedOutput : isolatedWorkflow;
+    return isolated as T;
+  } catch {
+    return undefined;
+  }
 }
 
 export function parseAcceptedQueueResponse(

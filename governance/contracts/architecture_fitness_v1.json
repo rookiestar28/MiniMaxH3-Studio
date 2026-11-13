@@ -49,7 +49,7 @@
       "path": "frontend/src/entry.tsx"
     }
   ],
-  "fingerprint": "sha256:1ad6fda27b0c4d1a6e0e1c04571ff2e58552c414765a6a2955598d3c0349b1b8",
+  "fingerprint": "sha256:dfea2fd577e1ec3bf8c5717c77ec41b4fac21afb9a39770a6f59887f2a1fa5b7",
   "known_violations": [],
   "modules": [
     {
@@ -247,7 +247,7 @@
         "comfyui_h3_context/core/nle_authoring_contract.py"
       ],
       "language": "python",
-      "lines": 548,
+      "lines": 551,
       "path": "comfyui_h3_context/adapters/authoring_derivative_source.py",
       "source_reachability": {
         "class": "product",
@@ -270,7 +270,7 @@
         "comfyui_h3_context/core/canonical.py"
       ],
       "language": "python",
-      "lines": 732,
+      "lines": 948,
       "path": "comfyui_h3_context/adapters/authoring_fonts.py",
       "source_reachability": {
         "class": "product",
@@ -444,7 +444,7 @@
         "comfyui_h3_context/core/nle_authoring_contract.py"
       ],
       "language": "python",
-      "lines": 587,
+      "lines": 593,
       "path": "comfyui_h3_context/adapters/authoring_output_service.py",
       "source_reachability": {
         "class": "product",
@@ -477,7 +477,7 @@
         "comfyui_h3_context/core/safe_paths.py"
       ],
       "language": "python",
-      "lines": 419,
+      "lines": 423,
       "path": "comfyui_h3_context/adapters/authoring_render_executor.py",
       "source_reachability": {
         "class": "product",
@@ -564,7 +564,7 @@
         "comfyui_h3_context/core/safe_paths.py"
       ],
       "language": "python",
-      "lines": 471,
+      "lines": 477,
       "path": "comfyui_h3_context/adapters/authoring_render_probe.py",
       "source_reachability": {
         "class": "product",
@@ -589,7 +589,7 @@
         "comfyui_h3_context/core/safe_paths.py"
       ],
       "language": "python",
-      "lines": 787,
+      "lines": 793,
       "path": "comfyui_h3_context/adapters/authoring_render_process.py",
       "source_reachability": {
         "class": "product",
@@ -622,7 +622,7 @@
         "comfyui_h3_context/core/render_planner.py"
       ],
       "language": "python",
-      "lines": 688,
+      "lines": 693,
       "path": "comfyui_h3_context/adapters/authoring_render_service.py",
       "source_reachability": {
         "class": "product",
@@ -658,7 +658,7 @@
         "comfyui_h3_context/core/render_planner.py"
       ],
       "language": "python",
-      "lines": 678,
+      "lines": 711,
       "path": "comfyui_h3_context/adapters/authoring_render_source.py",
       "source_reachability": {
         "class": "product",
@@ -685,7 +685,7 @@
         "comfyui_h3_context/core/safe_paths.py"
       ],
       "language": "python",
-      "lines": 514,
+      "lines": 589,
       "path": "comfyui_h3_context/adapters/authoring_render_store.py",
       "source_reachability": {
         "class": "product",
@@ -1209,13 +1209,15 @@
         "comfyui_h3_context/core/context_reporting.py",
         "comfyui_h3_context/core/generation_profile.py",
         "comfyui_h3_context/core/native_composition.py",
+        "comfyui_h3_context/core/native_guide.py",
         "comfyui_h3_context/core/native_h3.py",
+        "comfyui_h3_context/core/native_keyframe_structure.py",
         "comfyui_h3_context/core/native_source_compatibility.py",
         "comfyui_h3_context/core/native_t2va_structure.py",
         "comfyui_h3_context/core/perception_producer.py"
       ],
       "language": "python",
-      "lines": 707,
+      "lines": 719,
       "path": "comfyui_h3_context/adapters/comfyui_generation_profile.py",
       "source_reachability": {
         "class": "product",
@@ -1242,7 +1244,7 @@
         "comfyui_h3_context/core/safe_paths.py"
       ],
       "language": "python",
-      "lines": 607,
+      "lines": 619,
       "path": "comfyui_h3_context/adapters/comfyui_input_geometry.py",
       "source_reachability": {
         "class": "product",
@@ -1620,6 +1622,8 @@
         "comfyui_h3_context/adapters/media_preview_authority.py",
         "comfyui_h3_context/adapters/media_runtime_resolution.py",
         "comfyui_h3_context/adapters/segment_artifact_store.py",
+        "comfyui_h3_context/adapters/sequence_media_bindings.py",
+        "comfyui_h3_context/adapters/sequence_media_observation.py",
         "comfyui_h3_context/core/canonical.py",
         "comfyui_h3_context/core/durable_workspace_state.py",
         "comfyui_h3_context/core/generation_sequence.py",
@@ -1638,7 +1642,7 @@
         "comfyui_h3_context/core/ui_projection.py"
       ],
       "language": "python",
-      "lines": 4069,
+      "lines": 4168,
       "path": "comfyui_h3_context/adapters/comfyui_sequence_coordinator.py",
       "source_reachability": {
         "class": "product",
@@ -1835,7 +1839,7 @@
         "comfyui_h3_context/core/safe_paths.py"
       ],
       "language": "python",
-      "lines": 697,
+      "lines": 708,
       "path": "comfyui_h3_context/adapters/durable_state_store.py",
       "source_reachability": {
         "class": "product",
@@ -1964,6 +1968,24 @@
     },
     {
       "imports": [
+        "comfyui_h3_context/adapters/executable_admission.py",
+        "comfyui_h3_context/adapters/media_subprocess.py",
+        "comfyui_h3_context/adapters/seam_observation_media.py"
+      ],
+      "language": "python",
+      "lines": 193,
+      "path": "comfyui_h3_context/adapters/keyframe_match_media.py",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "comfyui_h3_context/adapters/keyframe_match_media.py"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
         "comfyui_h3_context/adapters/av_reconstruction_media.py",
         "comfyui_h3_context/adapters/av_reconstruction_pipeline.py",
         "comfyui_h3_context/adapters/av_reconstruction_store.py",
@@ -2007,7 +2029,7 @@
         "comfyui_h3_context/core/safe_paths.py"
       ],
       "language": "python",
-      "lines": 615,
+      "lines": 617,
       "path": "comfyui_h3_context/adapters/managed_artifact_scopes.py",
       "source_reachability": {
         "class": "product",
@@ -2069,12 +2091,14 @@
         "comfyui_h3_context/core/guide_conformance.py",
         "comfyui_h3_context/core/managed_sequence.py",
         "comfyui_h3_context/core/native_composition.py",
+        "comfyui_h3_context/core/native_guide.py",
+        "comfyui_h3_context/core/native_keyframe_structure.py",
         "comfyui_h3_context/core/native_mode_matrix.py",
         "comfyui_h3_context/core/native_source_compatibility.py",
         "comfyui_h3_context/core/production_import.py"
       ],
       "language": "python",
-      "lines": 312,
+      "lines": 342,
       "path": "comfyui_h3_context/adapters/managed_mode_qualification.py",
       "source_reachability": {
         "class": "product",
@@ -2143,11 +2167,14 @@
     },
     {
       "imports": [
+        "comfyui_h3_context/adapters/comfyui_input_geometry.py",
         "comfyui_h3_context/adapters/comfyui_production_workspace.py",
         "comfyui_h3_context/adapters/comfyui_route_seam.py",
         "comfyui_h3_context/adapters/composition_root.py",
         "comfyui_h3_context/adapters/managed_mode_qualification.py",
         "comfyui_h3_context/adapters/production_context_materializer.py",
+        "comfyui_h3_context/adapters/sequence_media_bindings.py",
+        "comfyui_h3_context/adapters/sequence_media_observation.py",
         "comfyui_h3_context/core/canonical.py",
         "comfyui_h3_context/core/context_reporting.py",
         "comfyui_h3_context/core/contracts.py",
@@ -2158,7 +2185,7 @@
         "comfyui_h3_context/core/segment_workspace.py"
       ],
       "language": "python",
-      "lines": 4023,
+      "lines": 4634,
       "path": "comfyui_h3_context/adapters/managed_sequence_service.py",
       "source_reachability": {
         "class": "product",
@@ -2317,7 +2344,7 @@
         "comfyui_h3_context/core/safe_paths.py"
       ],
       "language": "python",
-      "lines": 1466,
+      "lines": 1472,
       "path": "comfyui_h3_context/adapters/media_runtime_resolution.py",
       "source_reachability": {
         "class": "product",
@@ -2633,7 +2660,7 @@
         "comfyui_h3_context/core/ui_projection.py"
       ],
       "language": "python",
-      "lines": 701,
+      "lines": 766,
       "path": "comfyui_h3_context/adapters/production_context_materializer.py",
       "source_reachability": {
         "class": "product",
@@ -3082,8 +3109,60 @@
         "comfyui_h3_context/core/segment_artifacts.py"
       ],
       "language": "python",
-      "lines": 2094,
+      "lines": 2116,
       "path": "comfyui_h3_context/adapters/segment_artifact_store.py",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "comfyui_h3_context/__init__.py",
+          "comfyui_h3_context/adapters/assisted_draft_execution.py",
+          "comfyui_h3_context/adapters/authoring_derivative_generator.py",
+          "comfyui_h3_context/adapters/authoring_derivative_source.py",
+          "comfyui_h3_context/adapters/authoring_generated_source.py",
+          "comfyui_h3_context/adapters/authoring_image_source.py",
+          "comfyui_h3_context/adapters/authoring_native_renderer.py",
+          "comfyui_h3_context/adapters/authoring_output_preview.py"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "comfyui_h3_context/adapters/comfyui_input_geometry.py",
+        "comfyui_h3_context/core/canonical.py",
+        "comfyui_h3_context/core/contracts.py",
+        "comfyui_h3_context/core/managed_sequence.py",
+        "comfyui_h3_context/core/registry.py"
+      ],
+      "language": "python",
+      "lines": 338,
+      "path": "comfyui_h3_context/adapters/sequence_media_bindings.py",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "comfyui_h3_context/__init__.py",
+          "comfyui_h3_context/adapters/assisted_draft_execution.py",
+          "comfyui_h3_context/adapters/authoring_derivative_generator.py",
+          "comfyui_h3_context/adapters/authoring_derivative_source.py",
+          "comfyui_h3_context/adapters/authoring_generated_source.py",
+          "comfyui_h3_context/adapters/authoring_image_source.py",
+          "comfyui_h3_context/adapters/authoring_native_renderer.py",
+          "comfyui_h3_context/adapters/authoring_output_preview.py"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "comfyui_h3_context/adapters/comfyui_input_geometry.py",
+        "comfyui_h3_context/adapters/sequence_media_bindings.py",
+        "comfyui_h3_context/core/contracts.py"
+      ],
+      "language": "python",
+      "lines": 127,
+      "path": "comfyui_h3_context/adapters/sequence_media_observation.py",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -3673,7 +3752,7 @@
         "comfyui_h3_context/core/nle_authoring_contract.py"
       ],
       "language": "python",
-      "lines": 670,
+      "lines": 675,
       "path": "comfyui_h3_context/core/authoring_media.py",
       "source_reachability": {
         "class": "product",
@@ -3696,7 +3775,7 @@
         "comfyui_h3_context/core/composition_contract.py"
       ],
       "language": "python",
-      "lines": 276,
+      "lines": 277,
       "path": "comfyui_h3_context/core/authoring_output_protocol.py",
       "source_reachability": {
         "class": "product",
@@ -3743,7 +3822,7 @@
         "comfyui_h3_context/core/render_planner.py"
       ],
       "language": "python",
-      "lines": 415,
+      "lines": 416,
       "path": "comfyui_h3_context/core/authoring_render_jobs.py",
       "source_reachability": {
         "class": "product",
@@ -5348,7 +5427,7 @@
         "comfyui_h3_context/core/guide_conformance.py"
       ],
       "language": "python",
-      "lines": 2101,
+      "lines": 2112,
       "path": "comfyui_h3_context/core/managed_sequence.py",
       "source_reachability": {
         "class": "product",
@@ -5479,8 +5558,32 @@
         "comfyui_h3_context/core/registry.py"
       ],
       "language": "python",
-      "lines": 325,
+      "lines": 331,
       "path": "comfyui_h3_context/core/native_composition.py",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "comfyui_h3_context/__init__.py",
+          "comfyui_h3_context/adapters/assisted_draft_execution.py",
+          "comfyui_h3_context/adapters/authoring_derivative_generator.py",
+          "comfyui_h3_context/adapters/authoring_derivative_source.py",
+          "comfyui_h3_context/adapters/authoring_generated_source.py",
+          "comfyui_h3_context/adapters/authoring_image_source.py",
+          "comfyui_h3_context/adapters/authoring_native_renderer.py",
+          "comfyui_h3_context/adapters/authoring_output_preview.py"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "comfyui_h3_context/core/canonical.py",
+        "comfyui_h3_context/core/native_t2va_structure.py"
+      ],
+      "language": "python",
+      "lines": 95,
+      "path": "comfyui_h3_context/core/native_guide.py",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -5511,6 +5614,52 @@
       "language": "python",
       "lines": 685,
       "path": "comfyui_h3_context/core/native_h3.py",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "comfyui_h3_context/__init__.py",
+          "comfyui_h3_context/adapters/assisted_draft_execution.py",
+          "comfyui_h3_context/adapters/authoring_derivative_generator.py",
+          "comfyui_h3_context/adapters/authoring_derivative_source.py",
+          "comfyui_h3_context/adapters/authoring_generated_source.py",
+          "comfyui_h3_context/adapters/authoring_image_source.py",
+          "comfyui_h3_context/adapters/authoring_native_renderer.py",
+          "comfyui_h3_context/adapters/authoring_output_preview.py"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [],
+      "language": "python",
+      "lines": 166,
+      "path": "comfyui_h3_context/core/native_keyframe_baseline.py",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "comfyui_h3_context/__init__.py",
+          "comfyui_h3_context/adapters/assisted_draft_execution.py",
+          "comfyui_h3_context/adapters/authoring_derivative_generator.py",
+          "comfyui_h3_context/adapters/authoring_derivative_source.py",
+          "comfyui_h3_context/adapters/authoring_generated_source.py",
+          "comfyui_h3_context/adapters/authoring_image_source.py",
+          "comfyui_h3_context/adapters/authoring_native_renderer.py",
+          "comfyui_h3_context/adapters/authoring_output_preview.py"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "comfyui_h3_context/core/__init__.py",
+        "comfyui_h3_context/core/native_keyframe_baseline.py",
+        "comfyui_h3_context/core/native_t2va_structure.py"
+      ],
+      "language": "python",
+      "lines": 113,
+      "path": "comfyui_h3_context/core/native_keyframe_structure.py",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -5562,11 +5711,13 @@
       "imports": [
         "comfyui_h3_context/core/canonical.py",
         "comfyui_h3_context/core/contracts.py",
+        "comfyui_h3_context/core/native_guide.py",
         "comfyui_h3_context/core/native_h3.py",
+        "comfyui_h3_context/core/native_keyframe_structure.py",
         "comfyui_h3_context/core/native_t2va_structure.py"
       ],
       "language": "python",
-      "lines": 87,
+      "lines": 132,
       "path": "comfyui_h3_context/core/native_source_compatibility.py",
       "source_reachability": {
         "class": "product",
@@ -5611,7 +5762,7 @@
         "comfyui_h3_context/core/native_t2va_baseline.py"
       ],
       "language": "python",
-      "lines": 777,
+      "lines": 780,
       "path": "comfyui_h3_context/core/native_t2va_structure.py",
       "source_reachability": {
         "class": "product",
@@ -6287,7 +6438,7 @@
         "comfyui_h3_context/core/production_duration.py"
       ],
       "language": "python",
-      "lines": 1467,
+      "lines": 1511,
       "path": "comfyui_h3_context/core/production_semantics.py",
       "source_reachability": {
         "class": "product",
@@ -6317,7 +6468,7 @@
         "comfyui_h3_context/core/rendering.py"
       ],
       "language": "python",
-      "lines": 2263,
+      "lines": 2311,
       "path": "comfyui_h3_context/core/production_storyboard.py",
       "source_reachability": {
         "class": "product",
@@ -6897,7 +7048,7 @@
         "comfyui_h3_context/core/errors.py"
       ],
       "language": "python",
-      "lines": 636,
+      "lines": 638,
       "path": "comfyui_h3_context/core/reachability.py",
       "source_reachability": {
         "class": "product",
@@ -7246,7 +7397,7 @@
         "comfyui_h3_context/core/errors.py"
       ],
       "language": "python",
-      "lines": 1251,
+      "lines": 1257,
       "path": "comfyui_h3_context/core/render_planner.py",
       "source_reachability": {
         "class": "product",
@@ -7276,7 +7427,7 @@
         "comfyui_h3_context/core/profiles.py"
       ],
       "language": "python",
-      "lines": 1286,
+      "lines": 1321,
       "path": "comfyui_h3_context/core/rendering.py",
       "source_reachability": {
         "class": "product",
@@ -7366,7 +7517,7 @@
     {
       "imports": [],
       "language": "python",
-      "lines": 145,
+      "lines": 178,
       "path": "comfyui_h3_context/core/safe_paths.py",
       "source_reachability": {
         "class": "product",
@@ -9187,7 +9338,7 @@
         "frontend/src/i18n/catalog.ts"
       ],
       "language": "typescript",
-      "lines": 264,
+      "lines": 271,
       "path": "frontend/src/components/AuthoringOutput.tsx",
       "source_reachability": {
         "class": "product",
@@ -9302,7 +9453,7 @@
         "frontend/src/state/sidebarWorkspace.ts"
       ],
       "language": "typescript",
-      "lines": 1958,
+      "lines": 1960,
       "path": "frontend/src/components/H3Sidebar.tsx",
       "source_reachability": {
         "class": "product",
@@ -9680,7 +9831,7 @@
         "frontend/src/i18n/catalog.ts"
       ],
       "language": "typescript",
-      "lines": 142,
+      "lines": 149,
       "path": "frontend/src/components/authoringOutputCopy.ts",
       "source_reachability": {
         "class": "product",
@@ -9807,9 +9958,11 @@
     {
       "imports": [
         "frontend/src/components/nle/NleIconActions.tsx",
+        "frontend/src/components/nle/NleTextPresetGrid.tsx",
         "frontend/src/components/nle/NleTextStyleControls.tsx",
         "frontend/src/components/nle/nleCommandBuilders.ts",
         "frontend/src/components/nle/nleCopy.ts",
+        "frontend/src/components/nle/nleTextPresets.ts",
         "frontend/src/components/nle/nleTimelineSurface.ts",
         "frontend/src/components/nle/nleTitleCoverage.ts",
         "frontend/src/components/useRetainedSlot.ts",
@@ -9823,7 +9976,7 @@
         "frontend/src/state/sidebarRetention.ts"
       ],
       "language": "typescript",
-      "lines": 2377,
+      "lines": 2414,
       "path": "frontend/src/components/nle/NleInspectorTabs.tsx",
       "source_reachability": {
         "class": "product",
@@ -10021,11 +10174,12 @@
         "frontend/src/components/nle/nleWorkspaceBinding.ts",
         "frontend/src/components/plainReasons.ts",
         "frontend/src/contracts/productionWorkbenchCodec.ts",
+        "frontend/src/host/managedSequenceDiagnostics.ts",
         "frontend/src/i18n/catalog.ts",
         "frontend/src/state/nleWorkspaceState.ts"
       ],
       "language": "typescript",
-      "lines": 427,
+      "lines": 465,
       "path": "frontend/src/components/nle/NleSequencePanel.tsx",
       "source_reachability": {
         "class": "product",
@@ -10075,15 +10229,37 @@
     },
     {
       "imports": [
+        "frontend/src/components/nle/NleTextPresetGrid.tsx",
         "frontend/src/components/nle/nleCommandBuilders.ts",
         "frontend/src/components/nle/nleCopy.ts",
+        "frontend/src/components/nle/nleTextPresets.ts",
         "frontend/src/components/nle/nleTitleInsertion.ts",
         "frontend/src/i18n/catalog.ts",
         "frontend/src/state/authoringViewState.ts"
       ],
       "language": "typescript",
-      "lines": 113,
+      "lines": 140,
       "path": "frontend/src/components/nle/NleTextBin.tsx",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/components/nle/nleCopy.ts",
+        "frontend/src/components/nle/nleTextPresetFonts.ts",
+        "frontend/src/components/nle/nleTextPresets.ts",
+        "frontend/src/i18n/catalog.ts",
+        "frontend/src/runtime/visualCompositor.ts"
+      ],
+      "language": "typescript",
+      "lines": 186,
+      "path": "frontend/src/components/nle/NleTextPresetGrid.tsx",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -10504,7 +10680,7 @@
         "frontend/src/i18n/catalog.ts"
       ],
       "language": "typescript",
-      "lines": 2122,
+      "lines": 2177,
       "path": "frontend/src/components/nle/nleCopy.ts",
       "source_reachability": {
         "class": "product",
@@ -10553,6 +10729,38 @@
       "language": "typescript",
       "lines": 72,
       "path": "frontend/src/components/nle/nleMonitorGeometry.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/runtime/visualCompositionResources.ts"
+      ],
+      "language": "typescript",
+      "lines": 68,
+      "path": "frontend/src/components/nle/nleTextPresetFonts.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/components/nle/nleCommandBuilders.ts"
+      ],
+      "language": "typescript",
+      "lines": 114,
+      "path": "frontend/src/components/nle/nleTextPresets.ts",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -10629,7 +10837,7 @@
         "frontend/src/components/nle/nleCommandBuilders.ts"
       ],
       "language": "typescript",
-      "lines": 44,
+      "lines": 83,
       "path": "frontend/src/components/nle/nleTitleCoverage.ts",
       "source_reachability": {
         "class": "product",
@@ -10649,7 +10857,7 @@
         "frontend/src/state/authoringViewState.ts"
       ],
       "language": "typescript",
-      "lines": 135,
+      "lines": 137,
       "path": "frontend/src/components/nle/nleTitleInsertion.ts",
       "source_reachability": {
         "class": "product",
@@ -11023,7 +11231,7 @@
         "frontend/src/i18n/catalog.ts"
       ],
       "language": "typescript",
-      "lines": 1022,
+      "lines": 1052,
       "path": "frontend/src/components/plainReasons.ts",
       "source_reachability": {
         "class": "product",
@@ -11087,7 +11295,7 @@
         "frontend/src/host/authoringOutputPreview.ts"
       ],
       "language": "typescript",
-      "lines": 268,
+      "lines": 279,
       "path": "frontend/src/components/useAuthoringOutput.ts",
       "source_reachability": {
         "class": "product",
@@ -11165,7 +11373,7 @@
         "frontend/src/runtime/publicAssetManifest.ts"
       ],
       "language": "typescript",
-      "lines": 795,
+      "lines": 798,
       "path": "frontend/src/contracts/authoringMediaLeaseCodec.ts",
       "source_reachability": {
         "class": "product",
@@ -11181,7 +11389,7 @@
         "frontend/src/contracts/compositionCodec.ts"
       ],
       "language": "typescript",
-      "lines": 366,
+      "lines": 368,
       "path": "frontend/src/contracts/authoringOutputCodec.ts",
       "source_reachability": {
         "class": "product",
@@ -11703,7 +11911,7 @@
         "frontend/src/host/hostModuleTypes.ts"
       ],
       "language": "typescript",
-      "lines": 12,
+      "lines": 17,
       "path": "frontend/src/host-modules.d.ts",
       "source_reachability": {
         "class": "product",
@@ -11716,31 +11924,34 @@
     },
     {
       "imports": [
-        "frontend/src/contracts/generationProfileCodec.ts",
         "frontend/src/host/appModeAdmission.ts",
         "frontend/src/host/appModeCanvasPreparation.ts",
         "frontend/src/host/appModeCensus.ts",
         "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/appModeError.ts",
         "frontend/src/host/appModeExistingRoute.ts",
         "frontend/src/host/appModeManagedPreparation.ts",
+        "frontend/src/host/appModeProfileAdmission.ts",
         "frontend/src/host/appModeQualification.ts",
         "frontend/src/host/appModeRoutes.ts",
+        "frontend/src/host/appModeSourceObservation.ts",
         "frontend/src/host/appModeTemplateSources.ts",
         "frontend/src/host/canvasOwnedWrite.ts",
         "frontend/src/host/compiledMetadata.ts",
-        "frontend/src/host/generationProfileClient.ts",
         "frontend/src/host/graphAdapter.ts",
         "frontend/src/host/graphSerialization.ts",
         "frontend/src/host/hostSeams.ts",
         "frontend/src/host/imageCropCapability.ts",
         "frontend/src/host/imageCropSource.ts",
-        "frontend/src/host/inputGeometry.ts",
+        "frontend/src/host/managedSequenceRunnerContract.ts",
         "frontend/src/host/ownedGraphIdentity.ts",
+        "frontend/src/host/preparedSequenceGraph.ts",
         "frontend/src/host/queueSeam.ts",
+        "frontend/src/host/sequenceMediaBindings.ts",
         "frontend/src/host/templateMaterialization.ts"
       ],
       "language": "typescript",
-      "lines": 1197,
+      "lines": 1198,
       "path": "frontend/src/host/appMode.ts",
       "source_reachability": {
         "class": "product",
@@ -11810,19 +12021,41 @@
       "imports": [
         "frontend/src/contracts/canonicalFingerprint.ts",
         "frontend/src/contracts/generationProfileCodec.ts",
+        "frontend/src/host/appModeError.ts",
         "frontend/src/host/compiledMetadata.ts",
         "frontend/src/host/graphAdapter.ts",
         "frontend/src/host/imageCropContract.ts",
         "frontend/src/host/inputGeometry.ts",
         "frontend/src/host/officialAssetResolution.ts",
         "frontend/src/host/ownedGraphIdentity.ts",
+        "frontend/src/host/preparedCanonicalStart.ts",
+        "frontend/src/host/preparedSequenceMedia.ts",
+        "frontend/src/host/preparedSequenceObservation.ts",
+        "frontend/src/host/privateCanonicalPrompt.ts",
         "frontend/src/host/queueSeam.ts",
         "frontend/src/host/referenceSelection.ts",
         "frontend/src/host/templateMaterialization.ts"
       ],
       "language": "typescript",
-      "lines": 1177,
+      "lines": 1105,
       "path": "frontend/src/host/appModeContract.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/managedSequenceDiagnostics.ts"
+      ],
+      "language": "typescript",
+      "lines": 156,
+      "path": "frontend/src/host/appModeError.ts",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -11842,11 +12075,14 @@
         "frontend/src/host/imageCropBindings.ts",
         "frontend/src/host/imageCropCapability.ts",
         "frontend/src/host/officialAssetResolution.ts",
+        "frontend/src/host/preparedSequenceAdmission.ts",
+        "frontend/src/host/preparedSequenceMedia.ts",
+        "frontend/src/host/privateCanonicalPrompt.ts",
         "frontend/src/host/referenceBindingIdentity.ts",
         "frontend/src/host/templateMaterialization.ts"
       ],
       "language": "typescript",
-      "lines": 1173,
+      "lines": 1195,
       "path": "frontend/src/host/appModeExistingRoute.ts",
       "source_reachability": {
         "class": "product",
@@ -11863,13 +12099,37 @@
         "frontend/src/host/appModeCensus.ts",
         "frontend/src/host/appModeContract.ts",
         "frontend/src/host/appModeTemplateSources.ts",
+        "frontend/src/host/compiledPromptData.ts",
+        "frontend/src/host/imageCropBindings.ts",
+        "frontend/src/host/imageCropCapability.ts",
         "frontend/src/host/inputGeometry.ts",
         "frontend/src/host/ownedGraphIdentity.ts",
+        "frontend/src/host/preparedSequenceObservation.ts",
         "frontend/src/host/queueSeam.ts"
       ],
       "language": "typescript",
-      "lines": 419,
+      "lines": 546,
       "path": "frontend/src/host/appModeManagedPreparation.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/contracts/generationProfileCodec.ts",
+        "frontend/src/host/appModeAdmission.ts",
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/generationProfileClient.ts",
+        "frontend/src/host/hostSeams.ts"
+      ],
+      "language": "typescript",
+      "lines": 56,
+      "path": "frontend/src/host/appModeProfileAdmission.ts",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -11901,6 +12161,7 @@
     {
       "imports": [
         "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/appModeError.ts",
         "frontend/src/host/appModeTemplateSources.ts",
         "frontend/src/host/canvasOwnedWrite.ts",
         "frontend/src/host/hostSeamContract.ts",
@@ -11909,11 +12170,35 @@
         "frontend/src/host/imageCropContract.ts",
         "frontend/src/host/officialAssetResolution.ts",
         "frontend/src/host/ownedGraphIdentity.ts",
+        "frontend/src/host/preparedSequenceMedia.ts",
+        "frontend/src/host/sequenceFrameMaterialization.ts",
+        "frontend/src/host/sequenceMediaBindings.ts",
+        "frontend/src/host/sequenceTemplateCanvas.ts",
         "frontend/src/host/templateMaterialization.ts"
       ],
       "language": "typescript",
-      "lines": 506,
+      "lines": 593,
       "path": "frontend/src/host/appModeRoutes.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/appModeManagedPreparation.ts",
+        "frontend/src/host/inputGeometry.ts",
+        "frontend/src/host/preparedSequenceObservation.ts",
+        "frontend/src/host/templateGraphTopology.ts"
+      ],
+      "language": "typescript",
+      "lines": 81,
+      "path": "frontend/src/host/appModeSourceObservation.ts",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -12239,8 +12524,24 @@
         "frontend/src/host/templateMaterialization.ts"
       ],
       "language": "typescript",
-      "lines": 283,
+      "lines": 285,
       "path": "frontend/src/host/canvasOwnedWrite.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/templateGraphTopology.ts"
+      ],
+      "language": "typescript",
+      "lines": 168,
+      "path": "frontend/src/host/closingGuideNamespace.ts",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -12272,6 +12573,20 @@
       "language": "typescript",
       "lines": 56,
       "path": "frontend/src/host/compiledMetadata.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [],
+      "language": "typescript",
+      "lines": 120,
+      "path": "frontend/src/host/compiledPromptData.ts",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -12340,7 +12655,7 @@
         "frontend/src/host/graphTopology.ts"
       ],
       "language": "typescript",
-      "lines": 492,
+      "lines": 499,
       "path": "frontend/src/host/graphAdapter.ts",
       "source_reachability": {
         "class": "product",
@@ -12549,7 +12864,7 @@
         "frontend/src/host/templateGraphTopology.ts"
       ],
       "language": "typescript",
-      "lines": 117,
+      "lines": 128,
       "path": "frontend/src/host/imageCropBindings.ts",
       "source_reachability": {
         "class": "product",
@@ -12649,7 +12964,7 @@
     {
       "imports": [],
       "language": "typescript",
-      "lines": 222,
+      "lines": 224,
       "path": "frontend/src/host/inputGeometry.ts",
       "source_reachability": {
         "class": "product",
@@ -12731,11 +13046,48 @@
     },
     {
       "imports": [
-        "frontend/src/contracts/canonicalFingerprint.ts"
+        "frontend/src/contracts/canonicalFingerprint.ts",
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/managedSequenceClient.ts",
+        "frontend/src/host/managedSequenceRunnerContract.ts",
+        "frontend/src/host/sequenceMediaBindings.ts"
       ],
       "language": "typescript",
-      "lines": 681,
+      "lines": 181,
+      "path": "frontend/src/host/managedSequenceAuthority.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/contracts/canonicalFingerprint.ts",
+        "frontend/src/host/managedSequenceDiagnostics.ts"
+      ],
+      "language": "typescript",
+      "lines": 810,
       "path": "frontend/src/host/managedSequenceClient.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/managedSequenceClient.ts"
+      ],
+      "language": "typescript",
+      "lines": 299,
+      "path": "frontend/src/host/managedSequenceDiagnostics.ts",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -12749,13 +13101,15 @@
       "imports": [
         "frontend/src/contracts/canonicalFingerprint.ts",
         "frontend/src/host/appMode.ts",
+        "frontend/src/host/managedSequenceAuthority.ts",
         "frontend/src/host/managedSequenceClient.ts",
+        "frontend/src/host/managedSequenceDiagnostics.ts",
         "frontend/src/host/managedSequenceRunnerContract.ts",
         "frontend/src/host/sequenceCoordinator.ts",
         "frontend/src/host/sidebarHost.ts"
       ],
       "language": "typescript",
-      "lines": 1194,
+      "lines": 1198,
       "path": "frontend/src/host/managedSequenceRunner.ts",
       "source_reachability": {
         "class": "product",
@@ -12771,11 +13125,14 @@
         "frontend/src/host/appMode.ts",
         "frontend/src/host/comfyPromptHistory.ts",
         "frontend/src/host/managedSequenceClient.ts",
+        "frontend/src/host/managedSequenceDiagnostics.ts",
+        "frontend/src/host/preparedSequenceMedia.ts",
         "frontend/src/host/sequenceCoordinator.ts",
+        "frontend/src/host/sequenceMediaBindings.ts",
         "frontend/src/host/sidebarHost.ts"
       ],
       "language": "typescript",
-      "lines": 194,
+      "lines": 237,
       "path": "frontend/src/host/managedSequenceRunnerContract.ts",
       "source_reachability": {
         "class": "product",
@@ -12900,7 +13257,7 @@
         "frontend/src/contracts/canonicalFingerprint.ts"
       ],
       "language": "typescript",
-      "lines": 173,
+      "lines": 188,
       "path": "frontend/src/host/ownedGraphIdentity.ts",
       "source_reachability": {
         "class": "product",
@@ -12918,6 +13275,122 @@
       "language": "typescript",
       "lines": 55,
       "path": "frontend/src/host/perceptionHostClient.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/preparedSequenceMedia.ts",
+        "frontend/src/host/privateCanonicalPrompt.ts"
+      ],
+      "language": "typescript",
+      "lines": 123,
+      "path": "frontend/src/host/preparedCanonicalStart.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/graphAdapter.ts",
+        "frontend/src/host/imageCropCapability.ts",
+        "frontend/src/host/preparedSequenceMedia.ts",
+        "frontend/src/host/preparedSequenceObservation.ts",
+        "frontend/src/host/templateGraphTopology.ts"
+      ],
+      "language": "typescript",
+      "lines": 212,
+      "path": "frontend/src/host/preparedSequenceAdmission.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/contracts/canonicalFingerprint.ts",
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/graphSerialization.ts",
+        "frontend/src/host/managedSequenceDiagnostics.ts",
+        "frontend/src/host/sequenceMediaBindings.ts",
+        "frontend/src/host/templateGraphTopology.ts"
+      ],
+      "language": "typescript",
+      "lines": 426,
+      "path": "frontend/src/host/preparedSequenceGraph.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/imageCropCapability.ts",
+        "frontend/src/host/sequenceGeometry.ts",
+        "frontend/src/host/sequenceMediaBindings.ts",
+        "frontend/src/host/templateGraphTopology.ts"
+      ],
+      "language": "typescript",
+      "lines": 223,
+      "path": "frontend/src/host/preparedSequenceMedia.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/graphAdapter.ts",
+        "frontend/src/host/preparedSequenceGraph.ts",
+        "frontend/src/host/preparedSequenceMedia.ts",
+        "frontend/src/host/sequenceMediaBindings.ts",
+        "frontend/src/host/sequenceMediaCapture.ts",
+        "frontend/src/host/templateGraphTopology.ts"
+      ],
+      "language": "typescript",
+      "lines": 320,
+      "path": "frontend/src/host/preparedSequenceObservation.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [],
+      "language": "typescript",
+      "lines": 16,
+      "path": "frontend/src/host/privateCanonicalPrompt.ts",
       "source_reachability": {
         "class": "product",
         "evidence": "product_closure",
@@ -12999,14 +13472,18 @@
       "imports": [
         "frontend/src/contracts/canonicalFingerprint.ts",
         "frontend/src/host/appMode.ts",
+        "frontend/src/host/appModeContract.ts",
         "frontend/src/host/canvasOwnedWrite.ts",
         "frontend/src/host/hostSeams.ts",
         "frontend/src/host/managedSequenceClient.ts",
         "frontend/src/host/managedSequenceRunnerContract.ts",
-        "frontend/src/host/ownedGraphIdentity.ts"
+        "frontend/src/host/ownedGraphIdentity.ts",
+        "frontend/src/host/preparedSequenceMedia.ts",
+        "frontend/src/host/privateCanonicalPrompt.ts",
+        "frontend/src/host/sequenceMediaBindings.ts"
       ],
       "language": "typescript",
-      "lines": 733,
+      "lines": 910,
       "path": "frontend/src/host/productionManagedChildResolver.ts",
       "source_reachability": {
         "class": "product",
@@ -13161,9 +13638,11 @@
       }
     },
     {
-      "imports": [],
+      "imports": [
+        "frontend/src/host/compiledPromptData.ts"
+      ],
       "language": "typescript",
-      "lines": 366,
+      "lines": 410,
       "path": "frontend/src/host/queueSeam.ts",
       "source_reachability": {
         "class": "product",
@@ -13257,6 +13736,97 @@
     },
     {
       "imports": [
+        "frontend/src/host/closingGuideNamespace.ts",
+        "frontend/src/host/graphSerialization.ts",
+        "frontend/src/host/templateGraphTopology.ts"
+      ],
+      "language": "typescript",
+      "lines": 286,
+      "path": "frontend/src/host/sequenceFrameMaterialization.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/templateGraphTopology.ts"
+      ],
+      "language": "typescript",
+      "lines": 39,
+      "path": "frontend/src/host/sequenceGeometry.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/contracts/canonicalFingerprint.ts",
+        "frontend/src/host/imageCropCapability.ts",
+        "frontend/src/host/imageCropGeometry.ts",
+        "frontend/src/host/inputGeometry.ts",
+        "frontend/src/host/managedSequenceDiagnostics.ts"
+      ],
+      "language": "typescript",
+      "lines": 250,
+      "path": "frontend/src/host/sequenceMediaBindings.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/graphAdapter.ts",
+        "frontend/src/host/imageCropCapability.ts",
+        "frontend/src/host/inputGeometry.ts",
+        "frontend/src/host/sequenceMediaBindings.ts"
+      ],
+      "language": "typescript",
+      "lines": 362,
+      "path": "frontend/src/host/sequenceMediaCapture.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
+        "frontend/src/host/graphSerialization.ts",
+        "frontend/src/host/templateGraphTopology.ts"
+      ],
+      "language": "typescript",
+      "lines": 120,
+      "path": "frontend/src/host/sequenceTemplateCanvas.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
         "frontend/src/components/SemanticProposalReview.tsx",
         "frontend/src/components/SidebarStages.tsx",
         "frontend/src/contracts/assistedPromptProposalCodec.ts",
@@ -13338,7 +13908,7 @@
         "frontend/src/host/referenceSelection.ts"
       ],
       "language": "typescript",
-      "lines": 918,
+      "lines": 1068,
       "path": "frontend/src/host/templateGraphTopology.ts",
       "source_reachability": {
         "class": "product",
@@ -13353,10 +13923,11 @@
       "imports": [
         "frontend/src/host/graphSerialization.ts",
         "frontend/src/host/imageCropInsertion.ts",
+        "frontend/src/host/sequenceGeometry.ts",
         "frontend/src/host/templateGraphTopology.ts"
       ],
       "language": "typescript",
-      "lines": 1197,
+      "lines": 1168,
       "path": "frontend/src/host/templateMaterialization.ts",
       "source_reachability": {
         "class": "product",
@@ -13502,7 +14073,6 @@
         "frontend/src/host/productionActions.ts",
         "frontend/src/host/productionGeneration.ts",
         "frontend/src/host/sequenceCoordinator.ts",
-        "frontend/src/lifecycle/appModeMachine.ts",
         "frontend/src/lifecycle/appModeSessionPolicy.ts",
         "frontend/src/lifecycle/managedProjectMember.ts",
         "frontend/src/lifecycle/managedSerialSession.ts",
@@ -13512,7 +14082,7 @@
         "frontend/src/state/shellState.ts"
       ],
       "language": "typescript",
-      "lines": 1197,
+      "lines": 1196,
       "path": "frontend/src/lifecycle/appModeSession.ts",
       "source_reachability": {
         "class": "product",
@@ -13527,10 +14097,11 @@
       "imports": [
         "frontend/src/host/appModeContract.ts",
         "frontend/src/lifecycle/appModeMachine.ts",
-        "frontend/src/lifecycle/shellSession.ts"
+        "frontend/src/lifecycle/shellSession.ts",
+        "frontend/src/state/shellState.ts"
       ],
       "language": "typescript",
-      "lines": 64,
+      "lines": 76,
       "path": "frontend/src/lifecycle/appModeSessionPolicy.ts",
       "source_reachability": {
         "class": "product",
@@ -13645,6 +14216,7 @@
     },
     {
       "imports": [
+        "frontend/src/host/appModeContract.ts",
         "frontend/src/host/comfyPromptHistory.ts",
         "frontend/src/host/managedSequence.ts",
         "frontend/src/host/sequenceCoordinator.ts",
@@ -13652,7 +14224,7 @@
         "frontend/src/lifecycle/shellSession.ts"
       ],
       "language": "typescript",
-      "lines": 257,
+      "lines": 262,
       "path": "frontend/src/lifecycle/managedSerialSession.ts",
       "source_reachability": {
         "class": "product",
@@ -13728,6 +14300,22 @@
     },
     {
       "imports": [
+        "frontend/src/state/nleWorkspaceState.ts"
+      ],
+      "language": "typescript",
+      "lines": 49,
+      "path": "frontend/src/lifecycle/nleSequenceUi.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
+      "imports": [
         "frontend/src/contracts/productionAuthoringImportCodec.ts",
         "frontend/src/host/productionAuthoringImportClient.ts",
         "frontend/src/lifecycle/shellSession.ts",
@@ -13769,13 +14357,17 @@
         "frontend/src/contracts/managedQualificationCodec.ts",
         "frontend/src/contracts/nleSurfaceCapability.ts",
         "frontend/src/contracts/productionWorkbenchCodec.ts",
+        "frontend/src/host/appModeContract.ts",
         "frontend/src/host/canvasOwnedWrite.ts",
         "frontend/src/host/hostSeams.ts",
         "frontend/src/host/managedQualificationActions.ts",
         "frontend/src/host/ownedGraphIdentity.ts",
         "frontend/src/host/productionManagedChildResolver.ts",
+        "frontend/src/host/sequenceMediaBindings.ts",
+        "frontend/src/host/sequenceMediaCapture.ts",
         "frontend/src/lifecycle/nleOwnerRenewal.ts",
         "frontend/src/lifecycle/nleRenderCapabilityRead.ts",
+        "frontend/src/lifecycle/nleSequenceUi.ts",
         "frontend/src/lifecycle/nleWorkspaceImport.ts",
         "frontend/src/lifecycle/nleWorkspacePlanning.ts",
         "frontend/src/lifecycle/shellSession.ts",
@@ -13789,7 +14381,7 @@
         "frontend/src/state/sidebarRetention.ts"
       ],
       "language": "typescript",
-      "lines": 1096,
+      "lines": 1168,
       "path": "frontend/src/lifecycle/nleWorkspaceSession.ts",
       "source_reachability": {
         "class": "product",
@@ -14157,7 +14749,7 @@
         "frontend/src/runtime/publicAssetManifest.ts"
       ],
       "language": "typescript",
-      "lines": 2729,
+      "lines": 2741,
       "path": "frontend/src/runtime/editorRuntime.ts",
       "source_reachability": {
         "class": "product",
@@ -14430,6 +15022,20 @@
       }
     },
     {
+      "imports": [],
+      "language": "typescript",
+      "lines": 11,
+      "path": "frontend/src/runtime/packagedFontAssets.ts",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "frontend/src/entry.tsx"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
       "imports": [
         "frontend/src/contracts/compositionCodec.ts",
         "frontend/src/runtime/mediaCapabilities.ts"
@@ -14516,11 +15122,12 @@
         "frontend/src/contracts/compositionCodec.ts",
         "frontend/src/host/authoringMediaSourceLease.ts",
         "frontend/src/host/nleLeaseScheduler.ts",
+        "frontend/src/runtime/packagedFontAssets.ts",
         "frontend/src/runtime/publicAssetManifest.ts",
         "frontend/src/runtime/visualCompositor.ts"
       ],
       "language": "typescript",
-      "lines": 866,
+      "lines": 871,
       "path": "frontend/src/runtime/visualCompositionResources.ts",
       "source_reachability": {
         "class": "product",
@@ -14558,10 +15165,11 @@
     },
     {
       "imports": [
-        "frontend/src/contracts/compositionCodec.ts"
+        "frontend/src/contracts/compositionCodec.ts",
+        "frontend/src/runtime/packagedFontAssets.ts"
       ],
       "language": "typescript",
-      "lines": 2012,
+      "lines": 2015,
       "path": "frontend/src/runtime/visualCompositor.ts",
       "source_reachability": {
         "class": "product",
@@ -14649,13 +15257,14 @@
         "frontend/src/contracts/productionAuthoringImportCodec.ts",
         "frontend/src/contracts/productionPlanningCodec.ts",
         "frontend/src/host/managedSequenceClient.ts",
+        "frontend/src/host/managedSequenceDiagnostics.ts",
         "frontend/src/host/managedSequenceRunnerContract.ts",
         "frontend/src/host/productionAuthoringImportClient.ts",
         "frontend/src/runtime/nleLayoutGeometry.ts",
         "frontend/src/runtime/nleOverlayGeometry.ts"
       ],
       "language": "typescript",
-      "lines": 277,
+      "lines": 279,
       "path": "frontend/src/state/nleWorkspaceState.ts",
       "source_reachability": {
         "class": "product",

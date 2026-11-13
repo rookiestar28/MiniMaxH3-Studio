@@ -29,6 +29,7 @@ from ..core.durable_workspace_state import (
 from ..core.private_storage_layout import MIB, private_subtree_path
 from ..core.safe_paths import (
     UnsafePathError,
+    _native_io_path,
     ensure_directory,
     validate_directory,
     validate_regular_file,
@@ -177,25 +178,27 @@ def _owner_bytes(owner: str) -> bytes:
 
 def _exists(path: Path) -> bool:
     try:
-        path.lstat()
+        _native_io_path(path).lstat()
         return True
     except FileNotFoundError:
         return False
 
 
 def _read(path: Path, maximum: int) -> tuple[bytes, os.stat_result]:
-    before = validate_regular_file(path, maximum_bytes=maximum).lstat()
+    # CRITICAL: validation returns logical paths; prefix each syscall, never stored identities.
+    # A plain follow-up lstat still fails past MAX_PATH after safe component validation succeeds.
+    before = _native_io_path(validate_regular_file(path, maximum_bytes=maximum)).lstat()
     if before.st_nlink != 1:
         raise DurableStateError("storage_unsafe")
     payload = _read_regular_bytes(path, maximum_bytes=maximum)
-    if _identity(before) != _identity(path.lstat()):
+    if _identity(before) != _identity(_native_io_path(path).lstat()):
         raise DurableStateError("storage_unsafe")
     return payload, before
 
 
 def _delete(path: Path, expected: os.stat_result) -> None:
     with _validated_directories(path.parent):
-        actual = validate_regular_file(path).lstat()
+        actual = _native_io_path(validate_regular_file(path)).lstat()
         if actual.st_nlink != 1 or _identity(actual) != _identity(expected):
             raise DurableStateError("storage_unsafe")
         if os.name == "nt":
@@ -220,12 +223,15 @@ def _replace_manifest(
 ) -> None:
     """Publish a closed single-link manifest without following the destination entry."""
     with _validated_directories(source.parent, target.parent):
-        before = validate_regular_file(source, maximum_bytes=maximum_bytes).lstat()
+        before = _native_io_path(validate_regular_file(source, maximum_bytes=maximum_bytes)).lstat()
         if source.parent != target.parent or before.st_nlink != 1:
             raise DurableStateError("storage_unsafe")
         if (
             _exists(target)
-            and validate_regular_file(target, maximum_bytes=maximum_bytes).lstat().st_nlink != 1
+            and _native_io_path(validate_regular_file(target, maximum_bytes=maximum_bytes))
+            .lstat()
+            .st_nlink
+            != 1
         ):
             raise DurableStateError("storage_unsafe")
         if os.name != "nt":
@@ -277,7 +283,8 @@ def _replace_manifest(
                     ("name", wintypes.WCHAR * 1),
                 )
 
-            name = str(target).encode("utf-16-le")
+            # CRITICAL: the pinned source alone does not extend the rename destination buffer.
+            name = _windows_native_path(target, force=True).encode("utf-16-le")
             size = ctypes.sizeof(RenameInfo) + len(name)
             buffer = ctypes.create_string_buffer(size)
             info = ctypes.cast(buffer, ctypes.POINTER(RenameInfo)).contents
@@ -290,7 +297,7 @@ def _replace_manifest(
             # A closed-source pathname race could publish an unrelated substituted manifest.
             if not setter(_msvcrt_get_osfhandle(descriptor), 3, buffer, size):
                 raise OSError(_windows_last_error(), "manifest_replace_failed")
-            if _identity(os.fstat(descriptor)) != _identity(target.lstat()):
+            if _identity(os.fstat(descriptor)) != _identity(_native_io_path(target).lstat()):
                 raise DurableStateError("storage_unsafe")
         finally:
             if descriptor is None:
@@ -333,7 +340,7 @@ class DurableStateStore:
         if self._lease is None or self._owner_identity != identity:
             raise DurableStateError("storage_unsafe")
         path = self.owner_directory / _OWNER_LOCK
-        before = validate_regular_file(path, maximum_bytes=1024).lstat()
+        before = _native_io_path(validate_regular_file(path, maximum_bytes=1024)).lstat()
         opened = os.fstat(self._lease)
         expected = _owner_bytes(self.owner_id)
         if (
@@ -350,7 +357,7 @@ class DurableStateStore:
         if (
             payload != expected
             or _identity(os.fstat(self._lease)) != _identity(opened)
-            or _identity(path.lstat()) != _identity(opened)
+            or _identity(_native_io_path(path).lstat()) != _identity(opened)
         ):
             raise DurableStateError("storage_unsafe")
 
@@ -400,7 +407,9 @@ class DurableStateStore:
                             raise DurableStateError("quota_bytes")
                         ensure_directory(self.owner_directory)
                     with _validated_directories(self.owner_directory):
-                        identity = _directory_identity(self.owner_directory.lstat())
+                        identity = _directory_identity(
+                            _native_io_path(self.owner_directory).lstat()
+                        )
                         if self._lease is None:
                             if not _exists(self.owner_directory / _OWNER_LOCK):
                                 total, _ = self._inventory()
@@ -437,7 +446,7 @@ class DurableStateStore:
 
     def _owners(self) -> tuple[Path, ...]:
         owners = []
-        with os.scandir(self.root) as entries:
+        with os.scandir(_native_io_path(self.root)) as entries:
             for count, entry in enumerate(entries, 1):
                 if count > 18:
                     raise DurableStateError("quota_directory")
@@ -453,7 +462,7 @@ class DurableStateStore:
     def _files(self, owner: Path) -> tuple[tuple[Path, os.stat_result], ...]:
         files = []
         snapshots = 0
-        with os.scandir(owner) as entries:
+        with os.scandir(_native_io_path(owner)) as entries:
             for count, entry in enumerate(entries, 1):
                 if count > 6:
                     raise DurableStateError("quota_directory")
@@ -471,7 +480,9 @@ class DurableStateStore:
                     if entry.name in {_MANIFEST, _PENDING}
                     else MAX_SNAPSHOT_BYTES
                 )
-                metadata = validate_regular_file(path, maximum_bytes=maximum).lstat()
+                metadata = _native_io_path(
+                    validate_regular_file(path, maximum_bytes=maximum)
+                ).lstat()
                 if metadata.st_nlink != 1:
                     raise DurableStateError("storage_unsafe")
                 files.append((path, metadata))
@@ -526,7 +537,7 @@ class DurableStateStore:
 
     def _inventory(self) -> tuple[int, dict[str, set[str]]]:
         files = [
-            (self.root / name, (self.root / name).lstat())
+            (self.root / name, (_native_io_path(self.root / name)).lstat())
             for name in (_FAMILY_MARKER, _CATALOG_LOCK)
         ]
         owners = self._owners()

@@ -23,6 +23,7 @@ from test_m25_authoring_render_receipts import _receipt
 from test_m25_render_job_leases import image_bound as image_bound
 
 from comfyui_h3_context.core.authoring_render_jobs import RenderJobLimits
+from comfyui_h3_context.core.safe_paths import _native_io_path
 
 
 def stores() -> Any:
@@ -44,17 +45,20 @@ def test_stage_input_pin_denies_write_delete_and_releases_after_failure(tmp_path
         stage = store.begin("render-" + "b" * 32, "sha256:" + "b" * 64)
         payload = b"synthetic-private-input"
         path = stage.write_input(payload, suffix=".txt")
+        # IMPORTANT: keep product identity logical, but use native spelling for fixture I/O.
+        # Ordinary long opens fail before pin assertions and are re-coded by store unwind.
+        native_path = _native_io_path(path)
         digest = "sha256:" + hashlib.sha256(payload).hexdigest()
         with pytest.raises(RuntimeError, match="synthetic failure"):
             with executors()._pin_stage_inputs(stage, {path: digest}, process_control()):
-                assert path.read_bytes() == payload
+                assert native_path.read_bytes() == payload
                 with pytest.raises(OSError):
-                    path.write_bytes(b"replacement")
+                    native_path.write_bytes(b"replacement")
                 with pytest.raises(OSError):
-                    path.unlink()
+                    native_path.unlink()
                 raise RuntimeError("synthetic failure")
-        path.write_bytes(payload)
-        assert path.read_bytes() == payload
+        native_path.write_bytes(payload)
+        assert native_path.read_bytes() == payload
     finally:
         store.close()
 
@@ -290,7 +294,7 @@ def test_text_preparation_never_substitutes_an_unsupported_glyph(tmp_path: Path)
     from comfyui_h3_context.adapters.authoring_fonts import load_packaged_font_manifest
 
     title = next(clip.text for clip in _snapshot().clips if clip.text is not None)
-    title = replace(title, content="漢")
+    title = replace(title, content="漢😀")
     store = stores().RenderOutputStore(tmp_path)
     try:
         stage = store.begin("render-" + "f" * 32, "sha256:" + "f" * 64)

@@ -514,10 +514,11 @@ class ChainCloseoutTests(unittest.TestCase):
         self.assertEqual(projected.to_wire(), v1.to_wire())
         self.assertEqual(projected.fingerprint, v1.fingerprint)
         # IMPORTANT: keep this independent literal pin; deriving it from v1 would
-        # hide public-surface drift.
+        # hide public-surface drift. Repinned for 1.4.5: 's frame-guided sequences made
+        # mode.native_generation_i2va and mode.native_generation_l2va reachable.
         self.assertEqual(
             v1.fingerprint,
-            "sha256:f7f921d6363ad8f9d3cfc5448247dfaf587e58a8b797879b1e2d023e9e99feff",
+            "sha256:9538df4d9d801691f1a7456751090e0635a9b0c8eaa9ca603ad5c2fd61129c2e",
         )
 
     def test_perception_manifest_preserves_required_inputs_and_optional_admission(self) -> None:

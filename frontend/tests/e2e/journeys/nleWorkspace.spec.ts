@@ -14,6 +14,10 @@ import { routeGenericFixtureMedia } from "../helpers/genericFixtureMedia";
 import { chooseAssetCommand } from "../helpers/nleBinMenus";
 import { expectGripClearOfLanes, nleLaneOrigin } from "../helpers/nleTargets";
 import {
+  productionAssemblyObservation,
+  refreshProductionAssembly,
+} from "../helpers/productionAssembly";
+import {
   playheadFrame,
   playheadSlider,
   seekPlayhead,
@@ -170,7 +174,20 @@ test("NLE sequence keyboard review, import, serial start and separate assembly",
     "data-h3-nle-assembly-state",
     "running",
   );
+  await refreshProductionAssembly(
+    page.locator('[data-h3-nle-region="sequence"]'),
+    2_000,
+  );
   await activate("production.refresh");
+  const assemblyEvents = await page.evaluate(
+    () => window.nleSequenceHarness.snapshot().events,
+  );
+  expect(
+    assemblyEvents.filter((event) => event === "production:assemble_sequence"),
+  ).toHaveLength(1);
+  expect(
+    assemblyEvents.lastIndexOf("production:read_projection"),
+  ).toBeGreaterThan(assemblyEvents.indexOf("production:assemble_sequence"));
   await expect(page.locator("[data-h3-nle-assembly-state]")).toHaveAttribute(
     "data-h3-nle-assembly-state",
     "succeeded",
@@ -182,6 +199,153 @@ test("NLE sequence keyboard review, import, serial start and separate assembly",
     page.locator('[data-h3-nle-status="assembly-inputs"]'),
   ).toContainText("Segment videos: 2. Cuts: 1.");
 });
+
+test("assembly observation retains closed failed code", () => {
+  expect(
+    productionAssemblyObservation({
+      state: "failed",
+      failureCode: "assembly_derived_input_failed",
+    }),
+  ).toEqual({ state: "failed", failureCode: "assembly_derived_input_failed" });
+  expect(
+    productionAssemblyObservation({
+      state: "failed",
+      failureCode: "workspace_capacity",
+    }),
+  ).toEqual({ state: "failed", failureCode: "workspace_capacity" });
+});
+
+test("assembly observation excludes private values", () => {
+  expect(productionAssemblyObservation(undefined)).toEqual({
+    state: "not_observed",
+    failureCode: null,
+  });
+  for (const state of [
+    "unavailable",
+    "planned",
+    "running",
+    "cancelling",
+    "succeeded",
+    "failed",
+  ]) {
+    expect(productionAssemblyObservation({ state, failureCode: null })).toEqual(
+      {
+        state,
+        failureCode: null,
+      },
+    );
+  }
+  for (const failureCode of [
+    "assembly_private_identifier",
+    "SYNTHETIC_PRIVATE_TEXT",
+    "C:\\synthetic-private\\file",
+    ["SYNTHETIC_PRIVATE_TEXT"],
+    { message: "SYNTHETIC_PRIVATE_TEXT" },
+    undefined,
+  ]) {
+    const value = productionAssemblyObservation({
+      state: "failed",
+      failureCode,
+      ...{ workspaceHandle: "SYNTHETIC_PRIVATE_TEXT" },
+    });
+    expect(value).toEqual({ state: "failed", failureCode: "unrecognized" });
+    expect(JSON.stringify(value)).not.toContain("SYNTHETIC_PRIVATE");
+    expect(JSON.stringify(value)).not.toContain("synthetic-private");
+    expect(Object.keys(value).sort()).toEqual(["failureCode", "state"]);
+  }
+  expect(
+    productionAssemblyObservation({
+      state: "SYNTHETIC_PRIVATE_TEXT",
+      failureCode: "assembly_execution_failed",
+    }),
+  ).toEqual({
+    state: "unrecognized",
+    failureCode: "assembly_execution_failed",
+  });
+});
+
+for (const mode of ["failed", "running", "disabled", "delayed"] as const) {
+  test(`assembly wait helper preserves ${mode} settlement`, async ({
+    page,
+  }) => {
+    await page.setContent(`
+      <main data-h3-nle-region="sequence">
+        <section data-h3-nle-assembly-state="running"></section>
+        <button data-h3-nle-control="production.refresh">Refresh</button>
+      </main>
+    `);
+    await page.evaluate((mode) => {
+      const refresh = document.querySelector<HTMLButtonElement>("button")!;
+      const assembly = document.querySelector("section")!;
+      document.body.dataset.refreshes = "0";
+      document.body.dataset.settled = "0";
+      refresh.disabled = mode === "disabled";
+      refresh.addEventListener("click", () => {
+        document.body.dataset.refreshes = String(
+          Number(document.body.dataset.refreshes) + 1,
+        );
+        refresh.disabled = true;
+        if (mode === "delayed")
+          assembly.setAttribute("data-h3-nle-assembly-state", "succeeded");
+        setTimeout(
+          () => {
+            if (mode === "failed") {
+              assembly.setAttribute("data-h3-nle-assembly-state", "failed");
+              assembly.setAttribute(
+                "data-code",
+                "assembly_derived_input_failed",
+              );
+            }
+            document.body.dataset.settled = "1";
+            refresh.disabled = false;
+          },
+          mode === "delayed" ? 150 : 0,
+        );
+      });
+    }, mode);
+    const sequence = page.locator('[data-h3-nle-region="sequence"]');
+    const started = performance.now();
+    if (mode === "delayed") {
+      await refreshProductionAssembly(sequence, 2_000);
+      // Read once at return: retrying would hide premature helper completion.
+      const settlement = await page.evaluate(() => ({
+        settled: document.body.dataset.settled,
+        refreshes: document.body.dataset.refreshes,
+      }));
+      expect(settlement.settled).toBe("1");
+      expect(settlement.refreshes).toBe("1");
+    } else {
+      await expect(
+        refreshProductionAssembly(sequence, mode === "failed" ? 2_000 : 250),
+      ).rejects.toThrow(
+        mode === "failed"
+          ? "assembly_terminal_failed"
+          : mode === "running"
+            ? "assembly_wait_timeout"
+            : /Timeout/,
+      );
+      if (mode === "failed") {
+        const failed = await page.locator("section").evaluate((assembly) => ({
+          state: assembly.getAttribute("data-h3-nle-assembly-state"),
+          failureCode: assembly.getAttribute("data-code"),
+        }));
+        expect(productionAssemblyObservation(failed)).toEqual({
+          state: "failed",
+          failureCode: "assembly_derived_input_failed",
+        });
+      }
+      expect(performance.now() - started).toBeLessThan(1_500);
+      const count = await page.locator("body").getAttribute("data-refreshes");
+      // Flush beyond the helper's own deadline: no timed-out poll may click later.
+      await page.waitForTimeout(300);
+      await expect(page.locator("body")).toHaveAttribute(
+        "data-refreshes",
+        count!,
+      );
+      expect(Number(count)).toBe(mode === "disabled" ? 0 : 1);
+    }
+  });
+}
 
 async function detachAtChildBoundary(page: Page, completed: boolean) {
   await page.goto("/nleSequence.html");

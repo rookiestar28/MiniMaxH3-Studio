@@ -55,7 +55,9 @@ import {
   type TransformWire,
 } from "./nleCommandBuilders";
 import { fill, nleCopy } from "./nleCopy";
-import { titleTextCovered } from "./nleTitleCoverage";
+import { titleTextCovered, titleTextRefusal } from "./nleTitleCoverage";
+import { applyPreset } from "./nleTextPresets";
+import { NleTextPresetGrid } from "./NleTextPresetGrid";
 import { assetDisplayNames, clipDisplayName } from "./nleTimelineSurface";
 import { NleActionIcon } from "./NleIconActions";
 import {
@@ -2118,6 +2120,35 @@ function ClipPropertyTabs({
           </PropertyGroup>
         ) : activeTab === "text" && style !== null && acceptedStyle !== null ? (
           <>
+            <NleTextPresetGrid
+              locale={locale}
+              mode="apply"
+              selected={(preset) =>
+                same(applyPreset(acceptedStyle, preset), acceptedStyle)
+              }
+              refusal={(preset) => {
+                if (busy) return text.assets.titleRefusals.busy;
+                const next = applyPreset(acceptedStyle, preset);
+                return titleTextCovered(textContentOf(clip), next)
+                  ? undefined
+                  : text.assets.titleRefusals[
+                      titleTextRefusal(textContentOf(clip), next)
+                    ];
+              }}
+              onChoose={(preset) => {
+                // Use accepted counterparts, not an unsubmitted size/font draft. Refusals
+                // must preserve that draft and issue no partial style command.
+                const next = applyPreset(acceptedStyle, preset);
+                if (
+                  busy ||
+                  same(next, acceptedStyle) ||
+                  !titleTextCovered(textContentOf(clip), next)
+                )
+                  return;
+                setStyle(next);
+                commitTextStyleValue(next);
+              }}
+            />
             <PropertyGroup
               label={copy.groups.textContent}
               resetLabel={resetLabel(copy.groups.textContent)}
@@ -2172,7 +2203,9 @@ function ClipPropertyTabs({
               {!textValid ? (
                 <p role="alert" className="h3-nle-validation">
                   {textSyntaxValid
-                    ? text.assets.titleRefusals.font_glyph_unsupported
+                    ? text.assets.titleRefusals[
+                        titleTextRefusal(content, acceptedStyle!)
+                      ]
                     : copy.invalidText}
                 </p>
               ) : null}
@@ -2287,7 +2320,11 @@ function ClipPropertyTabs({
               </CommitButton>
               {!textStyleValid ? (
                 <p role="alert" className="h3-nle-validation">
-                  {text.assets.titleRefusals.font_glyph_unsupported}
+                  {
+                    text.assets.titleRefusals[
+                      titleTextRefusal(textContentOf(clip), style!)
+                    ]
+                  }
                 </p>
               ) : null}
             </PropertyGroup>

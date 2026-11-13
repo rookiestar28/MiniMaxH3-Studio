@@ -3,6 +3,8 @@ import type {
   AppModeStartOptions,
   AppModeStartResult,
 } from "../host/appModeContract";
+import { projectAppModeSnapshot } from "../state/shellState";
+import type { AppModeEvent } from "./appModeMachine";
 import type { AppModeDecision } from "./appModeMachine";
 import type { ShellRuntime } from "./shellSession";
 
@@ -29,7 +31,16 @@ export function workingRouteRetainsExistingGraph(
   return route === "existing" || route === "connect";
 }
 
-export function createAppModeLifecycleTransitions({ deps }: ShellRuntime) {
+export function createAppModeLifecycleTransitions({
+  deps,
+  session,
+}: ShellRuntime) {
+  function sendAppModeLifecycle(event: AppModeEvent, project = false): void {
+    const snapshot = deps.appModeLifecycle.send(event);
+    if (project)
+      session.state = projectAppModeSnapshot(snapshot, session.state);
+  }
+
   function completeAppModeLifecycle(run: number): void {
     if (!deps.appModeLifecycle.isCurrent(run)) return;
     if (deps.appModeLifecycle.getSnapshot().value === "queued")
@@ -56,6 +67,7 @@ export function createAppModeLifecycleTransitions({ deps }: ShellRuntime) {
   // on the supplied host and incorrectly disables controls during module evaluation.
   return {
     completeAppModeLifecycle,
+    sendAppModeLifecycle,
     failAppModeLifecycle,
     currentAppModeCapability: () => deps.appModeController.capability(),
     currentAppModeRun: () => deps.appModeLifecycle.getRunSequence(),

@@ -188,6 +188,7 @@ _OSV_MAX_PACKAGES = 4096
 _CURRENT_SBOM_COMFYUI_COMMIT = "b323a345bbbfb2f3a95b5b73b68eb7919a26515e"
 _M16_03_HISTORICAL_COMFYUI_COMMIT = "c44dea18809e3ca0e12e25cbe6938c2c45a29c9d"
 _CURRENT_SBOM_NOTO_COMMIT = "c4a321e123-e4d4ff315f-57f4e0adf2-94fe3a95be".replace("-", "")
+_CURRENT_SBOM_CJK_COMMIT = "523d033d6c-b47f4a80c5-8a35753646-f5c3608a78".replace("-", "")
 
 
 class AuditError(ValueError):
@@ -1373,6 +1374,18 @@ def _osv_projection(
             "LIBRARY",
         ): _CURRENT_SBOM_NOTO_COMMIT,
     }
+    # Regional packages share one upstream commit but keep distinct family identities.
+    cjk_commit = _CURRENT_SBOM_CJK_COMMIT
+    for region in ("TC", "SC", "JP", "KR"):
+        github_commits[
+            (
+                f"Noto Sans {region}",
+                "NotoSansCJK-v2.004",
+                f"pkg:github/notofonts/noto-cjk@{cjk_commit}",
+                "bundled_font_runtime",
+                "LIBRARY",
+            )
+        ] = cjk_commit
     comment = package.get("comment")
     purpose = package.get("primaryPackagePurpose")
     github_commit = (
@@ -1408,10 +1421,21 @@ def _osv_query_plan(
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], bytes, str]:
     queries: list[dict[str, object]] = []
     nonclaims: list[dict[str, object]] = []
+    regional_families: set[str] = set()
     for index, package in enumerate(packages):
         query, nonclaim = _osv_projection(cast(dict[str, object], package), f"{field}[{index}]")
         if query is not None:
-            queries.append(query)
+            # CRITICAL: four closed regional identities share one commit. Coalesce only after
+            # projection validates every identity; general deduplication would conceal duplicate
+            # packages or let an unrecognized family inherit a reviewed font's advisory authority.
+            regional = query == {"commit": _CURRENT_SBOM_CJK_COMMIT}
+            if regional:
+                family = cast(dict[str, str], package)["name"]
+                if family in regional_families:
+                    raise AuditError("OSV SBOM regional font families must be unique")
+                regional_families.add(family)
+            if not regional or query not in queries:
+                queries.append(query)
         if nonclaim is not None:
             nonclaims.append(nonclaim)
     if not queries:

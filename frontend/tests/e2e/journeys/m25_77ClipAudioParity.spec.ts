@@ -14,6 +14,7 @@ import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 import semanticManifest from "../../../../governance/contracts/nle_semantic_conformance_manifest_v1.json" with { type: "json" };
+import { chooseClipAudioWindow } from "../../../e2e/clipAudioWindows";
 import {
   IDENTITY_CLIP_AUDIO,
   type ClipAudio,
@@ -76,8 +77,8 @@ const POINTS = Object.freeze([
 // which has no marker. Clip B plays its source from sample 0, so the marker sits at the middle of
 // its 24-frame fade-in, and a window holding it measures the marker, not the envelope (0.83
 // against a defined 0.25). Each preview window is therefore the capture's window nearest its
-// point that excludes the marker, and the final is measured on exactly the samples the preview
-// window covers; never measure the nominal window when it holds the marker.
+// point that stays at least one render quantum from the marker, and the final is measured on
+// exactly the samples the preview window covers; an overlap-only check admits marker energy.
 const PREVIEW_SOURCE_MARKER = Object.freeze({ start: 24_000, end: 24_024 });
 // The corpus's frozen audio-level bounds (plan 2.8): relative to the defined level, never below
 // the floor, both in millionths of the reference level.
@@ -181,36 +182,24 @@ function measurePreview(capture: AudioCapture, audio: ClipAudio) {
   );
   const cut = step.start_sample + WINDOW * firstClipShare;
   const first = envelopes[0]!.start_sample;
-  const clipStartOf = (index: number) =>
-    Math.round(envelopes[index]!.start_sample - cut);
-  const holdsMarker = (index: number) =>
-    clipStartOf(index) < PREVIEW_SOURCE_MARKER.end &&
-    clipStartOf(index) + WINDOW > PREVIEW_SOURCE_MARKER.start;
   const windows = POINTS.map(([name, centre]) => {
     const nominal = Math.round((cut + centre - WINDOW / 2 - first) / WINDOW);
-    if (envelopes[nominal] === undefined)
-      throw new Error(`the capture has no full window at ${name}`);
-    // The nearer neighbour that excludes the marker, when the nominal window holds it.
-    const index = !holdsMarker(nominal)
-      ? nominal
-      : [nominal - 1, nominal + 1]
-          .filter(
-            (candidate) =>
-              envelopes[candidate] !== undefined && !holdsMarker(candidate),
-          )
-          .sort(
-            (left, right) =>
-              Math.abs(clipStartOf(left) + WINDOW / 2 - centre) -
-              Math.abs(clipStartOf(right) + WINDOW / 2 - centre),
-          )[0];
-    const envelope = index === undefined ? undefined : envelopes[index];
-    if (envelope === undefined || envelope.sample_count !== WINDOW)
-      throw new Error(`the capture has no full window at ${name}`);
-    const clipStart = Math.round(envelope.start_sample - cut);
+    const {
+      envelope,
+      clipStartSample: clipStart,
+      markerAvoided,
+    } = chooseClipAudioWindow(envelopes, {
+      nominal,
+      centre,
+      cut,
+      windowSamples: WINDOW,
+      marker: PREVIEW_SOURCE_MARKER,
+      name,
+    });
     return {
       name,
       clipStartSample: clipStart,
-      markerAvoided: index !== nominal,
+      markerAvoided,
       measured: stereoLevel(envelope.channel_rms) / reference,
       defined: definedLevel(audio, clipStart),
     };

@@ -8,6 +8,7 @@
 // vocabulary in front of the user the first time a new code appears.
 
 import type { Locale } from "../i18n/catalog";
+import { sidebarCopy } from "../i18n/catalog";
 
 type Table = Readonly<{
   fallback: string;
@@ -76,7 +77,7 @@ const en: Tables = {
       qualification_compiler_unavailable:
         "This extension's files could not be read. Reinstall the extension.",
       qualification_host_bindings_unavailable:
-        "Sequence generation supports text-to-video segments without reference media.",
+        "Sequence generation supports Text to Video, Image to Video, Last Frame and First-Last Frame. Reference to Video sequences are not available yet. For a frame plan, update ComfyUI's native frame and guide support, then check readiness again.",
       qualification_changed:
         "The host, models or extension changed during the check. Check readiness again.",
     },
@@ -87,9 +88,9 @@ const en: Tables = {
       hard_content_crosses_boundary:
         "A cut falls inside a shot that must stay whole: a hard boundary, exact dialogue or visible text. Change the target, the policy or the shot timing.",
       local_reference_unavailable:
-        "A segment needs a reference that its generation mode cannot use.",
+        "A shot refers to media unavailable in its segment. Keep frame references in their first or last segment, or supply an ordinary reference image for appearance that continues across segments.",
       required_asset_missing:
-        "A segment needs a first frame, last frame or reference image that the Context does not have.",
+        "A segment lacks the media its generation mode needs. Add the required media, such as an ordinary reference image for Reference to Video. For frame-only input, use Image to Video, First-Last Frame or Last Frame.",
       native_mapping_unavailable:
         "This host has no native generation mode for a segment.",
       managed_execution_qualification_pending:
@@ -159,7 +160,16 @@ const en: Tables = {
       invalid_response:
         "The server's reply could not be used. Reconnect; the sequence may have expired.",
       unsupported_prepared_context:
-        "This segment cannot be generated here: sequence generation supports text-to-video segments without reference media and prompts up to 4,096 characters.",
+        "This segment needs Text to Video, Image to Video, Last Frame or First-Last Frame, its declared frame sources and a prompt of up to 4,096 characters. Reference to Video sequences are not available yet.",
+      sequence_media_binding_missing:
+        "Choose the required first or last frame from a Load Image node on the original workflow, then generate again.",
+      sequence_media_binding_invalid:
+        "Reselect the plan's frame sources from Load Image nodes on the original workflow, then generate again.",
+      compile_failed: sidebarCopy("en").errorMessages.compile_failed,
+      sequence_media_changed:
+        "A declared frame source or crop changed. Restore the original image and crop, then retry. To use different media, cancel any running sequence and generate again.",
+      sequence_media_unavailable:
+        "A declared frame source is unavailable. Restore its Load Image node and image on the original workflow, then retry the segment or generate again.",
       artifact_content_invalid:
         "The generated video did not pass verification. Retry the segment.",
       artifact_locator_rejected:
@@ -437,7 +447,7 @@ const zhTW: Tables = {
       qualification_compiler_unavailable:
         "無法讀取此擴充功能的檔案，請重新安裝擴充功能。",
       qualification_host_bindings_unavailable:
-        "序列生成支援不含參考媒體的文字轉影片片段。",
+        "序列生成支援 Text to Video、Image to Video、Last Frame 與 First-Last Frame，尚未支援 Reference to Video 序列。若是影格計畫，請更新 ComfyUI 的原生影格與引導節點支援，再重新檢查就緒狀態。",
       qualification_changed:
         "檢查期間主機、模型或擴充功能已變更，請再檢查一次。",
     },
@@ -447,9 +457,10 @@ const zhTW: Tables = {
     codes: {
       hard_content_crosses_boundary:
         "有剪接點落在必須保持完整的鏡頭內（硬邊界、精確對白或畫面文字）。請變更目標時長、分段策略或鏡頭時間。",
-      local_reference_unavailable: "有片段需要其生成模式無法使用的參考素材。",
+      local_reference_unavailable:
+        "鏡頭引用了該片段無法使用的素材。請將影格引用保留在其所屬的第一段或最後一段，或提供一般參考圖片以維持跨片段的外觀。",
       required_asset_missing:
-        "有片段需要首影格、尾影格或參考圖片，但 Context 中沒有。",
+        "片段缺少其生成模式所需的素材。請補上必要素材，例如為 Reference to Video 補上一般參考圖片。若只有首尾影格，請使用 Image to Video、First-Last Frame 或 Last Frame。",
       native_mapping_unavailable: "此主機沒有對應片段的原生生成模式。",
       managed_execution_qualification_pending: "匯入計畫後請檢查就緒狀態。",
       managed_execution_unsupported: "此主機無法執行序列生成。",
@@ -505,7 +516,16 @@ const zhTW: Tables = {
         "伺服器拒絕了此序列步驟。請重新整理後重試或取消。",
       invalid_response: "無法使用伺服器的回應。請重新連線；序列可能已過期。",
       unsupported_prepared_context:
-        "此片段無法在此生成：序列生成支援不含參考媒體、提示詞不超過 4,096 個字元的文字轉影片片段。",
+        "此片段需要 Text to Video、Image to Video、Last Frame 或 First-Last Frame、已宣告的影格來源，以及不超過 4,096 個字元的提示詞。尚未支援 Reference to Video 序列。",
+      sequence_media_binding_missing:
+        "請從原始工作流程的 Load Image 節點選擇必要的首影格或尾影格，再重新生成。",
+      sequence_media_binding_invalid:
+        "請從原始工作流程的 Load Image 節點重新選擇計畫的影格來源，再重新生成。",
+      compile_failed: sidebarCopy("zh-TW").errorMessages.compile_failed,
+      sequence_media_changed:
+        "已宣告的影格來源或裁切已變更。請還原原始影像與裁切後重試。若要改用其他媒體，請取消任何執行中的序列，再重新生成。",
+      sequence_media_unavailable:
+        "無法使用已宣告的影格來源。請在原始工作流程還原其 Load Image 節點與影像，再重試片段或重新生成。",
       artifact_content_invalid: "生成的影片未通過驗證。請重試該片段。",
       artifact_locator_rejected: "生成的影片檔案遺失或已變更。請重試該片段。",
       artifact_store_unavailable:
@@ -739,7 +759,7 @@ const zhCN: Tables = {
       qualification_compiler_unavailable:
         "无法读取此扩展的文件，请重新安装扩展。",
       qualification_host_bindings_unavailable:
-        "序列生成支持不含参考媒体的文本生成视频片段。",
+        "序列生成支持 Text to Video、Image to Video、Last Frame 和 First-Last Frame，尚不支持 Reference to Video 序列。如果是帧计划，请更新 ComfyUI 的原生帧与引导节点支持，再重新检查就绪状态。",
       qualification_changed: "检查期间主机、模型或扩展已变更，请再检查一次。",
     },
   },
@@ -748,9 +768,10 @@ const zhCN: Tables = {
     codes: {
       hard_content_crosses_boundary:
         "有剪切点落在必须保持完整的镜头内（硬边界、精确对白或画面文字）。请更改目标时长、分段策略或镜头时间。",
-      local_reference_unavailable: "有片段需要其生成模式无法使用的参考素材。",
+      local_reference_unavailable:
+        "镜头引用了该片段无法使用的素材。请将帧引用保留在其所属的第一段或最后一段，或提供普通参考图片以维持跨片段的外观。",
       required_asset_missing:
-        "有片段需要首帧、尾帧或参考图片，但 Context 中没有。",
+        "片段缺少其生成模式所需的素材。请补上必要素材，例如为 Reference to Video 补上普通参考图片。若只有首尾帧，请使用 Image to Video、First-Last Frame 或 Last Frame。",
       native_mapping_unavailable: "此主机没有对应片段的原生生成模式。",
       managed_execution_qualification_pending: "导入计划后请检查就绪状态。",
       managed_execution_unsupported: "此主机无法执行序列生成。",
@@ -804,7 +825,16 @@ const zhCN: Tables = {
       prepared_context_rejected: "服务器拒绝了此序列步骤。请刷新后重试或取消。",
       invalid_response: "无法使用服务器的响应。请重新连接；序列可能已过期。",
       unsupported_prepared_context:
-        "此片段无法在此生成：序列生成支持不含参考媒体、提示词不超过 4,096 个字符的文本生成视频片段。",
+        "此片段需要 Text to Video、Image to Video、Last Frame 或 First-Last Frame、已声明的帧来源，以及不超过 4,096 个字符的提示词。尚不支持 Reference to Video 序列。",
+      sequence_media_binding_missing:
+        "请从原始工作流的 Load Image 节点选择必要的首帧或尾帧，再重新生成。",
+      sequence_media_binding_invalid:
+        "请从原始工作流的 Load Image 节点重新选择计划的帧来源，再重新生成。",
+      compile_failed: sidebarCopy("zh-CN").errorMessages.compile_failed,
+      sequence_media_changed:
+        "已声明的帧来源或裁剪已更改。请恢复原始图像与裁剪后重试。如需使用其他媒体，请取消任何运行中的序列，再重新生成。",
+      sequence_media_unavailable:
+        "无法使用已声明的帧来源。请在原始工作流恢复其 Load Image 节点与图像，再重试片段或重新生成。",
       artifact_content_invalid: "生成的视频未通过验证。请重试该片段。",
       artifact_locator_rejected: "生成的视频文件丢失或已变更。请重试该片段。",
       artifact_store_unavailable:

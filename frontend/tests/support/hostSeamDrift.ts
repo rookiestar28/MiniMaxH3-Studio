@@ -23,6 +23,11 @@ const TRANSITION_ARTIFACT_KEYS = [
   "seam_contract_sha256_parts",
 ];
 const TRANSITION_CHANGE_KEYS = ["seam_id", "added_source_paths"];
+const TRANSITION_RECONCILIATION_CHANGE_KEYS = [
+  "seam_id",
+  "added_source_paths",
+  "removed_source_paths",
+];
 const TRANSITION_REMOVAL_CHANGE_KEYS = [
   "seam_id",
   "removed_source_paths",
@@ -1003,6 +1008,35 @@ const REFERENCE_CROP_SOURCE_PATH_ADDITIONS = Object.freeze([
   },
 ]);
 
+// IMPORTANT: caller relocation changes paths without changing ownership. Keep these pins
+// independent of mutable census bytes, or the current census would authorize its own drift.
+const FRAME_SOURCES_BASE_SOURCE = Object.freeze({
+  commit: ["e363c1b8", "b745d705", "676936f4", "0d9b0edf", "7434ce3c"].join(""),
+  tree: ["42bc6fb0", "80c1d572", "bdaf41a1", "0c8d81ca", "7738db5a"].join(""),
+});
+const FRAME_SOURCES_CENSUS_SHA256 = [
+  "191b1f89",
+  "ab02266b",
+  "d817d67e",
+  "a44ee4b5",
+  "55164aa2",
+  "2df7a070",
+  "10657621",
+  "bb0b6126",
+].join("");
+const FRAME_SOURCES_PATH_CHANGES = Object.freeze([
+  {
+    seam_id: "frontend.api.fetch_api",
+    added_source_paths: ["frontend/src/host/appModeProfileAdmission.ts"],
+    removed_source_paths: ["frontend/src/host/appMode.ts"],
+  },
+  {
+    seam_id: "frontend.app.graph",
+    added_source_paths: ["frontend/src/lifecycle/nleWorkspaceSession.ts"],
+    removed_source_paths: [],
+  },
+]);
+
 type HostSeamCensusTransitionWire = Readonly<{
   schema:
     | "h3.context.host_seam_census_transition.v1"
@@ -1027,7 +1061,8 @@ type HostSeamCensusTransitionWire = Readonly<{
     | "h3.context.host_seam_census_transition_retained_media.v1"
     | "h3.context.host_seam_census_transition_project_persistence.v1"
     | "h3.context.host_seam_census_transition_perception_host.v1"
-    | "h3.context.host_seam_census_transition_reference_crop.v1";
+    | "h3.context.host_seam_census_transition_reference_crop.v1"
+    | "h3.context.host_seam_census_transition_frame_sources.v1";
   item:
     | "M23-15"
     | "M23-18"
@@ -1050,7 +1085,8 @@ type HostSeamCensusTransitionWire = Readonly<{
     | "RETAINED-MEDIA"
     | "PROJECT-PERSISTENCE"
     | "PERCEPTION-HOST"
-    | "REFERENCE-CROP";
+    | "REFERENCE-CROP"
+    | "FRAME-SOURCES";
   source: Readonly<{ commit: string; tree: string }>;
   artifacts: Readonly<{
     from_census_sha256: string;
@@ -1059,6 +1095,11 @@ type HostSeamCensusTransitionWire = Readonly<{
     seam_contract_sha256: string;
   }>;
   changes: readonly (
+    | Readonly<{
+        seam_id: string;
+        added_source_paths: readonly string[];
+        removed_source_paths: readonly string[];
+      }>
     | Readonly<{
         seam_id: string;
         added_source_paths: readonly string[];
@@ -1301,7 +1342,10 @@ function parseHostSeamCensusTransition(
       root.item === "PERCEPTION-HOST") ||
     (root.schema ===
       "h3.context.host_seam_census_transition_reference_crop.v1" &&
-      root.item === "REFERENCE-CROP")
+      root.item === "REFERENCE-CROP") ||
+    (root.schema ===
+      "h3.context.host_seam_census_transition_frame_sources.v1" &&
+      root.item === "FRAME-SOURCES")
   ))
     throw new Error("census transition has an unsupported identity");
   const source = closed(
@@ -1320,12 +1364,13 @@ function parseHostSeamCensusTransition(
     root.changes.length > 64
   )
     throw new Error("census transition changes must be bounded");
-  // A transition document is either all additions or all removals; a removal also has to say who
-  // the seam's owner becomes, because removing the current owner's path without naming the next one
-  // would leave the census unable to say which source is authoritative.
+  // Historical removal schemas also name the next owner; caller-only reconciliation has
+  // its own closed schema so it cannot silently relax those ownership requirements.
   const isRemovalTransition = REMOVAL_TRANSITION_SCHEMAS.has(
     String(root.schema),
   );
+  const isReconciliationTransition =
+    root.schema === "h3.context.host_seam_census_transition_frame_sources.v1";
   const validSourcePath = (path: unknown): path is string =>
     typeof path === "string" &&
     path.length <= 260 &&
@@ -1336,12 +1381,46 @@ function parseHostSeamCensusTransition(
     const change = closed(
       value,
       "census transition change",
-      isRemovalTransition
-        ? TRANSITION_REMOVAL_CHANGE_KEYS
-        : TRANSITION_CHANGE_KEYS,
+      isReconciliationTransition
+        ? TRANSITION_RECONCILIATION_CHANGE_KEYS
+        : isRemovalTransition
+          ? TRANSITION_REMOVAL_CHANGE_KEYS
+          : TRANSITION_CHANGE_KEYS,
     );
     if (typeof change.seam_id !== "string" || !SEAM_ID.test(change.seam_id))
       throw new Error("census transition change is invalid");
+    if (isReconciliationTransition) {
+      const parsePaths = (value: unknown): readonly string[] => {
+        if (
+          !Array.isArray(value) ||
+          value.length > 64 ||
+          value.some((path) => !validSourcePath(path))
+        )
+          throw new Error("census transition change is invalid");
+        const paths = [...value] as string[];
+        if (
+          paths.some(
+            (path, index) => path !== [...new Set(paths)].sort()[index],
+          )
+        )
+          throw new Error("census transition paths must be sorted and unique");
+        return Object.freeze(paths);
+      };
+      const added = parsePaths(change.added_source_paths);
+      const removed = parsePaths(change.removed_source_paths);
+      if (
+        added.length + removed.length === 0 ||
+        added.some((path) => removed.includes(path))
+      )
+        throw new Error(
+          "census transition reconciliation must be nonempty and disjoint",
+        );
+      return Object.freeze({
+        seam_id: change.seam_id,
+        added_source_paths: added,
+        removed_source_paths: removed,
+      });
+    }
     const sourcePaths = isRemovalTransition
       ? change.removed_source_paths
       : change.added_source_paths;
@@ -1720,6 +1799,15 @@ export function verifyHostSeamBaseline(
       seam_contract_sha256: PERCEPTION_HOST_SEAM_CONTRACT_SHA256,
       changes: REFERENCE_CROP_SOURCE_PATH_ADDITIONS,
     },
+    {
+      item: "FRAME-SOURCES",
+      source: FRAME_SOURCES_BASE_SOURCE,
+      from_census_sha256: REFERENCE_CROP_CENSUS_SHA256,
+      to_census_sha256: FRAME_SOURCES_CENSUS_SHA256,
+      fixture_sha256: ACCEPTED_MODAL_KEYBOARD_FIXTURE_SHA256,
+      seam_contract_sha256: ACCEPTED_MODAL_KEYBOARD_SEAM_CONTRACT_SHA256,
+      changes: FRAME_SOURCES_PATH_CHANGES,
+    },
   ] as const;
   const targetIndex = expectedTransitions.findIndex(
     (expected) => expected.to_census_sha256 === censusSha256,
@@ -1760,16 +1848,14 @@ export function verifyHostSeamBaseline(
     const finalPathStates = new Map<string, "added" | "removed">();
     for (const transition of transitions)
       for (const change of transition.changes) {
-        const state =
-          "added_source_paths" in change
-            ? ("added" as const)
-            : ("removed" as const);
-        const paths =
-          "added_source_paths" in change
-            ? change.added_source_paths
-            : change.removed_source_paths;
-        for (const path of paths)
-          finalPathStates.set(`${change.seam_id}\0${path}`, state);
+        // IMPORTANT: a caller relocation contains both arrays. Choosing one by property
+        // presence would lose the removal and leave the old source authorized.
+        if ("removed_source_paths" in change)
+          for (const path of change.removed_source_paths)
+            finalPathStates.set(`${change.seam_id}\0${path}`, "removed");
+        if ("added_source_paths" in change)
+          for (const path of change.added_source_paths)
+            finalPathStates.set(`${change.seam_id}\0${path}`, "added");
       }
     // IMPORTANT: owner moves are ordered. Validate a seam against its last authorized owner;
     // checking every historical intermediate owner rejects a legitimate later relocation.

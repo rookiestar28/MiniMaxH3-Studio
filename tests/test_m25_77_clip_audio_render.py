@@ -89,13 +89,13 @@ BASE_IDENTITY = {
         "sha256:3a09b8d0d358a69f0f58f27c272889cbafc51fd8b0e99177daca4e171e546521"
     ),
     "bound_video_plan.plan_wire_without_chunks": (
-        "27e9bb0befe71c455c54a109285a3c582b8f52da284635c6f73dcc3d8a455990"  # noqa: E501  # pragma: allowlist secret
+        "6438642cd18058dc95bd90cf7e793440933ff5dd972212144568c0543c07f336"  # noqa: E501  # pragma: allowlist secret
     ),
     "bound_video_plan.render_plan_fingerprint": (
-        "sha256:8a64416a4fcbba4a70a14b40f31bc25c6c550b1f9c1b43df22e3ab330c87dc60"
+        "sha256:ce62c3199d91a16ba0f96758b606bfd66f3f40a78b1b64be868f5c0fbf2ed49a"
     ),
     "bound_video_plan.idempotency_fingerprint": (
-        "sha256:245efc6ad395d3a727e06b627f22b1d5cc8e737637ae09465ece727452ce2135"
+        "sha256:fa67147868c8c87db3fb6c4f2599a1cbfc19ef82967893855a2d53bdfe96d4c2"
     ),
     "bound_video_plan.filter_graph": (
         "4f4dd23850ce392149140208c98ff170e501aec147785185a333dd9b5e5546cb"  # noqa: E501  # pragma: allowlist secret
@@ -107,7 +107,7 @@ BASE_IDENTITY = {
         "sha256:cbfca53d49070657ccf26ef74a8abedd29f70ff2ae4fde513af95c8b6c278dca"
     ),
     "bound_video_plan.semantic_render_fingerprint": (
-        "sha256:577521e4ce044e431eee85ac190b42bda7e8c143d784f7ac28139bab4abcec75"
+        "sha256:ca239bdb61cb536db2417e67a4a90873f3c403d587404be451da22ad30dc9026"
     ),
 }
 

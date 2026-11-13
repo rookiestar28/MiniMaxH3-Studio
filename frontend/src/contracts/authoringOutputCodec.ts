@@ -27,6 +27,7 @@ export const OUTPUT_FAILURES = [
   "store_unavailable",
   "service_closed",
   "runtime_unavailable",
+  "path_too_deep",
 ] as const;
 export type OutputPhase = (typeof OUTPUT_PHASES)[number];
 export type OutputFailure = (typeof OUTPUT_FAILURES)[number];
@@ -40,6 +41,7 @@ export const OUTPUT_ERROR_STATUS = Object.freeze({
   not_ready: 409,
   resource_limit: 429,
   runtime_unavailable: 503,
+  path_too_deep: 503,
   preview_unavailable: 503,
   internal_error: 500,
 });

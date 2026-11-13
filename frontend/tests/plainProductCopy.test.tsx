@@ -109,7 +109,7 @@ describe("B-M1605-COPY-01 plain reason tables", () => {
 });
 
 describe("B-M1605-COPY-01 sequence pane", () => {
-  function pane(locale: Locale) {
+  function pane(locale: Locale, blocker = "hard_content_crosses_boundary") {
     const failedProjection = {
       parentSequenceId: "parent.1",
       state: "paused_failure",
@@ -151,7 +151,7 @@ describe("B-M1605-COPY-01 sequence pane", () => {
         revision: 1,
         fingerprint: fp("6"),
         importable: false,
-        blocker_codes: ["hard_content_crosses_boundary"],
+        blocker_codes: [blocker],
         start_hold_codes: ["managed_execution_qualification_pending"],
         segments: [1, 2].map((ordinal) => ({
           segment_id: `segment_${ordinal}`,
@@ -232,6 +232,50 @@ describe("B-M1605-COPY-01 sequence pane", () => {
       expect(text).toContain(
         plainReason(locale, "sequence", "queue_callback_incomplete"),
       );
+    },
+  );
+
+  it.each(LOCALES)(
+    "names ordinary references and explicit frame modes for missing media in %s",
+    (locale) => {
+      const view = pane(locale, "required_asset_missing");
+      const element = view.container.querySelector(
+        '[data-h3-nle-status="proposal-blockers"]',
+      )!;
+      expect(element.getAttribute("data-codes")).toBe("required_asset_missing");
+      const text = element.textContent ?? "";
+      for (const mode of ["Image to Video", "First-Last Frame", "Last Frame"])
+        expect(text).toContain(mode);
+      expect(text).toContain(
+        {
+          en: "ordinary reference image",
+          "zh-TW": "一般參考圖片",
+          "zh-CN": "普通参考图片",
+        }[locale],
+      );
+      expect(text).not.toContain("Context does not have");
+      expect(text).not.toContain("Context 中没有");
+      expect(text).not.toContain("Context 中沒有");
+    },
+  );
+
+  it.each(LOCALES)(
+    "explains local reference ownership and continuing appearance in %s",
+    (locale) => {
+      const view = pane(locale, "local_reference_unavailable");
+      const element = view.container.querySelector(
+        '[data-h3-nle-status="proposal-blockers"]',
+      )!;
+      expect(element.getAttribute("data-codes")).toBe(
+        "local_reference_unavailable",
+      );
+      const expected = {
+        en: ["first or last segment", "ordinary reference image"],
+        "zh-TW": ["第一段或最後一段", "一般參考圖片"],
+        "zh-CN": ["第一段或最后一段", "普通参考图片"],
+      }[locale];
+      for (const words of expected)
+        expect(element.textContent).toContain(words);
     },
   );
 

@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 from typing import Final
 
+import pytest
+
 from comfyui_h3_context.adapters.authoring_derivative_generator import (
     VIDEO_PROXY_GOP,
     VIDEO_PROXY_MAX_BITS_PER_SECOND,
@@ -48,10 +50,24 @@ def _typescript_table(source: Path, opening: str) -> dict[str, int]:
     text = source.read_text(encoding="utf-8")
     start = text.index(opening) + len(opening)
     body = text[start : text.index("}", start)]
+    # IMPORTANT: measured-size comments can resemble members ("OTF: 8,543,168");
+    # discard line comments before parsing numbers or a harmless guard comment invents a kind.
+    body = re.sub(r"//[^\r\n]*", "", body)
     table: dict[str, int] = {}
     for name, expression in re.findall(r"(\w+):\s*([0-9_ */]+),", body):
         table[name] = int(eval(expression.replace("_", "")))  # noqa: S307 - literal arithmetic
     return table
+
+
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
+def test_real_table_comments_and_checkout_newlines_do_not_add_kinds(
+    tmp_path: Path, newline: bytes
+) -> None:
+    source = tmp_path / "codec.ts"
+    source.write_bytes(CODEC.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline))
+    assert _typescript_table(
+        source, "const byteLimits: Readonly<Record<AuthoringMediaDerivativeKind, number>> = {"
+    ) == {kind: derivative_byte_limit(kind) for kind in KINDS}
 
 
 def test_every_kind_has_the_same_byte_ceiling_on_both_ends() -> None:

@@ -10,3 +10,6 @@ tests/fixtures/m25_20_semantic_media/
 .planning/
 .tmp/
 ../comfyui_h3_context/web/
+
+# JSON.stringify owns this byte-pinned baseline serialization.
+tests/fixtures/managedT2vaGraph.json

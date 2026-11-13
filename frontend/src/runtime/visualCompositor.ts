@@ -10,6 +10,7 @@ import {
   type PublicCompositionSnapshot,
   type ResolvedCompositionScene,
 } from "../contracts/compositionCodec";
+import { isPackagedFontAssetId } from "./packagedFontAssets";
 
 export const VISUAL_COMPOSITOR_RECEIPT_SCHEMA =
   "h3.visual_compositor_receipt.v1" as const;
@@ -923,7 +924,7 @@ function measureTabbedLine(
   return Object.freeze({ width: cursor, chunks: Object.freeze(chunks) });
 }
 
-function drawText(
+export function drawText(
   context: CanvasRenderingContext2D,
   layer: DecodedLayer,
   resource: Extract<VisualLayerResource, { kind: "font" }>,
@@ -934,8 +935,9 @@ function drawText(
 ): void {
   const text = layer.text;
   if (text === null) fail("invalid_contract", "text layer has no text style");
+  // CRITICAL: use the bundled manifest's font set; a legacy literal refuses regional titles.
   if (
-    textField<string>(text, "fontAssetId") !== "h3.font.noto_sans.v1" ||
+    !isPackagedFontAssetId(textField<string>(text, "fontAssetId")) ||
     typeof resource.family !== "string" ||
     resource.family.length < 1 ||
     resource.family.length > 128 ||
@@ -1290,8 +1292,9 @@ function validateScene(
       if (resource?.kind !== "font" || layer.text === null)
         fail("source_unavailable", "text resource is unavailable");
       const fontId = textField<string>(layer.text, "fontAssetId");
+      // CRITICAL: use the bundled manifest's font set; a legacy literal refuses regional titles.
       if (
-        fontId !== "h3.font.noto_sans.v1" ||
+        !isPackagedFontAssetId(fontId) ||
         assets.get(fontId)?.kind !== "font" ||
         typeof resource.family !== "string" ||
         resource.family.length < 1 ||

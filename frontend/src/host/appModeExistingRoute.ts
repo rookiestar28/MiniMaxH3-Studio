@@ -6,6 +6,9 @@ import type { OfficialAssetResolution } from "./officialAssetResolution";
 import type { SpliceMediaIds } from "./templateMaterialization";
 import { matchesReferenceBindingIdentity } from "./referenceBindingIdentity";
 import { IMAGE_CROP_NODE_TYPE } from "./imageCropCapability";
+import type { PreparedSequenceMedia } from "./preparedSequenceMedia";
+import { matchesPreparedSequenceMedia } from "./preparedSequenceAdmission";
+import { isBoundedPrivateCanonicalPrompt } from "./privateCanonicalPrompt";
 import {
   cropEndpoint,
   matchesImageCropNodes,
@@ -61,7 +64,9 @@ export function isCompatibleExistingPrompt(
   compiled: AppModeCompiledPrompt,
   route: CompiledPromptRoute = "materialize",
   existingSubject?: ExistingCompiledAdmission,
+  sequence?: PreparedSequenceMedia,
 ): boolean {
+  if (sequence !== undefined && route !== "prepared") return false;
   const nodes = compiledOutputNodes(compiled);
   if (nodes.length === 0) return false;
   // IMPORTANT: existing source topology is user-owned. This branch must stay
@@ -187,7 +192,9 @@ export function isCompatibleExistingPrompt(
       (isReference || frameRegistryRequired ? 1 : 0) ||
     typeof requestInputs.user_intent !== "string" ||
     requestInputs.user_intent.trim().length === 0 ||
-    requestInputs.user_intent.length > 4096 ||
+    (sequence === undefined
+      ? requestInputs.user_intent.length > 4096
+      : !isBoundedPrivateCanonicalPrompt(requestInputs.user_intent)) ||
     // the authored length. Absent or zero is the host loader sentinel for
     // an unset optional widget, which leaves the node default in force and is a
     // perfectly bindable graph; anything else must be a duration inside the
@@ -371,7 +378,12 @@ export function isCompatibleExistingPrompt(
     const taskMode = requestInputs.task_mode as AppModeTaskMode;
     const imageCount = byClass.get(loadImageNodeType)?.length ?? 0;
     const first = generationInputs.first_frame;
-    const last = generationInputs.last_frame;
+    const last =
+      sequence === undefined
+        ? generationInputs.last_frame
+        : record(byClass.get("MiniMaxH3AddGuide")?.[0]?.inputs)?.image;
+    if (sequence !== undefined && generationInputs.last_frame !== undefined)
+      return false;
     const validImage = (value: unknown): boolean =>
       validTarget(value, imageSources, new Set([0]));
     const typedFirst = referenceInputs?.first_frame;
@@ -405,7 +417,7 @@ export function isCompatibleExistingPrompt(
         return false;
     } else if (
       (taskMode === "t2va" &&
-        (imageCount !== 0 ||
+        (imageCount !== (sequence?.sequenceTaskMode === "i2va" ? 1 : 0) ||
           first !== undefined ||
           last !== undefined ||
           typedFirst !== undefined ||
@@ -902,7 +914,9 @@ export function compiledPromptMatchesRequestedRoute(
   existingSubject?: ExistingCompiledAdmission,
   canonicalLowering?: ProductionCanonicalLowering,
   canvasOnly = false,
+  sequence?: PreparedSequenceMedia,
 ): boolean {
+  if (sequence !== undefined && route !== "prepared") return false;
   const useExisting = route === "existing";
   if (
     inputs.image_crops !== undefined &&
@@ -959,6 +973,7 @@ export function compiledPromptMatchesRequestedRoute(
   const byId = new Map(nodes.map(({ id, node }) => [id, node] as const));
   if (
     (route === "materialize" || route === "prepared") &&
+    sequence === undefined &&
     (!matchesImageCropNodes(materialized, byId) ||
       !matchesRequestedImageCrops(inputs, materialized))
   )
@@ -977,6 +992,13 @@ export function compiledPromptMatchesRequestedRoute(
     !isLink(requestDuration)
   )
     return false;
+  if (sequence !== undefined)
+    return matchesPreparedSequenceMedia(
+      compiled,
+      materialized,
+      inputs,
+      sequence,
+    );
   const sourceId = (value: unknown): string | undefined =>
     isLink(value) ? String(value[0]) : undefined;
   const sameExactLink = (left: unknown, right: unknown): boolean =>

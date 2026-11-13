@@ -1,3 +1,4 @@
+import { stdout } from "node:process";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -176,6 +177,185 @@ function preparedContext(
   };
 }
 
+function framePreparedContext() {
+  const refs = ["first_frame", "last_frame"].map((role, index) => ({
+    asset_id: `${role}_1`,
+    role,
+    kind: "image",
+    connection_order: index + 1,
+    metadata: null,
+    paired_video_id: null,
+  }));
+  return preparedContext({
+    schema: "h3.context.managed_prepared_context.v2",
+    task_mode: "fl2va",
+    sequence_task_mode: "fl2va",
+    geometry_donor_asset_id: null,
+    ordered_references: refs,
+    canonical_lowering: null,
+    media_bindings: {
+      schema: "h3.context.sequence_media_binding_set.v1",
+      entries: refs.map((ref) => ({
+        asset_id: ref.asset_id,
+        role: ref.role,
+        kind: "image",
+        loader_class: "LoadImage",
+        loader_node_id: ref.role,
+        locator: `synthetic/${ref.role}.png`,
+        source_identity: {
+          schema: "h3.context.input_geometry.receipt.v2",
+          receipt_handle: "ig_" + "r".repeat(40),
+          source_fingerprint: fp("a"),
+        },
+        registry_endpoint: {
+          node_id: "registry",
+          input_name: ref.role,
+          source_node_id: ref.role,
+          source_slot: 0,
+        },
+        transform: null,
+      })),
+    },
+  });
+}
+
+describe("private prepared V2 binding contract", () => {
+  it("measures the fully populated private V2 maximum Unicode envelope", () => {
+    const value = framePreparedContext();
+    const prompt = "🌟".repeat(4096);
+    const entries = ["first_frame", "last_frame"].map((role, index) => {
+      const asset = `asset${index}`.padEnd(128, "n"),
+        loader = `loader${index}`.padEnd(128, "n"),
+        crop = `crop${index}`.padEnd(128, "n");
+      return {
+        asset_id: asset,
+        role,
+        kind: "image",
+        loader_class: "LoadImage",
+        loader_node_id: loader,
+        locator: "🌟".repeat(512),
+        source_identity: {
+          schema: "h3.context.input_geometry.receipt.v2",
+          receipt_handle: "ig_" + "r".repeat(96),
+          source_fingerprint: fp("a"),
+        },
+        registry_endpoint: {
+          node_id: "registry".padEnd(128, "n"),
+          input_name: role,
+          source_node_id: crop,
+          source_slot: 0,
+        },
+        transform: {
+          node_id: crop,
+          class_type: "ImageCropV2",
+          region: { x: 16352, y: 16352, width: 32, height: 32 },
+        },
+      };
+    });
+    Object.assign(value, {
+      parent_sequence_id: "p".repeat(128),
+      segment_id: "s".repeat(128),
+      context_report_id: "r".repeat(128),
+      context_workspace_handle: "ws_" + "w".repeat(96),
+      canonical_prompt: prompt,
+      canonical_prompt_fingerprint: canonicalStringFingerprint(prompt),
+      ordered_references: entries.map((row, index) =>
+        reference(row.asset_id, "image", row.role, index + 1),
+      ),
+      media_bindings: {
+        schema: "h3.context.sequence_media_binding_set.v1",
+        entries,
+      },
+      canonical_lowering: {
+        ...(preparedContext().canonical_lowering as object),
+        schema: "h3.context.production_canonical_lowering.v2",
+        task_mode: "fl2va",
+        binding_roles: ["first_frame", "last_frame"],
+      },
+    });
+    const size = (value: unknown) =>
+      new TextEncoder().encode(JSON.stringify(value)).byteLength;
+    expect(decodeProductionManagedPreparedContext(value).canonical_prompt).toBe(
+      prompt,
+    );
+    expect(entries.every((row) => size(row) <= 4096)).toBe(true);
+    expect(size(value)).toBeLessThanOrEqual(32768);
+    expect([...prompt]).toHaveLength(4096);
+    expect(size(prompt) - 2).toBe(16384);
+    stdout.write(
+      JSON.stringify({
+        maximum_entry_bytes: entries.map(size),
+        maximum_frame_prepared_bytes: size(value),
+      }) + "\n",
+    );
+  });
+  it("joins a V2 lowering to the child's exact mode and ordered roles", () => {
+    const value = framePreparedContext();
+    value.canonical_lowering = {
+      ...(preparedContext().canonical_lowering as object),
+      schema: "h3.context.production_canonical_lowering.v2",
+      task_mode: "fl2va",
+      binding_roles: ["first_frame", "last_frame"],
+    };
+    expect(
+      decodeProductionManagedPreparedContext(value).canonical_lowering,
+    ).toMatchObject({
+      schema: "h3.context.production_canonical_lowering.v2",
+      taskMode: "fl2va",
+      bindingRoles: ["first_frame", "last_frame"],
+    });
+    expect(() =>
+      decodeProductionManagedPreparedContext({
+        ...value,
+        canonical_lowering: {
+          ...(value.canonical_lowering as object),
+          task_mode: "i2va",
+        },
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeProductionManagedPreparedContext({
+        ...value,
+        canonical_lowering: {
+          ...(value.canonical_lowering as object),
+          binding_roles: ["last_frame", "first_frame"],
+        },
+      }),
+    ).toThrow();
+  });
+  it("decodes exact frame bindings and global geometry ownership", () => {
+    const value = framePreparedContext();
+    expect(decodeProductionManagedPreparedContext(value)).toMatchObject(value);
+  });
+  it.each([
+    "extra",
+    "missing",
+    "foreign_asset",
+    "wrong_role",
+    "wrong_mode",
+    "donor",
+  ])("rejects %s", (change) => {
+    const value = framePreparedContext();
+    if (change === "extra") value.foreign = true;
+    if (change === "missing") value.media_bindings = null;
+    if (change === "foreign_asset") value.ordered_references = [];
+    if (change === "wrong_role")
+      value.ordered_references = [
+        {
+          asset_id: "first_frame_1",
+          role: "reference",
+          kind: "image",
+          connection_order: 1,
+          metadata: null,
+          paired_video_id: null,
+        },
+      ];
+    if (change === "wrong_mode") value.sequence_task_mode = "ref2va";
+    if (change === "donor") value.geometry_donor_asset_id = "first_frame_1";
+    expect(() => decodeProductionManagedPreparedContext(value)).toThrow();
+  });
+});
+
 function environment(responseValue = preparedContext()) {
   let visible: unknown = graph();
   const loadGraphData = vi.fn();
@@ -213,6 +393,129 @@ function environment(responseValue = preparedContext()) {
     },
   };
 }
+
+function reservedFrameContext(
+  task: "t2va" | "i2va" | "l2va" | "fl2va",
+  global: "i2va" | "l2va" | "fl2va",
+  text: string,
+) {
+  const value = framePreparedContext();
+  const roles =
+    task === "fl2va"
+      ? ["first_frame", "last_frame"]
+      : task === "i2va"
+        ? ["first_frame"]
+        : task === "l2va"
+          ? ["last_frame"]
+          : [];
+  const needed = new Set([
+    ...roles,
+    ...(global === "i2va" ? ["first_frame"] : []),
+  ]);
+  const entries = (
+    value.media_bindings as { entries: Array<Record<string, unknown>> }
+  ).entries.filter((row) => needed.has(String(row.role)));
+  // Invalid-surrogate rows deliberately carry a syntactic fingerprint so the decoder owns refusal.
+  const textFingerprint = /[\uD800-\uDFFF]/u.test(text)
+    ? fp("4")
+    : canonicalStringFingerprint(text);
+  return {
+    ...value,
+    task_mode: task,
+    sequence_task_mode: global,
+    canonical_prompt: text,
+    canonical_prompt_fingerprint: textFingerprint,
+    geometry_donor_asset_id: global === "i2va" ? "first_frame_1" : null,
+    ordered_references: roles.map((role, index) =>
+      reference(`${role}_1`, "image", role, index + 1),
+    ),
+    media_bindings: entries.length
+      ? { schema: "h3.context.sequence_media_binding_set.v1", entries }
+      : null,
+    canonical_lowering: {
+      ...(preparedContext().canonical_lowering as object),
+      ...(task === "t2va"
+        ? {}
+        : {
+            schema: "h3.context.production_canonical_lowering.v2",
+            task_mode: task,
+            binding_roles: roles,
+          }),
+    },
+  };
+}
+
+describe("reserved private frame resolver", () => {
+  it.each([
+    ["i2va", "i2va"],
+    ["t2va", "i2va"],
+    ["l2va", "l2va"],
+    ["fl2va", "fl2va"],
+    ["t2va", "fl2va"],
+  ] as const)(
+    "resolves 4096 astral code points and exact private media for %s of %s",
+    async (task, global) => {
+      const value = reservedFrameContext(task, global, "🌟".repeat(4096));
+      const subject = environment(value);
+      const plan = await subject.resolver(
+        execution(),
+        contextWorkspaceHandle,
+        0,
+      );
+      expect(plan.inputs.user_intent).toBe(value.canonical_prompt);
+      expect(plan.inputs.task_mode).toBe(task);
+      expect(plan.inputs.first_frame_source).toBe(
+        task === "i2va" || task === "fl2va" ? "first_frame" : undefined,
+      );
+      expect(plan.inputs.last_frame_source).toBe(
+        task === "l2va" || task === "fl2va" ? "last_frame" : undefined,
+      );
+      expect(plan.preparedSequenceMedia).toMatchObject({
+        sequenceTaskMode: global,
+        bindings: value.media_bindings,
+        geometryDonorAssetId: value.geometry_donor_asset_id,
+      });
+      expect(plan.options).not.toHaveProperty("preparedSequenceMedia");
+      expect(subject.loadGraphData).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "🌟".repeat(4097),
+    "synthetic\ud800prompt",
+    "synthetic\udc00prompt",
+  ])(
+    "refuses invalid private Unicode before a child plan or canvas write %#",
+    async (text) => {
+      const subject = environment(reservedFrameContext("i2va", "i2va", text));
+      await expect(
+        subject.resolver(execution(), contextWorkspaceHandle, 0),
+      ).rejects.toMatchObject({
+        code:
+          text.length > 8192
+            ? "unsupported_prepared_context"
+            : "invalid_response",
+      });
+      expect(subject.loadGraphData).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps ordinary T2VA's existing UTF-16 refusal", async () => {
+    const text = "🌟".repeat(4096);
+    const subject = environment(
+      preparedContext({
+        canonical_prompt: text,
+        canonical_prompt_fingerprint: canonicalStringFingerprint(text),
+      }),
+    );
+    await expect(
+      subject.resolver(execution(), contextWorkspaceHandle, 0),
+    ).rejects.toMatchObject({
+      code: "unsupported_prepared_context",
+      status: 422,
+    });
+  });
+});
 
 function deferredEnvironment() {
   let release!: (value: unknown) => void;
@@ -260,6 +563,43 @@ function deferredEnvironment() {
 }
 
 describe("Production managed child resolver", () => {
+  it("enforces the dedicated prepared byte budget for CJK payloads", () => {
+    const cjk = "\u754c".repeat(4_096);
+    const admitted = preparedContext({
+      canonical_prompt: cjk,
+      canonical_prompt_fingerprint: canonicalStringFingerprint(cjk),
+    });
+    expect(
+      decodeProductionManagedPreparedContext(admitted).canonical_prompt,
+    ).toBe(cjk);
+    const oversized = "\u754c".repeat(16_384);
+    const refused = preparedContext({
+      canonical_prompt: oversized,
+      canonical_prompt_fingerprint: canonicalStringFingerprint(oversized),
+    });
+    expect(() => decodeProductionManagedPreparedContext(refused)).toThrow();
+  });
+  it("admits exactly the derived prepared byte cap and refuses one extra byte", () => {
+    const make = (extra: number) => {
+      const value = preparedContext({
+        canonical_prompt: "x",
+        canonical_prompt_fingerprint: canonicalStringFingerprint("x"),
+      });
+      const overhead =
+        new TextEncoder().encode(JSON.stringify(value)).byteLength - 1;
+      const text = "x".repeat(32 * 1_024 + extra - overhead);
+      value.canonical_prompt = text;
+      value.canonical_prompt_fingerprint = canonicalStringFingerprint(text);
+      expect(new TextEncoder().encode(JSON.stringify(value)).byteLength).toBe(
+        32 * 1_024 + extra,
+      );
+      return value;
+    };
+    expect(
+      decodeProductionManagedPreparedContext(make(0)).canonical_prompt,
+    ).toBeTruthy();
+    expect(() => decodeProductionManagedPreparedContext(make(1))).toThrow();
+  });
   it("keeps parent identity across legitimate child writes while refreshing owned currentness", async () => {
     const wire = preparedContext();
     const subject = environment(wire);

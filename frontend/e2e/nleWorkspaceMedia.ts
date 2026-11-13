@@ -357,7 +357,9 @@ async function bytes(
   const response = await fetch(`/nle-media/${member}${query}`, { signal });
   if (!response.ok) throw new Error("synthetic_media_unavailable");
   const blob = await response.blob();
-  if (blob.size > 1024 * 1024) throw new Error("synthetic_media_bound");
+  // Pinned CJK SC Bold is 8,543,168 bytes; other synthetic members keep their 1 MiB cap.
+  if (blob.size > (member === "font" ? 12 : 1) * 1024 * 1024)
+    throw new Error("synthetic_media_bound");
   const corpus =
     assetId !== undefined &&
     response.headers.get(CORPUS_MEDIA_HEADER) === assetId;

@@ -17,6 +17,11 @@ draft recovery. Project format version 1 remains in use, but a project or saved 
 directional wipe requires version 1.4.0 or later. Version 1.3.2 and earlier refuse such a project
 rather than silently dropping the wipe.
 
+Titles in Traditional Chinese, Simplified Chinese, Japanese or Korean are preserved by Save/Open
+and draft recovery. Project format version 1 remains in use, but editing or rendering such a title
+requires version 1.4.5 or later. Versions 1.4.0 and 1.4.1 open the project and keep the text, but
+refuse to edit or render those titles.
+
 ## Save And Open
 
 **Save project** uses the browser's native save picker when available. **File written** means

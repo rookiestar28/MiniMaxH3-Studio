@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -58,6 +59,21 @@ class ToolingContractTests(unittest.TestCase):
             "pre-commit/pre-commit-hooks",
         ):
             self.assertIn(repository, text)
+        hooks_repository = next(
+            row
+            for row in yaml.safe_load(text)["repos"]
+            if row["repo"] == "https://github.com/pre-commit/pre-commit-hooks"
+        )
+        self.assertIn("fix-byte-order-marker", [hook["id"] for hook in hooks_repository["hooks"]])
+        secrets_hook = next(
+            hook
+            for row in yaml.safe_load(text)["repos"]
+            if row["repo"] == "https://github.com/Yelp/detect-secrets"
+            for hook in row["hooks"]
+            if hook["id"] == "detect-secrets"
+        )
+        # The scan must not depend on a verification service (see .pre-commit-config.yaml).
+        self.assertIn("--no-verify", secrets_hook["args"])
 
     def test_standard_runners_share_one_bounded_stage_set(self) -> None:
         windows = (ROOT / "scripts/run_full_tests_windows.ps1").read_text(encoding="utf-8")
@@ -230,7 +246,7 @@ class ToolingContractTests(unittest.TestCase):
         )["external_parameters"]
         m23_24_commit = provenance_identity["source_commit"]
         m23_24_tree = provenance_identity["source_tree"]
-        # Keep the six audited public font object names closed and paired with the baseline;
+        # Keep the fifteen audited public font object names closed and paired with the baseline;
         # accepting every high-entropy manifest value would also approve unrelated new findings.
         font_revisions = {
             "font_build": "c4a321e123-e4d4ff315f-57f4e0adf2-94fe3a95be".replace("-", ""),
@@ -239,6 +255,15 @@ class ToolingContractTests(unittest.TestCase):
             "font_italic": "7f53133343-8b401f18ca-96db911899-54356beb65".replace("-", ""),
             "font_bold": "aae7546dc1-905b228aff-70cde8c818-b82f3a2bc4".replace("-", ""),
             "font_bold_italic": "6f685b2e5e-0df0077ea3-96ba6384d4-6c8e96d9e9".replace("-", ""),
+            "font_cjk_revision": "523d033d6c-b47f4a80c5-8a35753646-f5c3608a78".replace("-", ""),
+            "font_tc_regular": "63c3422382-411b4d1326-44794fd432-c53faa2882".replace("-", ""),
+            "font_tc_bold": "3a3f5ed878-b786e5cea6-8d2c2b1c34-96a22ab2c1".replace("-", ""),
+            "font_sc_regular": "fc0fda9394-367c16c1af-7555a2ae4d-5e2e6a6f02".replace("-", ""),
+            "font_sc_bold": "bcc11bc30e-65b69b9e5a-508c3e2138-197c5543cf".replace("-", ""),
+            "font_jp_regular": "4af556abb9-cc42e585aa-b777b01857-246a110746".replace("-", ""),
+            "font_jp_bold": "40262777db-707145a087-95e0e62ab5-956eafe4b6".replace("-", ""),
+            "font_kr_regular": "b8c11425a2-5c74dac1b5-1b28341ff1-ef379f2ffa".replace("-", ""),
+            "font_kr_bold": "497914abec-9fcf714fed-ebb7b893e6-3657d19124".replace("-", ""),
         }
         # CRITICAL: pin reviewed public model/asset digests independently of the source and
         # baseline. Reading either to generate approvals would silently approve new credentials.
@@ -493,7 +518,7 @@ class ToolingContractTests(unittest.TestCase):
             for identity, paths in approved_paths.items()
             for path in paths
         )
-        self.assertEqual(sum(expected.values()), 62)
+        self.assertEqual(sum(expected.values()), 71)
         # IMPORTANT: this one key-shaped match is encoded MP4 structure, not a credential.
         # Pin the whole normalized fixture, detector and match; never exempt its path broadly.
         fixture_path = "scripts/fixtures/m25_48_192_frame_mp4.b64"
@@ -515,7 +540,7 @@ class ToolingContractTests(unittest.TestCase):
             self.assertIn(refused_assignment, (ROOT / refused_path).read_text(encoding="utf-8"))
         refused_hash = hashlib.sha1(refused_assignment.encode(), usedforsecurity=False).hexdigest()
         expected[(refused_path, "Base64 High Entropy String", refused_hash)] = 1
-        self.assertEqual(sum(expected.values()), 64)
+        self.assertEqual(sum(expected.values()), 73)
         # IMPORTANT: the crop test recomputes these public workflow digests from pinned templates.
         # Bind every new register row here in the same commit; never admit arbitrary file hashes.
         crop_path = "frontend/tests/referenceCropBaseline.test.ts"
@@ -525,10 +550,10 @@ class ToolingContractTests(unittest.TestCase):
                 "de59fba914-e703ea8eba-b52f4f6ab4-3dedbfacba-0b025544d4-590bfd7296-45b1"
             ).replace("-", ""),
             ("i2va", "chosen"): (
-                "4d855886ff-12c30ebbc2-573de22f2b-1b63b1d48c-5c8f9c5cbd-b1c5a34c92-26d8"
+                "cedb0dbb6d-25a8ca1e4c-a4d5f52e33-828802d9ea-58af0c8641-f83c2fce2b-8eac"
             ).replace("-", ""),
             ("i2va", "template_defaults"): (
-                "5f9382c55c-ec98f76ca2-896ebf291d-1f708f00a3-e1561fb222-39ea23089f-3d3d"
+                "44a5beed9b-8a631f2dc9-2b65374238-0b7384f480-018ff8c5e1-658994b1e9-9441"
             ).replace("-", ""),
             ("fl2va", "chosen"): (
                 "1363374d13-40b5a48104-d2d7fcce7c-d92396a7fc-8bacc48024-95dc28fe86-c85b"
@@ -576,20 +601,20 @@ class ToolingContractTests(unittest.TestCase):
                 )
             match_hash = hashlib.sha1(literal.encode(), usedforsecurity=False).hexdigest()
             expected[(crop_path, "Hex High Entropy String", match_hash)] = 1
-        self.assertEqual(sum(expected.values()), 73)
+        self.assertEqual(sum(expected.values()), 82)
         # CRITICAL: approve public hex values only inside independently pinned complete inputs.
         # Learning this census from scanner output or unpinned files would admit new credentials.
         public_hash_inputs = {
             "governance/contracts/host_line_hashes_v1.json": (
-                "f372203af7-7f4662fceb-ad7b96f7c5-058f5200a1-b6dd0b3165-204edd55ff-52bc",
+                "9dd95bd714-22440241ef-470b1f481c-d3a5383500-760dc0da10-ca6f13946d-f62b",
                 1917,
             ),
             "governance/contracts/native_behaviour_catalogue_v1.json": (
-                "7182c279a9-b1d8acfaf1-8afc67bdcd-b51ad31b95-1e39002f04-b59a035810-13a4",
+                "aad1ad2066-52714dc739-e5e03cc7a2-b5b212fde6-99c30dc9b6-7525c1b655-d3f1",
                 3,
             ),
             "tests/fixtures/official_template_facts_v1.json": (
-                "03ce09e46f-856ec07d16-4d67938ff2-1f4a17fcab-95b63043af-4af2365e6b-2eb7",
+                "3d1139d760-bda6a1ded6-8667ea4dbb-c7a0c5a7a3-3058f3e663-4b086355a4-7d9c",
                 4,
             ),
         }
@@ -601,7 +626,34 @@ class ToolingContractTests(unittest.TestCase):
             for literal in literals:
                 match_hash = hashlib.sha1(literal, usedforsecurity=False).hexdigest()
                 expected[(path, "Hex High Entropy String", match_hash)] = 1
-        self.assertEqual(sum(expected.values()), 1997)
+        self.assertEqual(sum(expected.values()), 2006)
+        # CRITICAL: approve AWS fragments only inside these sha256-pinned font payloads,
+        # inlined once in the bundle; learning matches from scanner output admits real keys.
+        # The denylist's second pattern requires quotes, which base64 never contains.
+        # Changed fonts or missing/duplicated payloads fail; change baseline rows together.
+        font_inputs = {
+            "comfyui_h3_context/fonts/NotoSans-Regular.ttf": (
+                "478c558ea7-16033cd60c-03438f628d-fa75694dcf-6b5f6d505a-2f05fd2b4f-3823",
+                1,
+            ),
+            "comfyui_h3_context/fonts/NotoSans-Bold.ttf": (
+                "1df075a380-fc7cb898ac-f64c1f7b3b-4dd780de3c-aa860178bf-929de35817-a913",
+                2,
+            ),
+        }
+        bundle_path = "comfyui_h3_context/web/h3-context-sidebar.js"
+        bundle_bytes = (ROOT / bundle_path).read_bytes()
+        for path, (digest, count) in font_inputs.items():
+            font_bytes = (ROOT / path).read_bytes()
+            self.assertEqual(hashlib.sha256(font_bytes).hexdigest(), digest.replace("-", ""))
+            payload = base64.b64encode(font_bytes)
+            self.assertEqual(bundle_bytes.count(payload), 1)
+            matches = set(re.findall(rb"(?:A3T[A-Z0-9]|ABIA|ACCA|AKIA|ASIA)[0-9A-Z]{16}", payload))
+            self.assertEqual(len(matches), count)
+            for match in matches:
+                match_hash = hashlib.sha1(match, usedforsecurity=False).hexdigest()
+                expected[(bundle_path, "AWS Access Key", match_hash)] = 1
+        self.assertEqual(sum(expected.values()), 2009)
         observed: Counter[tuple[str, str, str]] = Counter()
         for path, findings in baseline.get("results", {}).items():
             normalized_path = path.replace("\\", "/")
@@ -612,7 +664,7 @@ class ToolingContractTests(unittest.TestCase):
                 observed[
                     (normalized_path, finding.get("type", ""), finding.get("hashed_secret", ""))
                 ] += 1
-        self.assertEqual(sum(observed.values()), 1997)
+        self.assertEqual(sum(observed.values()), 2009)
         self.assertEqual(observed, expected)
 
     def test_hosted_ci_uses_separate_public_lanes(self) -> None:

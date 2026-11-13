@@ -268,8 +268,14 @@ def qualify_native_composition(
         ):
             # A readable, nonmatching T2VA surface. `check` is a closed manifest identifier.
             reason, detail = "native_t2va_structure_changed", source.structure.check
+        elif (
+            wiring.task_mode in {TaskMode.I2VA, TaskMode.L2VA, TaskMode.FL2VA}
+            and source.keyframes is not None
+            and not source.keyframes.admitted
+        ):
+            reason, detail = "native_keyframe_structure_changed", source.keyframes.check
         else:
-            # Media modes and bindings stay pinned; a missing receipt is never promoted.
+            # Reference media remain pinned; a missing scoped receipt is never promoted.
             reason, detail = "native_source_identity_mismatch", "receipt_absent"
     else:
         detail = (

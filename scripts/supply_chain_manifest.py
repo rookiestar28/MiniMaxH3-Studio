@@ -24,8 +24,8 @@ from comfyui_h3_context.adapters.authoring_fonts import (  # noqa: E402
     FONT_MANIFEST_FILENAME,
     AuthoringFontError,
     load_packaged_font_manifest,
+    packaged_manifest_fingerprint,
 )
-from comfyui_h3_context.core.canonical import canonical_fingerprint  # noqa: E402
 from comfyui_h3_context.core.product_shell import (  # noqa: E402
     SUPPORTED_FRONTEND_VERSION,
 )
@@ -99,20 +99,22 @@ def _constant(value: str) -> object:
     raise SupplyChainError(f"supply-chain JSON contains invalid constant {value!r}")
 
 
-def _resources(value: object, *, depth: int = 0, count: list[int]) -> None:
+def _resources(
+    value: object, *, depth: int = 0, count: list[int], maximum_items: int = MAX_JSON_ITEMS
+) -> None:
     if depth > MAX_JSON_DEPTH:
         raise SupplyChainError("supply-chain JSON exceeds the depth limit")
     count[0] += 1
-    if count[0] > MAX_JSON_ITEMS:
+    if count[0] > maximum_items:
         raise SupplyChainError("supply-chain JSON exceeds the item limit")
     if type(value) is dict:
         for key, child in cast(dict[str, object], value).items():
             if type(key) is not str or len(key) > 256:
                 raise SupplyChainError("supply-chain JSON member name is unbounded")
-            _resources(child, depth=depth + 1, count=count)
+            _resources(child, depth=depth + 1, count=count, maximum_items=maximum_items)
     elif type(value) is list:
         for child in cast(list[object], value):
-            _resources(child, depth=depth + 1, count=count)
+            _resources(child, depth=depth + 1, count=count, maximum_items=maximum_items)
     elif value is None or type(value) in {str, int, bool}:
         if type(value) is str and len(value) > 4_096:
             raise SupplyChainError("supply-chain JSON text is unbounded")
@@ -120,7 +122,9 @@ def _resources(value: object, *, depth: int = 0, count: list[int]) -> None:
         raise SupplyChainError("supply-chain JSON contains an unsupported type")
 
 
-def _decode_json(payload: str | bytes | bytearray, *, maximum: int) -> object:
+def _decode_json(
+    payload: str | bytes | bytearray, *, maximum: int, maximum_items: int = MAX_JSON_ITEMS
+) -> object:
     # CRITICAL: exact built-in types prevent hostile subclasses from spoofing resource bounds.
     if type(payload) is str:
         try:
@@ -145,7 +149,7 @@ def _decode_json(payload: str | bytes | bytearray, *, maximum: int) -> object:
         raise
     except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
         raise SupplyChainError("supply-chain JSON is not strict JSON") from exc
-    _resources(value, count=[0])
+    _resources(value, count=[0], maximum_items=maximum_items)
     return value
 
 
@@ -343,7 +347,7 @@ def _spdx_package(
     }
 
 
-def _bundled_font_spdx_package() -> JsonObject:
+def _bundled_font_spdx_packages() -> list[JsonObject]:
     """Build the font package row from the same verified manifest the runtime consumes."""
 
     try:
@@ -353,40 +357,52 @@ def _bundled_font_spdx_package() -> JsonObject:
     manifest = _object(
         _decode_json(
             _regular_file(FONT_MANIFEST_PATH, "packaged font manifest").read_bytes(),
-            maximum=MAX_SUPPLY_CHAIN_WIRE_BYTES,
+            # Verified CJK cmap manifest: 382,379 bytes and 45,884 JSON nodes.
+            # Keep the ordinary supply-chain JSON caps unchanged.
+            maximum=512 * 1024,
+            maximum_items=65_536,
         ),
         "packaged font manifest",
     )
     # CRITICAL: verification and inventory must describe the same manifest bytes. Without this
     # join, a file replacement between the two reads could put unverified revision facts in SPDX.
-    if canonical_fingerprint(manifest) != verified.manifest_fingerprint:
+    if packaged_manifest_fingerprint(manifest) != verified.manifest_fingerprint:
         raise SupplyChainError("packaged font manifest changed after verification")
 
     assets = manifest.get("font_assets")
-    if type(assets) is not list or len(assets) != 1:
-        raise SupplyChainError("packaged font inventory must contain exactly one asset")
-    asset = _object(assets[0], "packaged font asset")
-    release_id = asset.get("release_id")
-    build_revision = asset.get("build_revision")
-    if (
-        type(release_id) is not str
-        or not release_id
-        or len(release_id) > 128
-        or type(build_revision) is not str
-        or re.fullmatch(r"[0-9a-f]{40}", build_revision) is None
-    ):
-        raise SupplyChainError("packaged font release identity is invalid")
-    if not verified.faces or len({face.family_name for face in verified.faces}) != 1:
-        raise SupplyChainError("packaged font family identity is invalid")
-    family_name = verified.faces[0].family_name
-    return _spdx_package(
-        family_name,
-        release_id,
-        verified.license_spdx_id,
-        "LIBRARY",
-        "bundled_font_runtime",
-        f"pkg:github/{FONT_SOURCE_REPOSITORY}@{build_revision}",
-    )
+    if type(assets) is not list or not assets:
+        raise SupplyChainError("packaged font inventory must contain assets")
+    packages = []
+    for raw_asset in assets:
+        asset = _object(raw_asset, "packaged font asset")
+        release_id = asset.get("release_id")
+        build_revision = asset.get("build_revision")
+        source = asset.get("source_repository")
+        family = asset.get("family_name")
+        if (
+            type(release_id) is not str
+            or not release_id
+            or len(release_id) > 128
+            or type(build_revision) is not str
+            or re.fullmatch(r"[0-9a-f]{40}", build_revision) is None
+            or source not in {FONT_SOURCE_REPOSITORY, "notofonts/noto-cjk"}
+            or type(family) is not str
+            or not any(face.family_name == family for face in verified.faces)
+        ):
+            raise SupplyChainError("packaged font release identity is invalid")
+        package = _spdx_package(
+            family,
+            release_id,
+            verified.license_spdx_id,
+            "LIBRARY",
+            "bundled_font_runtime",
+            f"pkg:github/{source}@{build_revision}",
+        )
+        # Each regional family has its own SPDX identity despite sharing an upstream purl.
+        if source == "notofonts/noto-cjk":
+            package["SPDXID"] += "-" + hashlib.sha256(family.encode()).hexdigest()[:12]
+        packages.append(package)
+    return packages
 
 
 def build_spdx_sbom() -> JsonObject:
@@ -431,7 +447,7 @@ def build_spdx_sbom() -> JsonObject:
             "pkg:github/ollama/ollama",
         ),
     ]
-    packages.append(_bundled_font_spdx_package())
+    packages.extend(_bundled_font_spdx_packages())
     python_development = {
         "aiohttp": ("3.11..<4", "Apache-2.0 AND MIT"),
         "build": ("1.5", "MIT"),

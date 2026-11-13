@@ -6,6 +6,14 @@ import { classifyHostMappingReadiness } from "./hostSeamContract";
 import { readImageCropCapability } from "./imageCropCapability";
 import { validateImageCrops } from "./imageCropContract";
 import {
+  applyPreparedSequenceCrops,
+  resolvePreparedSequenceSpliceMedia,
+} from "./preparedSequenceMedia";
+import { applySequenceClosingGuide } from "./sequenceFrameMaterialization";
+import { inheritSequenceTemplateCanvas } from "./sequenceTemplateCanvas";
+import { SequenceMediaBindingError } from "./sequenceMediaBindings";
+import { sequenceMediaAppModeError } from "./appModeError";
+import {
   OfficialAssetResolutionError,
   readOfficialAssetInventoryFromNodeDefinitions,
   resolveOfficialAssets,
@@ -23,6 +31,7 @@ import {
   TASK_MODE_FAMILY,
   TemplateSpliceError,
   type SpliceMediaIds,
+  type SpliceResult,
 } from "./templateMaterialization";
 import {
   anchorMissingReason,
@@ -74,6 +83,7 @@ export type MaterializeRouteOptions = Readonly<{
   nodeDefinitionReadinessReached: () => boolean;
   admitted: AppModeAdmission;
   preparedCanonicalPrompt: AppModeStartOptions["preparedCanonicalPrompt"];
+  preparedSequenceMedia?: AppModeStartOptions["preparedSequenceMedia"];
 }>;
 
 export function createHostDetachedGraph(
@@ -111,6 +121,8 @@ export async function compileLoadedCandidate(
     throw new AppModeError(
       "compile_failed",
       "the host could not compile the loaded H3 graph",
+      undefined,
+      "loaded_compile",
     );
   }
 }
@@ -237,18 +249,18 @@ export async function resolveMaterializeRoute(
   // The request contract used to be enforced by the API-prompt builder.
   // The builder is gone, so the route enforces it directly -- before the
   // template is fetched, and therefore before anything is loaded.
-  const media = resolveSpliceMedia(
-    serialized,
-    inputs,
-    options.canvasOnly === true,
-  );
+  const sequence = options.preparedSequenceMedia;
+  const media =
+    sequence === undefined
+      ? resolveSpliceMedia(serialized, inputs, options.canvasOnly === true)
+      : resolvePreparedSequenceSpliceMedia(inputs, sequence);
   const templateName = MODE_TEMPLATE[inputs.task_mode];
   if (media === undefined || templateName === undefined)
     throw new AppModeError(
       "incompatible_graph",
       "a selected host-owned media source is not a visible supported loader output",
     );
-  let spliced;
+  let spliced: SpliceResult;
   let ownedReference: OwnedGraphReference;
   let assetResolution: OfficialAssetResolution | undefined;
   try {
@@ -256,6 +268,27 @@ export async function resolveMaterializeRoute(
     const template = await Promise.resolve(options.loadTemplate(templateName));
     throwIfCancelled(signal);
     let materializationTemplate = record(template) ?? {};
+    if (
+      inputs.task_mode === "t2va" &&
+      (sequence?.sequenceTaskMode === "fl2va" ||
+        sequence?.sequenceTaskMode === "l2va")
+    ) {
+      // CRITICAL: every frame-mode child inherits its parent's canvas. Falling back to
+      // T2V defaults delivers an 864x480 middle child beside 640x640 anchored children.
+      // Keep the global-mode lookup even when this child's role is T2VA.
+      const authorityName = MODE_TEMPLATE[sequence.sequenceTaskMode]!;
+      const authority =
+        authorityName === templateName
+          ? materializationTemplate
+          : (record(
+              await Promise.resolve(options.loadTemplate(authorityName)),
+            ) ?? {});
+      throwIfCancelled(signal);
+      materializationTemplate = inheritSequenceTemplateCanvas(
+        materializationTemplate,
+        authority,
+      );
+    }
     // . Resolve against the host's already-loaded combo arrays and
     // finish every serialized mutation before the first canvas write.
     // Connect/adopt never enter this block, so a later user choice cannot
@@ -267,7 +300,8 @@ export async function resolveMaterializeRoute(
       definitionsReady,
     );
     if (
-      inputs.image_crops !== undefined &&
+      (inputs.image_crops !== undefined ||
+        sequence?.bindings?.entries.some((row) => row.transform !== null)) &&
       !readImageCropCapability(nodeDefinitions, definitionsReady)
     )
       throw new AppModeError(
@@ -303,6 +337,9 @@ export async function resolveMaterializeRoute(
     }
     spliced = spliceContextPipeline(materializationTemplate, {
       taskMode: inputs.task_mode,
+      ...(sequence === undefined
+        ? {}
+        : { sequenceTaskMode: sequence.sequenceTaskMode }),
       userIntent: inputs.user_intent,
       durationSeconds: inputs.duration_milliseconds / MILLISECONDS_PER_SECOND,
       media,
@@ -320,13 +357,54 @@ export async function resolveMaterializeRoute(
               reason: options.preparedCanonicalPrompt.reason,
             },
     });
+    if (sequence !== undefined) {
+      spliced = applyPreparedSequenceCrops(spliced, inputs, sequence);
+      if (inputs.task_mode === "l2va" || inputs.task_mode === "fl2va")
+        spliced = applySequenceClosingGuide(
+          spliced,
+          inputs.duration_milliseconds / MILLISECONDS_PER_SECOND,
+        );
+    }
+    const mediaNodes =
+      sequence === undefined
+        ? []
+        : (spliced.workflow.nodes as Record<string, unknown>[]).filter(
+            (node) =>
+              [
+                "LoadImage",
+                "ImageCropV2",
+                "ImageScaleToTotalPixels",
+                "GetImageSize",
+                "MiniMaxH3AddGuide",
+              ].includes(String(node.type)) || node.id === spliced.anchorNodeId,
+          );
+    const mediaIds = new Set(mediaNodes.map((node) => String(node.id)));
+    const mediaLinks =
+      sequence === undefined
+        ? []
+        : (spliced.workflow.links as unknown[][]).filter(
+            (edge) =>
+              mediaIds.has(String(edge[1])) || mediaIds.has(String(edge[3])),
+          );
     ownedReference = Object.freeze({
-      nodeIds: Object.freeze(spliced.ownedNodeIds.map(String)),
-      linkIds: Object.freeze(spliced.ownedLinkIds.map(String)),
+      nodeIds: Object.freeze([
+        ...new Set([...spliced.ownedNodeIds.map(String), ...mediaIds]),
+      ]),
+      linkIds: Object.freeze([
+        ...new Set([
+          ...spliced.ownedLinkIds.map(String),
+          ...mediaLinks.map((edge) => String(edge[0])),
+        ]),
+      ]),
       anchorNodeId: String(spliced.anchorNodeId),
-      authoredWidgetNodeIds: Object.freeze(
-        spliced.authoredWidgetNodeIds.map(String),
-      ),
+      authoredWidgetNodeIds: Object.freeze([
+        ...new Set([
+          ...spliced.authoredWidgetNodeIds.map(String),
+          ...mediaNodes
+            .filter((node) => node.id !== spliced.anchorNodeId)
+            .map((node) => String(node.id)),
+        ]),
+      ]),
     });
   } catch (error) {
     if (signal?.aborted)
@@ -335,6 +413,13 @@ export async function resolveMaterializeRoute(
         "App Mode was cancelled before the canvas was replaced",
       );
     if (error instanceof AppModeError) throw error;
+    if (error instanceof SequenceMediaBindingError)
+      throw sequenceMediaAppModeError(
+        error.category === "sequence_media_unavailable"
+          ? error.category
+          : "sequence_media_changed",
+        error,
+      );
     // Nothing has been loaded yet, so there is nothing to roll back: a
     // template that cannot be read or spliced leaves the canvas untouched.
     if (
@@ -392,6 +477,8 @@ export async function resolveMaterializeRoute(
     throw new AppModeError(
       "compile_failed",
       "the qualified Base graph candidate has no stable identity",
+      undefined,
+      "materialized_identity",
     );
   }
   return Object.freeze({

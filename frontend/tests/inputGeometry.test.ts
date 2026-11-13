@@ -36,6 +36,17 @@ function response(
 }
 
 describe("M23-29 source identity client", () => {
+  it("uses the backend 512 Unicode character locator boundary", async () => {
+    const fetchApi = vi.fn().mockResolvedValue(response(receipt));
+    const client = createInputGeometryClient({ fetchApi });
+    await expect(
+      client.observe({ ...request, locator: "🌟".repeat(512) }),
+    ).resolves.toEqual(receipt);
+    await expect(
+      client.observe({ ...request, locator: "🌟".repeat(513) }),
+    ).rejects.toMatchObject({ category: "invalid_request" });
+    expect(fetchApi).toHaveBeenCalledOnce();
+  });
   it("sends one exact same-origin request and decodes the closed receipt", async () => {
     const fetchApi = vi.fn().mockResolvedValue(response(receipt));
     const signal = new AbortController().signal;

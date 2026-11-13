@@ -47,6 +47,11 @@ def _envelope() -> dict[str, Any]:
             ROOT / "comfyui_h3_context/contracts/authoring_renderer_qualification_v2.json"
         ).read_bytes()
     )["subjects"]["source"]
+    from comfyui_h3_context.adapters.authoring_fonts import load_packaged_font_manifest
+
+    # CRITICAL: Admission checks the real shipped font package. A historical binding breaks
+    # positives and lets negative cases pass regardless of their intended mutation.
+    source["font_package"] = load_packaged_font_manifest().package_fingerprint
     public = copy.deepcopy(source)
     public["implementation"][next(iter(public["implementation"]))] = canonical_fingerprint(
         {"unit-only-public-input": 1}
@@ -76,6 +81,11 @@ def test_complete_report_requires_all_wipe_raster_observations() -> None:
         kind: canonical_fingerprint({"unit-only-primitive": kind}) for kind in RENDER_PRIMITIVE_IDS
     }
     report["profile"] = required_unqualified_renderer_profile().profile_fingerprint
+    from comfyui_h3_context.adapters.authoring_fonts import load_packaged_font_manifest
+
+    # CRITICAL: Admission checks the real shipped font package. A historical binding breaks
+    # positives and lets negative cases pass regardless of their intended mutation.
+    report["font_package"] = load_packaged_font_manifest().package_fingerprint
     for direction in ("left", "right", "top", "bottom"):
         for rotated in (False, True):
             report["raster_rows"][f"unit-wipe-{direction}-{int(rotated)}"] = {

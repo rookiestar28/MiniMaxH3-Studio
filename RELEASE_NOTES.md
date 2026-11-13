@@ -1,3 +1,116 @@
+# Release 1.4.5
+
+## Longer videos in the frame modes
+
+- Longer videos can now be generated in I2VA, FL2VA and L2VA, as in T2VA, with cuts between
+  segments. The opening frame belongs to the first segment and the closing frame to the last.
+  These modes also use ComfyUI's native `MiniMaxH3AddGuide` node, which the readiness check looks
+  for.
+- Keep the declared **Load Image** nodes, images and crops available on the original workflow
+  throughout generation. Frame sources are checked when generation starts and before each segment.
+- Ref2VA plans can be proposed and reviewed; sequence generation for that mode is not available
+  yet. After a page reload, a running sequence can be viewed but not resumed: cancel it and start
+  again.
+
+## Planning longer videos
+
+- In a Ref2VA whole-video plan, a first-frame reference now belongs only to the opening segment and
+  a last-frame reference only to the closing segment. Other references still appear in every
+  segment. Before, every segment described the same picture as its own first or last frame.
+- Planning from the generated storyboard accepts a Context whose plan-level sections, such as the
+  summary or the overall soundscape, name a reference or subject label such as `<Picture 2>`.
+  Before, it was refused; planning from reviewed rows was not affected.
+- A production Context that declares a subject but no dialogue can now be prepared for
+  generation. Before, its subject label was refused as invalid.
+
+## Titles
+
+- Titles include the unmodified Noto Sans TC, SC, JP and KR 2.004 regional fonts in regular and
+  bold, listed in the **Font** list as **Font 02** to **Font 05** after Noto Sans. Preview and
+  final rendering select the same whole-text face: the chosen face when it covers the whole
+  title; otherwise kana prefers Japanese forms, Hangul prefers Korean forms, and other text tries
+  Noto Sans, TC, SC, JP, then KR.
+- CJK italic is refused with a localized explanation; turn off italic. Emoji and other
+  uncovered characters remain unsupported. The larger font package is included in the download.
+- CJK titles need 1.4.5 or later. A CJK project still opens in 1.4.0 and 1.4.1, but those versions
+  refuse CJK title editing and rendering.
+- Eight title styles: **Outline**, **Yellow outline**, **Drop shadow**, **Outline and shadow**,
+  **Caption box**, **Highlight**, **Inverse box** and **Bold outline**. In the media bin's **Text**
+  tab, **Title styles** inserts a title with the chosen style. For a selected title, **Title
+  styles** in the Inspector's **Text** tab applies it as one undo step.
+- A style sets the weight, fill colour, stroke, shadow, background and background padding, and
+  turns italic off. It keeps the text, font, size, alignment and line height.
+
+正體中文：新增正體中文、簡體中文、日文及韓文標題的一般與粗體字型，預覽與渲染採用相同字型。
+中日韓文字不支援斜體，請關閉斜體；emoji 等未涵蓋字元仍會遭拒絕。套件因內含字型而增大。
+中日韓標題需要 1.4.5 或更新版本；1.4.0 與 1.4.1 可開啟專案，但拒絕中日韓標題的編輯與渲染。
+新增八種「標題樣式」，可在素材區與檢視器的「文字」分頁中使用。
+
+简体中文：新增繁中、简中、日文及韩文标题的常规和粗体字体，预览与渲染采用相同字体。
+中日韩文字不支持斜体，请关闭斜体；emoji 等未覆盖字符仍会被拒绝。内置字体使安装包增大。
+中日韩标题需要 1.4.5 或更新版本；1.4.0 与 1.4.1 可打开项目，但拒绝中日韩标题的编辑和渲染。
+新增八种“标题样式”，可在素材区与检查器的“文字”标签页中使用。
+
+## App Mode
+
+- When App Mode prepares an I2VA canvas, it no longer leaves the template's resolution selector
+  on the canvas unconnected. The output size follows the first-frame image, as before; editing
+  that selector had no effect.
+
+## Fixed
+
+- **Start H3 App Mode** on the **Execute / Export** step works on a canvas that App Mode prepared,
+  or that already holds a compatible H3 graph. In 1.4.1 and earlier versions, the sidebar asked
+  again whether to keep or replace the canvas, and nothing was queued.
+- After you crop a first frame, last frame or reference image and prepare the canvas, starting
+  from the sidebar works. In 1.4.0 and 1.4.1 the sidebar stopped with an error and nothing was
+  queued. ComfyUI's own Run on the same canvas was not affected.
+
+正體中文：已修正：在 App Mode 已準備好、或已含相容 H3 流程的畫布上，「執行／匯出」步驟的
+「啟動 H3 App Mode」現在可正常啟動；1.4.1 及更早版本會再次詢問保留或取代畫布，且不會加入佇列。
+裁切圖片並準備畫布後，從側邊欄啟動也可正常執行；1.4.0 與 1.4.1 會停在錯誤，且不會加入佇列。
+
+简体中文：已修复：在 App Mode 已准备好、或已含兼容 H3 流程的画布上，“执行／导出”步骤的
+“启动 H3 App Mode”现在可正常启动；1.4.1 及更早版本会再次询问保留或替换画布，且不会加入队列。
+裁剪图片并准备画布后，从侧边栏启动也可正常运行；1.4.0 与 1.4.1 会停在错误，且不会加入队列。
+
+## Windows storage
+
+- Rendering and segment storage handle long Windows paths consistently when staging, publishing
+  and cleaning up files. Existing path, identity and no-clobber checks still apply.
+- On Windows, final-video rendering needs the ComfyUI folder's absolute path to be at most 96
+  UTF-16 code units, so that the longest scratch-stage file path fits within 259. A deeper
+  installation is refused before rendering starts, with a message to move ComfyUI to a shorter
+  folder. Windows long-path settings do not change this.
+
+## Source checkouts
+
+- Text files in new checkouts now use LF on every platform, including Windows with
+  `core.autocrlf=true`. Updating an existing clone needs no extra action. Files the update does
+  not change may keep Windows line endings; the extension tolerates them.
+
+## Compatibility
+
+- The frame-mode sequences and the start on a crop-prepared canvas were tested on ComfyUI 0.42.0
+  with frontend 1.57.1.
+
+## Developer notes
+
+- `docs/DEVELOPMENT.md` explains how to renormalize a Windows clone made before the LF change.
+- A pre-commit hook and a test refuse tracked text files that start with a UTF-8 byte-order mark.
+- The clip editor's media transport refuses a video element whose metadata has not loaded, with a
+  distinct internal code, instead of waiting for a first frame that may never arrive. Product code
+  already waits for metadata, so users see no change.
+
+## Upgrade and limits
+
+Replace the complete package, restart ComfyUI and refresh the browser. The download is larger
+because it includes the CJK title fonts. Projects and settings from 1.4.1 open in 1.4.5. The
+supported FFmpeg build and platform requirements are unchanged; on Windows, rendering now needs a
+ComfyUI folder path of at most 96 characters (see "Windows storage").
+
+---
+
 # Release 1.4.1
 
 ## Newer ComfyUI frontends

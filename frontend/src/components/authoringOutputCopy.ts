@@ -11,6 +11,7 @@ type Copy = {
   old: string;
   empty: string;
   error: string;
+  pathTooDeep: string;
   fontUnavailable: string;
   refresh: string;
   loading: string;
@@ -41,6 +42,8 @@ export const outputCopy: Record<Locale, Copy> = {
       "Output status is unavailable. Refresh before accessing this output.",
     fontUnavailable:
       "The title font changed or cannot render some characters. Edit the title text or style before rendering again.",
+    pathTooDeep:
+      "The ComfyUI folder path is too deep for rendering on Windows. Move ComfyUI to a shorter folder.",
     refresh: "Refresh status",
     loading: "Loading preview",
     previewError: "Preview unavailable. The original remains separate.",
@@ -78,6 +81,8 @@ export const outputCopy: Record<Locale, Copy> = {
     error: "無法取得輸出狀態。請重新整理後再存取。",
     fontUnavailable:
       "標題字型已變更，或無法顯示部分字元。請編輯標題文字或樣式後再算繪。",
+    pathTooDeep:
+      "ComfyUI 資料夾路徑太深，無法在 Windows 算繪。請將 ComfyUI 移至較短的資料夾路徑。",
     refresh: "重新整理狀態",
     loading: "正在載入預覽",
     previewError: "預覽不可用；原檔仍為獨立輸出。",
@@ -115,6 +120,8 @@ export const outputCopy: Record<Locale, Copy> = {
     error: "无法获取输出状态。请刷新后再访问。",
     fontUnavailable:
       "标题字体已更改，或无法显示部分字符。请编辑标题文字或样式后再渲染。",
+    pathTooDeep:
+      "ComfyUI 文件夹路径过深，无法在 Windows 渲染。请将 ComfyUI 移至较短的文件夹路径。",
     refresh: "刷新状态",
     loading: "正在加载预览",
     previewError: "预览不可用；原文件仍为独立输出。",

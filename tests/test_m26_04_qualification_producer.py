@@ -13,20 +13,28 @@ from scripts.hc_09_host_seam_test_double import host_nodes_module
 
 
 @pytest.mark.parametrize(
-    "scenario",
+    ("scenario", "frame_recipe"),
     [
-        "i2va",
-        "fl2va",
-        "l2va",
-        "visual_ref2va",
-        "text_audio",
-        "image_audio",
-        "paired_video",
-        "mixed_audio",
+        (scenario, "missing")
+        for scenario in (
+            "i2va",
+            "fl2va",
+            "l2va",
+            "visual_ref2va",
+            "text_audio",
+            "image_audio",
+            "paired_video",
+            "mixed_audio",
+        )
+    ]
+    + [
+        (scenario, support)
+        for scenario in ("i2va", "l2va", "fl2va")
+        for support in ("qualified", "guide_missing", "structure_changed")
     ],
 )
 def test_real_media_plans_do_not_claim_missing_managed_host_bindings(
-    monkeypatch: pytest.MonkeyPatch, scenario: str
+    monkeypatch: pytest.MonkeyPatch, scenario: str, frame_recipe: str
 ) -> None:
     from dataclasses import replace
     from decimal import Decimal
@@ -64,7 +72,38 @@ def test_real_media_plans_do_not_claim_missing_managed_host_bindings(
         2,
         metadata=MediaMetadata(duration_seconds=Decimal("5")),
     )
-    if scenario in ("i2va", "l2va"):
+    if frame_recipe != "missing":
+        from comfyui_h3_context.nodes import (
+            H3ContextCompilerNode,
+            H3ContextPlanNode,
+            H3ContextRequestNode,
+            H3ContextValidatorNode,
+            H3ReferenceRegistryNode,
+        )
+
+        roles = {
+            "i2va": (AssetRole.FIRST_FRAME,),
+            "l2va": (AssetRole.LAST_FRAME,),
+            "fl2va": (AssetRole.FIRST_FRAME, AssetRole.LAST_FRAME),
+        }[scenario]
+        references = H3ReferenceRegistryNode().build_registry(
+            **{role.value: object() for role in roles}
+        )[0]
+        expected_registry = build_reference_registry(
+            tuple(
+                ReferenceAsset(f"{role.value}_1", MediaKind.IMAGE, role, ordinal)
+                for ordinal, role in enumerate(roles, start=1)
+            )
+        )
+        assert references == expected_registry
+        request = H3ContextRequestNode().build_request(
+            scenario, "Preserve the exact declared intent.", duration_seconds=5.0
+        )[0]
+        plan = H3ContextPlanNode().build_plan(request, references)[0]
+        _, _, document = H3ContextCompilerNode().compile(plan)
+        report = H3ContextValidatorNode().validate(plan, document)[1]
+        assert report.request.reference_registry == expected_registry
+    elif scenario in ("i2va", "l2va"):
         report = _single_keyframe_report(TaskMode(scenario))
     elif scenario == "fl2va":
         report = _keyframe_report()
@@ -110,12 +149,53 @@ def test_real_media_plans_do_not_claim_missing_managed_host_bindings(
     planning = composition_root.get(composition_root.PRODUCTION_PLANNING)
     monkeypatch.setattr(planning, "_clock", lambda: 10.0)
     host = observation()
+    from typing import cast
+
+    from comfyui_h3_context.core.native_source_compatibility import NativeSourceObservation
+
+    native_source = cast(NativeSourceObservation, observed_source())
+    native_checks: list[tuple[object, bool]] = []
+    if frame_recipe != "missing":
+        from comfyui_h3_context.core.native_guide import (
+            GUIDE_REQUIRED_INPUTS,
+            NativeGuideCapability,
+        )
+        from comfyui_h3_context.core.native_keyframe_structure import (
+            PRODUCTION_MANIFEST,
+            KeyframeStructureReason,
+            NativeKeyframeStructureVerdict,
+        )
+
+        native_source = replace(
+            native_source,
+            keyframes=NativeKeyframeStructureVerdict(
+                KeyframeStructureReason.CHANGED
+                if frame_recipe == "structure_changed"
+                else KeyframeStructureReason.ADMITTED,
+                "definition:MiniMaxH3ImageToVideo.execute"
+                if frame_recipe == "structure_changed"
+                else "admitted",
+                PRODUCTION_MANIFEST.fingerprint,
+            ),
+            guide=NativeGuideCapability(frame_recipe != "guide_missing", GUIDE_REQUIRED_INPUTS),
+        )
+        from comfyui_h3_context.adapters import managed_mode_qualification
+        from comfyui_h3_context.core.native_keyframe_structure import is_production_admission
+
+        original_admission = is_production_admission
+
+        def observed_admission(verdict: object) -> bool:
+            admitted = original_admission(verdict)
+            native_checks.append((verdict, admitted))
+            return admitted
+
+        monkeypatch.setattr(managed_mode_qualification, "is_keyframe_admission", observed_admission)
     _install_loader_inventory(monkeypatch)
     monkeypatch.setattr(comfyui_generation_profile, "observe_host", lambda *_args: host)
     monkeypatch.setattr(
         comfyui_generation_profile,
         "_observe_native_composition",
-        lambda: composition_observation(host, observed_source()),
+        lambda: composition_observation(host, native_source),
     )
     prepare = {
         "workspace_handle": created.workspace_handle,
@@ -158,12 +238,32 @@ def test_real_media_plans_do_not_claim_missing_managed_host_bindings(
             "ready.media",
         )
     ).to_wire()
-    assert result["status"] == "held"
-    assert result["reason"] in (
-        "qualification_host_bindings_unavailable",
-        "qualification_composition_unqualified",
-    )
-    assert result["qualification"] is None and registry._current is None
+    if frame_recipe == "qualified":
+        assert result["status"] == "ready"
+        assert result["qualification"] is not None and registry._current is not None
+        assert registry._current.observed_at == 10 and registry._current.expires_at == 70
+        assert "media_bindings" not in result and "media_bindings" not in result["qualification"]
+    else:
+        assert result["status"] == "held"
+        assert result["reason"] in (
+            "qualification_host_bindings_unavailable",
+            "qualification_composition_unqualified",
+        )
+        assert result["qualification"] is None and registry._current is None
+        if frame_recipe != "missing":
+            # Pin the actual capability branch: the public recipe is admissible in the
+            # same-mode qualified control; only this named native fact differs here.
+            assert result["reason"] == "qualification_host_bindings_unavailable"
+            assert native_checks == [(native_source.keyframes, frame_recipe == "guide_missing")]
+            keyframes = cast(NativeKeyframeStructureVerdict, native_source.keyframes)
+            guide = cast(NativeGuideCapability, native_source.guide)
+            if frame_recipe == "guide_missing":
+                assert keyframes.reason is KeyframeStructureReason.ADMITTED
+                assert guide.admitted is False
+            else:
+                assert keyframes.reason is KeyframeStructureReason.CHANGED
+                assert keyframes.check == "definition:MiniMaxH3ImageToVideo.execute"
+                assert guide.admitted is True
     assert set(sidebar._entries) == before
     assert composition_root.MANAGED_SEQUENCE not in composition_root._INSTANCES
 

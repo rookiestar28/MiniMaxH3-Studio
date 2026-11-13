@@ -20,6 +20,7 @@ import type { ProductionAuthoringImportRefusal } from "../host/productionAuthori
 import type { OutputCapability } from "../contracts/authoringOutputCodec";
 import type { ManagedSequenceProjection } from "../host/managedSequenceClient";
 import type { ManagedSerialReattachResult } from "../host/managedSequenceRunnerContract";
+import type { SequenceRunnerDiagnostics } from "../host/managedSequenceDiagnostics";
 import type {
   OverlayBounds,
   OverlayInternalPane,
@@ -145,6 +146,7 @@ export type NleSequenceUiState =
   | "failed";
 
 export type NleSequenceState = Readonly<{
+  diagnostics?: SequenceRunnerDiagnostics | null;
   ui: NleSequenceUiState;
   parentSequenceId: string | null;
   recoveryExpiresAtEpochMs: number | null;

@@ -1,3 +1,5 @@
+import { resolveCompositionScene } from "../src/runtime/sceneResolver";
+import packagedTitle from "./fixtures/packagedTitlePreview.json";
 import { describe, expect, it, vi } from "vitest";
 import fixture from "../../tests/fixtures/m25_10_composition_contract_v1.json";
 import {
@@ -94,7 +96,7 @@ function setup(
   };
 }
 
-function textSetup() {
+function textSetup(fontBytes = 8, fontType = "font/ttf") {
   const wire = structuredClone(fixture.snapshot);
   for (const track of wire.tracks)
     track.enabled = track.track_id === "track-text";
@@ -149,7 +151,7 @@ function textSetup() {
       releases.push(release);
       return {
         open: vi.fn(async () => ({
-          blob: new Blob([new Uint8Array(8)], { type: "font/ttf" }),
+          blob: new Blob([new Uint8Array(fontBytes)], { type: fontType }),
           geometry: null,
         })),
         release,
@@ -507,6 +509,23 @@ describe("visual composition resource ownership", () => {
       blobBytes: 0,
     });
     await resources.close();
+  });
+
+  it("owns and releases the largest bundled OTF face", async () => {
+    const s = textSetup(8_543_168, "font/otf");
+    const resources = createVisualCompositionResources({
+      snapshot: s.snapshot,
+      manifest: buildPublicAssetManifest(s.snapshot),
+      leaseClient: s.client,
+      loadFont: s.loadFont,
+    });
+    await resources.prepare(s.scene, 1, new AbortController().signal);
+    expect(s.loadFont).toHaveBeenCalledOnce();
+    expect((s.loadFont.mock.calls[0]![0] as ArrayBuffer).byteLength).toBe(
+      8_543_168,
+    );
+    await resources.close();
+    expect(s.faces[0]!.close).toHaveBeenCalledOnce();
   });
 
   it("replaces a font owner only when its exact face binding changes", async () => {
@@ -1110,6 +1129,78 @@ describe("visual composition resource ownership", () => {
     ).rejects.toThrow("source_unavailable");
     expect(s.bitmap.close).toHaveBeenCalledOnce();
     expect(s.release).toHaveBeenCalledOnce();
+    await resources.close();
+  });
+});
+
+// The retained TC400 wire shape uses synthetic identities here; no host handle is public.
+function packagedTitleSubject(fontId: string, weight: number) {
+  const wire = structuredClone(packagedTitle);
+  wire.clips[0]!.text.font_asset_id = fontId;
+  wire.clips[0]!.text.weight = weight;
+  if (!wire.assets.some((a) => a.asset_id === fontId))
+    wire.assets.push({ ...wire.assets[0]!, asset_id: fontId });
+  wire.public_fingerprint = publicCompositionFingerprint(wire);
+  const snapshot = decodePublicCompositionSnapshot(wire);
+  const scene = decodeResolvedScene(resolveCompositionScene(snapshot, 0));
+  return { snapshot, scene };
+}
+const packagedFaces = [
+  ["h3.font.noto_sans.v1", 400],
+  ["h3.font.noto_sans.v1", 700],
+  ["h3.font.noto_sans_tc.v1", 400],
+  ["h3.font.noto_sans_tc.v1", 700],
+  ["h3.font.noto_sans_sc.v1", 400],
+  ["h3.font.noto_sans_sc.v1", 700],
+  ["h3.font.noto_sans_jp.v1", 400],
+  ["h3.font.noto_sans_jp.v1", 700],
+  ["h3.font.noto_sans_kr.v1", 400],
+  ["h3.font.noto_sans_kr.v1", 700],
+] as const;
+
+describe("bundled title font resources", () => {
+  it.each(packagedFaces)("owns bundled %s at %i", async (id, weight) => {
+    const { snapshot, scene } = packagedTitleSubject(id, weight);
+    const s = textSetup();
+    const resources = createVisualCompositionResources({
+      snapshot,
+      manifest: buildPublicAssetManifest(snapshot),
+      leaseClient: s.client,
+      loadFont: s.loadFont,
+    });
+    await resources.prepare(scene, 1, new AbortController().signal);
+    expect(s.loadFont).toHaveBeenCalledOnce();
+    expect(s.loadFont.mock.calls[0]![2]).toBe(String(weight));
+    expect(resources.read(scene, 1).get("title.TC400")).toMatchObject({
+      kind: "font",
+      family: s.faces[0]!.family,
+    });
+    await resources.close();
+    expect(s.faces[0]!.close).toHaveBeenCalledOnce();
+    expect(s.releases[0]).toHaveBeenCalledOnce();
+  });
+  it.each(["unknown", "forged"])("refuses %s resource binding", async (bad) => {
+    const { snapshot, scene } = packagedTitleSubject(
+      bad === "unknown" ? "unbundled.font" : "h3.font.noto_sans_tc.v1",
+      400,
+    );
+    const s = textSetup();
+    const resources = createVisualCompositionResources({
+      snapshot,
+      manifest: buildPublicAssetManifest(snapshot),
+      leaseClient: s.client,
+      loadFont: s.loadFont,
+    });
+    await expect(
+      resources.prepare(
+        bad === "forged"
+          ? { ...scene, publicFingerprint: "sha256:" + "0".repeat(64) }
+          : scene,
+        1,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("source_unavailable");
+    expect(s.loadFont).not.toHaveBeenCalled();
     await resources.close();
   });
 });

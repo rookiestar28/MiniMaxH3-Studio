@@ -134,8 +134,8 @@
       "authority": "observed.hc_09_pinned_host",
       "source_paths": [
         "frontend/src/entry.tsx",
-        "frontend/src/host/appMode.ts",
         "frontend/src/host/appModeContract.ts",
+        "frontend/src/host/appModeProfileAdmission.ts",
         "frontend/src/host/authoringActions.ts",
         "frontend/src/host/authoringMediaPreview.ts",
         "frontend/src/host/authoringMediaSourceLease.ts",
@@ -331,7 +331,8 @@
       "source_paths": [
         "frontend/src/host/hostModuleTypes.ts",
         "frontend/src/host/hostSeams.ts",
-        "frontend/src/host/sidebarHost.ts"
+        "frontend/src/host/sidebarHost.ts",
+        "frontend/src/lifecycle/nleWorkspaceSession.ts"
       ],
       "readiness_states": [
         "ready",

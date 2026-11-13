@@ -184,6 +184,8 @@ export async function writeValidatedGraph(
     throw new AppModeError(
       "compile_failed",
       "the host rejected the validated graph transaction",
+      undefined,
+      "root_write_bootstrap",
     );
   } finally {
     release?.();

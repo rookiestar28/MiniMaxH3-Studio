@@ -4,11 +4,12 @@ import type {
 } from "../../contracts/authoringWorkbenchCodec";
 import type { PublicCompositionSnapshot } from "../../contracts/compositionCodec";
 import type { AuthoringIntent } from "../../state/authoringViewState";
-import { titleTextCovered } from "./nleTitleCoverage";
+import { titleTextCovered, titleTextRefusal } from "./nleTitleCoverage";
 import {
   build,
   DEFAULT_TEXT_STYLE,
   freshIdentifier,
+  type TextStyleWire,
 } from "./nleCommandBuilders";
 
 export type TitleInsertionAuthority =
@@ -18,6 +19,7 @@ export type TitleInsertionRefusal =
   | "missing_font"
   | "invalid_content"
   | "font_glyph_unsupported"
+  | "font_italic_unsupported"
   | "unavailable_frame"
   | "insufficient_capacity"
   | "clip_limit"
@@ -41,6 +43,7 @@ export function planTitleInsertion(
     frame: number;
     fontId: string;
     content: string;
+    style?: TextStyleWire;
   }>,
 ): TitleInsertionDecision {
   if (input.busy) return refuse("busy");
@@ -65,13 +68,12 @@ export function planTitleInsertion(
     /[\u0000-\u0008\u000b-\u001f\ud800-\udfff]/u.test(content)
   )
     return refuse("invalid_content");
-  if (
-    !titleTextCovered(content, {
-      ...DEFAULT_TEXT_STYLE,
-      font_asset_id: input.fontId,
-    })
-  )
-    return refuse("font_glyph_unsupported");
+  const style = {
+    ...(input.style ?? DEFAULT_TEXT_STYLE),
+    font_asset_id: input.fontId,
+  };
+  if (!titleTextCovered(content, style))
+    return refuse(titleTextRefusal(content, style));
   if (!Number.isSafeInteger(input.frame)) return refuse("unavailable_frame");
   const capacity =
     "editCapacityFrames" in authority
@@ -113,7 +115,7 @@ export function planTitleInsertion(
       startFrame,
       durationFrames,
       sourceStartFrame: 0,
-      text: { ...DEFAULT_TEXT_STYLE, font_asset_id: input.fontId, content },
+      text: { ...style, content },
     }),
   );
   return {

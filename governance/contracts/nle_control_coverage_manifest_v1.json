@@ -168,7 +168,9 @@
       "operation_id": "title.insert",
       "control_selector": "[data-h3-nle-control=\"title.insert\"]",
       "gesture": "activate",
-      "alternate_selectors": [],
+      "alternate_selectors": [
+        "[data-h3-nle-control=\"title.insert_preset\"]"
+      ],
       "role": "button",
       "accessible_name": "Add title",
       "state_attributes": [
@@ -673,7 +675,9 @@
       "operation_id": "text.style",
       "control_selector": "[data-h3-nle-control=\"text.style\"]",
       "gesture": "activate",
-      "alternate_selectors": [],
+      "alternate_selectors": [
+        "[data-h3-nle-control=\"text.apply_preset\"]"
+      ],
       "role": "button",
       "accessible_name": "Text style",
       "state_attributes": [

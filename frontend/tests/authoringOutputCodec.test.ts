@@ -100,7 +100,18 @@ describe("closed final-output protocol", () => {
   it("preserves terminal failure, historical output and availability invariants", async () => {
     const c = await codec();
     expect(c.OUTPUT_PHASES).toHaveLength(10);
-    expect(c.OUTPUT_FAILURES).toHaveLength(14);
+    expect(c.OUTPUT_FAILURES).toHaveLength(15);
+    expect(
+      c.decodeOutputStatus({
+        ...status,
+        phase: "failed",
+        failure: "path_too_deep",
+        progress_bp: 0,
+        output_handle: null,
+        output: null,
+        availability: "gone",
+      }).failure,
+    ).toBe("path_too_deep");
     for (const phase of c.OUTPUT_PHASES) {
       if (phase === "succeeded") continue;
       const failure =

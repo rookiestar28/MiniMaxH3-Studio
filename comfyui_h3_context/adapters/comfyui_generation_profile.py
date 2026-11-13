@@ -41,7 +41,9 @@ from ..core.native_composition import (
     NativeCompositionQualification,
     qualify_native_composition,
 )
+from ..core.native_guide import GUIDE_NODE_ID, observe_guide_capability
 from ..core.native_h3 import NativeH3Wiring
+from ..core.native_keyframe_structure import classify_native_keyframe_source
 from ..core.native_source_compatibility import NativeSourceObservation
 from ..core.native_t2va_structure import MAX_SOURCE_BYTES, classify_native_t2va_source
 from ..core.perception_producer import PerceptionProducerResult
@@ -629,10 +631,20 @@ def _observe_native_source() -> NativeSourceObservation | None:
     ).hexdigest()
     # CRITICAL: parse-only classification of the same bytes; host code is never imported here.
     # The origin stays in process for currentness and is never serialized or sent to a browser.
+    mappings = getattr(_host_module("nodes"), "NODE_CLASS_MAPPINGS", None)
+    guide = mappings.get(GUIDE_NODE_ID) if isinstance(mappings, dict) else None
+    module_guide = getattr(module, GUIDE_NODE_ID, None)
+    guide_registered = (
+        isinstance(guide, type)
+        and guide is module_guide
+        and _host_module(getattr(guide, "__module__", "")) is module
+    )
     return NativeSourceObservation(
         blob,
         classify_native_t2va_source(content),
-        (module, classes, location, status.st_dev, status.st_ino),
+        (module, classes, location, status.st_dev, status.st_ino, guide, module_guide),
+        keyframes=classify_native_keyframe_source(content),
+        guide=observe_guide_capability(content, registered=guide_registered),
     )
 
 

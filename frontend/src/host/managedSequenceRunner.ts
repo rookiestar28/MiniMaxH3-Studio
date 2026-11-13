@@ -1,4 +1,19 @@
 import { sha256Text } from "../contracts/canonicalFingerprint";
+import {
+  runnerRequestId,
+  safeFailureFingerprint,
+  mediaFailureCode,
+  validateStartIntent,
+  parentAuthority,
+  parentProjectionAuthority,
+  serialProjectionProgress,
+  validateReuseAuthority,
+  parentMutationPayload,
+} from "./managedSequenceAuthority";
+import {
+  validatePreparedMediaFailurePayload,
+  type SequenceMediaFailureCode,
+} from "./managedSequenceClient";
 import type {
   ManagedAppModePreflight,
   ManagedAppModeQueueAuthority,
@@ -9,101 +24,23 @@ import {
   type SequenceCoordinatorResult,
 } from "./sequenceCoordinator";
 import type { ExecutionTerminalEvent } from "./sidebarHost";
-import type {
-  ManagedSequenceMutationResult,
-  ManagedSequenceProjection,
-  ManagedSequenceReattachPointerV1,
-} from "./managedSequenceClient";
+import type { ManagedSequenceMutationResult } from "./managedSequenceClient";
 import {
   ManagedSerialSequenceRunnerError,
+  assertManagedSerialSequenceRunnerDependencies,
+  type ManagedSerialSequenceRunnerDependencies,
   type ActiveSerialChild,
-  type ChildCoordinatorClient,
-  type ManagedParentClient,
-  type ManagedReattachStore,
-  type ManagedSerialAppModeStart,
   type ManagedSerialArtifactObservation,
   type ManagedSerialChildPlan,
   type ManagedSerialReattachResult,
-  type ManagedSerialResolveChild,
-  type ManagedSerialResolveReuse,
   type ManagedSerialSequenceStartIntent,
   type ParentAuthority,
-  type PromptHistoryClient,
   type ReattachedTerminal,
 } from "./managedSequenceRunnerContract";
 
-const identifier = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
+import { createSequenceDiagnosticsRecorder } from "./managedSequenceDiagnostics";
+
 const fingerprint = /^sha256:[0-9a-f]{64}$/;
-
-function runnerRequestId(phase: string, ...authority: unknown[]): string {
-  return `m26.${phase}.${sha256Text(
-    JSON.stringify({
-      schema: "h3.context.managed_serial_runner_request.v1",
-      authority,
-    }),
-  ).slice(7, 47)}`;
-}
-
-function safeFailureFingerprint(phase: string, disposition: string): string {
-  return sha256Text(
-    JSON.stringify({
-      schema: "h3.context.managed_serial_runner_failure.v1",
-      phase,
-      disposition,
-    }),
-  );
-}
-
-function validateStartIntent(intent: ManagedSerialSequenceStartIntent): void {
-  const segments = intent.segmentIds;
-  if (
-    segments.length < 1 ||
-    segments.length > 15 ||
-    new Set(segments).size !== segments.length ||
-    segments.some((segmentId) => !identifier.test(segmentId)) ||
-    !fingerprint.test(intent.qualificationFingerprint)
-  )
-    throw new ManagedSerialSequenceRunnerError("invalid_start_intent");
-  const authorization = intent.authorization;
-  if (
-    !/^pw_[A-Za-z0-9_-]{32,96}$/.test(authorization.workspace_handle) ||
-    !Number.isSafeInteger(authorization.expected_workspace_revision) ||
-    authorization.expected_workspace_revision < 1 ||
-    authorization.expected_workspace_revision > 1_000_000 ||
-    !fingerprint.test(authorization.expected_workspace_fingerprint) ||
-    !fingerprint.test(authorization.expected_plan_fingerprint) ||
-    !fingerprint.test(authorization.generation_plan_fingerprint) ||
-    !fingerprint.test(authorization.compiler_fingerprint) ||
-    !fingerprint.test(authorization.host_capability_fingerprint) ||
-    authorization.explicit_intent !== "generate_approved_sequence"
-  )
-    throw new ManagedSerialSequenceRunnerError("invalid_start_intent");
-}
-
-function parentAuthority(
-  result: ManagedSequenceMutationResult,
-): ParentAuthority {
-  return Object.freeze({
-    parentSequenceId: result.parentSequenceId,
-    authorizationFingerprint: result.authorizationFingerprint,
-    readAuthorityFingerprint: result.readAuthorityFingerprint,
-    state: result.state,
-    revision: result.revision,
-    parentExpiresAtEpochMs: result.parentExpiresAtEpochMs,
-  });
-}
-
-function parentMutationPayload(
-  authority: ParentAuthority,
-  values: Record<string, unknown> = {},
-): Record<string, unknown> {
-  return {
-    parent_sequence_id: authority.parentSequenceId,
-    expected_revision: authority.revision,
-    authorization_fingerprint: authority.authorizationFingerprint,
-    ...values,
-  };
-}
 
 /**
  * Own the browser half of one explicitly authorized serial parent.
@@ -121,24 +58,16 @@ export function createManagedSerialSequenceRunner({
   resolveChild,
   historyClient,
   resolveReuse,
-}: {
-  parentClient: ManagedParentClient;
-  coordinatorClient: ChildCoordinatorClient;
-  reattachStore: ManagedReattachStore;
-  startChild: ManagedSerialAppModeStart;
-  historyClient?: PromptHistoryClient;
-  resolveReuse?: ManagedSerialResolveReuse;
-  resolveChild: ManagedSerialResolveChild;
-}) {
-  if (
-    typeof parentClient?.send !== "function" ||
-    typeof coordinatorClient?.send !== "function" ||
-    typeof reattachStore?.replace !== "function" ||
-    typeof startChild !== "function" ||
-    typeof resolveChild !== "function" ||
-    (resolveReuse !== undefined && typeof resolveReuse !== "function")
-  )
-    throw new Error("managed serial runner dependency is unavailable");
+}: ManagedSerialSequenceRunnerDependencies) {
+  assertManagedSerialSequenceRunnerDependencies({
+    parentClient,
+    coordinatorClient,
+    reattachStore,
+    startChild,
+    resolveChild,
+    historyClient,
+    resolveReuse,
+  });
 
   let authority: ParentAuthority | null = null;
   let active: ActiveSerialChild | null = null;
@@ -146,6 +75,10 @@ export function createManagedSerialSequenceRunner({
   let nextIndex = 0;
   let attached = false;
   let started = false;
+  let starting = false;
+  let pendingStartIdentity: string | null = null;
+  let startAuthorization: ParentAuthority | null = null;
+  let expectedSequenceMode: "t2va" | "i2va" | "l2va" | "fl2va" | null = null;
   let reconciledRead = false;
   let effectEpoch = 0;
   let lastSuccessfulTerminalFingerprint: string | null = null;
@@ -156,6 +89,9 @@ export function createManagedSerialSequenceRunner({
     activeWorkflowFingerprint: string;
   }> | null = null;
   let tail: Promise<unknown> = Promise.resolve();
+  // IMPORTANT: updates only observe acknowledged transitions; reading diagnostics here would
+  // make observation authorize execution. Only snapshot may consume this per-runner recorder.
+  const diagnostics = createSequenceDiagnosticsRecorder();
 
   const exclusive = <T>(operation: () => Promise<T>): Promise<T> => {
     const result = tail.then(operation, operation);
@@ -164,22 +100,21 @@ export function createManagedSerialSequenceRunner({
   };
 
   const adopt = (result: ManagedSequenceMutationResult): ParentAuthority => {
+    const mode =
+      result.schema === "h3.context.managed_sequence_result.v2"
+        ? result.sequenceTaskMode
+        : "t2va";
+    if (
+      mode === undefined ||
+      (expectedSequenceMode !== null && mode !== expectedSequenceMode)
+    )
+      throw new ManagedSerialSequenceRunnerError("child_authority_mismatch");
+    expectedSequenceMode = mode;
     authority = parentAuthority(result);
-    return authority;
-  };
-
-  const adoptProjection = (
-    projection: ManagedSequenceProjection,
-    pointer: ManagedSequenceReattachPointerV1,
-  ): ParentAuthority => {
-    authority = Object.freeze({
-      parentSequenceId: projection.parentSequenceId,
-      authorizationFingerprint: projection.authorizationFingerprint,
-      readAuthorityFingerprint: pointer.readAuthorityFingerprint,
-      state: projection.state,
-      revision: projection.revision,
-      parentExpiresAtEpochMs: pointer.expiresAtEpochMs,
-    });
+    // IMPORTANT: a failed claim commits a paused parent without child authority. Adopt that
+    // revision and preserve its typed reason before the generic missing-child guard below.
+    if (result.failureCode != null)
+      throw new ManagedSerialSequenceRunnerError(result.failureCode, result);
     return authority;
   };
 
@@ -192,9 +127,20 @@ export function createManagedSerialSequenceRunner({
   const failPrepared = async (
     prepared: ManagedSequenceMutationResult,
     phase: string,
+    failureCode?: SequenceMediaFailureCode,
   ): Promise<void> => {
     if (prepared.execution === null) return;
     const current = requireAuthority();
+    const payload = parentMutationPayload(current, {
+      segment_id: prepared.execution.segmentId,
+      eligible_execution_fingerprint: prepared.execution.fingerprint,
+      failure_fingerprint: safeFailureFingerprint(phase, "not_invoked"),
+      ...(failureCode === undefined ? {} : { failure_code: failureCode }),
+    });
+    validatePreparedMediaFailurePayload(
+      payload,
+      expectedSequenceMode ?? undefined,
+    );
     const result = await parentClient.send(
       runnerRequestId(
         "fail-prepared",
@@ -202,11 +148,7 @@ export function createManagedSerialSequenceRunner({
         prepared.execution.fingerprint,
       ),
       "fail_prepared_child",
-      parentMutationPayload(current, {
-        segment_id: prepared.execution.segmentId,
-        eligible_execution_fingerprint: prepared.execution.fingerprint,
-        failure_fingerprint: safeFailureFingerprint(phase, "not_invoked"),
-      }),
+      payload,
     );
     adopt(result);
   };
@@ -237,6 +179,7 @@ export function createManagedSerialSequenceRunner({
     );
     adopt(updated);
     child.artifactRecordedByParent = true;
+    diagnostics.artifactRecorded();
   };
 
   let launchNext: () => Promise<void>;
@@ -267,6 +210,7 @@ export function createManagedSerialSequenceRunner({
       if (released.disposition !== "released")
         throw new ManagedSerialSequenceRunnerError("child_release_refused");
       child.childReleased = true;
+      diagnostics.released();
     }
     const current = requireAuthority();
     const terminalResult = await parentClient.send(
@@ -287,6 +231,7 @@ export function createManagedSerialSequenceRunner({
       }),
     );
     const terminalAuthority = adopt(terminalResult);
+    diagnostics.parentTerminalRecorded();
     active = null;
     if (child.terminalKind === "success") {
       lastSuccessfulTerminalFingerprint = terminal;
@@ -348,19 +293,13 @@ export function createManagedSerialSequenceRunner({
     if (!attached || nextIndex >= segmentIds.length) return;
     const current = requireAuthority();
     const segmentId = segmentIds[nextIndex]!;
+    diagnostics.preparing(nextIndex);
     const reuse =
       resolveReuse === undefined
         ? null
         : await resolveReuse(segmentId, nextIndex);
     if (reuse !== null) {
-      if (
-        !fingerprint.test(reuse.artifactReceiptFingerprint) ||
-        !Number.isSafeInteger(reuse.byteLength) ||
-        reuse.byteLength < 1 ||
-        reuse.byteLength > 134_217_728 ||
-        !fingerprint.test(reuse.terminalFingerprint)
-      )
-        throw new ManagedSerialSequenceRunnerError("child_authority_mismatch");
+      validateReuseAuthority(reuse);
       const reused = await parentClient.send(
         runnerRequestId(
           "reuse",
@@ -424,6 +363,7 @@ export function createManagedSerialSequenceRunner({
       await failPrepared(prepared, "prepared_authority_drift");
       throw new ManagedSerialSequenceRunnerError("child_authority_mismatch");
     }
+    diagnostics.prepared(nextIndex);
     let plan: ManagedSerialChildPlan;
     try {
       plan = await resolveChild(
@@ -432,7 +372,8 @@ export function createManagedSerialSequenceRunner({
         nextIndex,
       );
     } catch (error) {
-      await failPrepared(prepared, "resolve_child");
+      diagnostics.failure(error);
+      await failPrepared(prepared, "resolve_child", mediaFailureCode(error));
       throw error;
     }
     if (
@@ -485,10 +426,10 @@ export function createManagedSerialSequenceRunner({
           observation: preflight.observation,
         }),
       );
+      const boundAuthority = adopt(bound);
       const childAuthority = bound.childAuthority;
       if (childAuthority === null)
         throw new ManagedSerialSequenceRunnerError("child_authority_mismatch");
-      const boundAuthority = adopt(bound);
       boundCanvas = Object.freeze({
         parentSequenceId: boundAuthority.parentSequenceId,
         workflowAuthority: plan.workflowAuthority,
@@ -512,6 +453,7 @@ export function createManagedSerialSequenceRunner({
         childReleased: false,
       };
       active = child;
+      diagnostics.bind(nextIndex);
       return Object.freeze({
         expectedIdentity: Object.freeze({
           graphFingerprint: preflight.observation.graph_fingerprint,
@@ -599,7 +541,8 @@ export function createManagedSerialSequenceRunner({
       unsafeOptions?.prepareManaged !== undefined ||
       unsafeOptions?.expectedIdentity !== undefined ||
       unsafeOptions?.onQueueSubmitted !== undefined ||
-      unsafeOptions?.preparedCanonicalPrompt !== undefined
+      unsafeOptions?.preparedCanonicalPrompt !== undefined ||
+      unsafeOptions?.preparedSequenceMedia !== undefined
     ) {
       await failPrepared(prepared, "reserved_callback_override");
       throw new ManagedSerialSequenceRunnerError("child_authority_mismatch");
@@ -608,6 +551,9 @@ export function createManagedSerialSequenceRunner({
       await startChild(plan.inputs, {
         ...plan.options,
         preparedCanonicalPrompt: plan.canonicalLowering,
+        ...(plan.preparedSequenceMedia === undefined
+          ? {}
+          : { preparedSequenceMedia: plan.preparedSequenceMedia }),
         prepareManaged,
       });
       const child = active;
@@ -618,37 +564,65 @@ export function createManagedSerialSequenceRunner({
       )
         throw new ManagedSerialSequenceRunnerError("queue_callback_incomplete");
     } catch (error) {
-      if (!queueFailureHandled) {
-        if (active !== null)
-          await handleQueueFailure(
-            active,
-            queueInvoked ? "ambiguous" : "not_invoked",
-          );
-        else if (!managedPrepared) await failPrepared(prepared, "compile");
-      }
+      diagnostics.failure(error);
+      if (!queueFailureHandled && active !== null && queueInvoked)
+        await handleQueueFailure(active, "ambiguous");
+      else if (!queueFailureHandled)
+        // CRITICAL: nothing was queued, so this notice is best-effort and must not replace the
+        // AppModeError. Never swallow the ambiguous mark above: it guards duplicate submission.
+        await (
+          active !== null
+            ? handleQueueFailure(active, "not_invoked")
+            : managedPrepared
+              ? undefined
+              : failPrepared(prepared, "compile", mediaFailureCode(error))
+        )?.catch(() => undefined);
       throw error;
     }
   };
 
   const start = (intent: ManagedSerialSequenceStartIntent): Promise<void> => {
+    // IMPORTANT: decide duplicates now, but deliver their refusal through the existing tail.
+    // Early rejection breaks callers awaiting the first transport; rechecking later can authorize another parent.
+    if (starting)
+      return exclusive(async () => {
+        throw new ManagedSerialSequenceRunnerError("already_started");
+      });
+    starting = true;
     const requestedEffectEpoch = effectEpoch;
     return exclusive(async () => {
       if (started)
         throw new ManagedSerialSequenceRunnerError("already_started");
       validateStartIntent(intent);
-      started = true;
-      attached = requestedEffectEpoch === effectEpoch;
-      segmentIds = Object.freeze([...intent.segmentIds]);
-      const authorization = await parentClient.send(
-        runnerRequestId(
-          "authorize",
-          intent.authorization.expected_plan_fingerprint,
-          intent.authorization.generation_plan_fingerprint,
-        ),
-        "authorize_sequence",
-        { ...intent.authorization },
+      const startIdentity = sha256Text(
+        JSON.stringify({
+          authorization: intent.authorization,
+          qualification: intent.qualificationFingerprint,
+          segments: intent.segmentIds,
+          mode: intent.sequenceTaskMode ?? "t2va",
+        }),
       );
-      const authorized = adopt(authorization);
+      if (
+        pendingStartIdentity !== null &&
+        startIdentity !== pendingStartIdentity
+      )
+        throw new ManagedSerialSequenceRunnerError("invalid_start_intent");
+      expectedSequenceMode = intent.sequenceTaskMode ?? "t2va";
+      segmentIds = Object.freeze([...intent.segmentIds]);
+      if (startAuthorization === null) {
+        const authorization = await parentClient.send(
+          runnerRequestId(
+            "authorize",
+            intent.authorization.expected_plan_fingerprint,
+            intent.authorization.generation_plan_fingerprint,
+          ),
+          "authorize_sequence",
+          { ...intent.authorization },
+        );
+        startAuthorization = adopt(authorization);
+        pendingStartIdentity = startIdentity;
+      }
+      const authorized = startAuthorization;
       const startedResult = await parentClient.send(
         runnerRequestId(
           "start",
@@ -658,9 +632,16 @@ export function createManagedSerialSequenceRunner({
         "start_sequence",
         parentMutationPayload(authorized, {
           qualification_fingerprint: intent.qualificationFingerprint,
+          ...(intent.mediaBindings === undefined
+            ? {}
+            : { media_bindings: intent.mediaBindings }),
         }),
       );
       const startedAuthority = adopt(startedResult);
+      // IMPORTANT: concrete Start may refuse a file before reserving a run. Keep the same
+      // authorization retryable; only a committed Start consumes this runner's start intent.
+      started = true;
+      attached = requestedEffectEpoch === effectEpoch;
       if (
         startedAuthority.parentExpiresAtEpochMs === null ||
         !reattachStore.replace({
@@ -684,6 +665,8 @@ export function createManagedSerialSequenceRunner({
       // IMPORTANT: pointer persistence is synchronous and complete before this first call can
       // compile, write, or reach App Mode's one queue boundary.
       await launchNext();
+    }).finally(() => {
+      starting = false;
     });
   };
 
@@ -704,20 +687,19 @@ export function createManagedSerialSequenceRunner({
       if (read.status !== 200 || read.projection === null)
         throw new ManagedSerialSequenceRunnerError("sequence_unavailable");
       const projection = read.projection;
-      adoptProjection(projection, pointer);
+      authority = parentProjectionAuthority(projection, pointer);
+      diagnostics.recoverActive(
+        projection.slots.findIndex(
+          (slot) => slot.segmentId === projection.activeSegmentId,
+        ),
+      );
       started = true;
       reconciledRead = true;
-      segmentIds = Object.freeze(
-        projection.slots.map((slot) => slot.segmentId),
-      );
-      nextIndex = projection.slots.findIndex(
-        (slot) => slot.state !== "succeeded" && slot.state !== "reused",
-      );
-      if (nextIndex < 0) nextIndex = projection.slots.length;
+      const progress = serialProjectionProgress(projection);
+      segmentIds = progress.segmentIds;
+      nextIndex = progress.nextIndex;
       lastSuccessfulTerminalFingerprint =
-        nextIndex === 0
-          ? null
-          : (projection.slots[nextIndex - 1]?.terminalFingerprint ?? null);
+        progress.lastSuccessfulTerminalFingerprint;
       if (projection.activeSegmentId === null) {
         return Object.freeze({
           disposition:
@@ -731,6 +713,11 @@ export function createManagedSerialSequenceRunner({
       const slot = projection.slots.find(
         (candidate) => candidate.segmentId === projection.activeSegmentId,
       );
+      if (slot !== undefined && reattachedTerminal === null)
+        diagnostics.recoverGate(
+          segmentIds.indexOf(slot.segmentId),
+          slot.artifactReceiptFingerprint !== null,
+        );
       if (
         slot === undefined ||
         slot.queuePromptId === null ||
@@ -821,6 +808,11 @@ export function createManagedSerialSequenceRunner({
           result,
           childReleased: false,
         };
+        diagnostics.recoverGate(
+          segmentIds.indexOf(slot.segmentId),
+          slot.artifactReceiptFingerprint !== null,
+          true,
+        );
       }
       const terminal = reattachedTerminal;
       if (!terminal.childReleased) {
@@ -843,6 +835,7 @@ export function createManagedSerialSequenceRunner({
         if (released.disposition !== "released")
           throw new ManagedSerialSequenceRunnerError("child_release_refused");
         terminal.childReleased = true;
+        diagnostics.released();
       }
       const current = requireAuthority();
       const parentTerminal = await parentClient.send(
@@ -863,6 +856,8 @@ export function createManagedSerialSequenceRunner({
         }),
       );
       const completed = adopt(parentTerminal);
+      diagnostics.parentTerminalRecorded();
+      diagnostics.clearRecoveredActive();
       if (terminal.kind === "success") {
         lastSuccessfulTerminalFingerprint = terminal.result.terminalFingerprint;
         const completedIndex = projection.slots.findIndex(
@@ -1010,6 +1005,7 @@ export function createManagedSerialSequenceRunner({
         child.coordinator = result;
         child.artifactChildRecorded = true;
       }
+      diagnostics.fingerprintObserved(result.terminalFingerprint !== null);
       await syncParentArtifact(child, result);
       if (result.terminalFingerprint !== null) {
         await finishTerminal(child, result);
@@ -1052,6 +1048,7 @@ export function createManagedSerialSequenceRunner({
         child.coordinator = result;
         child.terminalChildRecorded = true;
       }
+      diagnostics.terminalObserved(result.terminalFingerprint !== null);
       await syncParentArtifact(child, result);
       if (result.terminalFingerprint !== null)
         await finishTerminal(child, result);
@@ -1153,6 +1150,7 @@ export function createManagedSerialSequenceRunner({
       if (retriedAuthority.state !== "active")
         throw new ManagedSerialSequenceRunnerError("sequence_unavailable");
       active = null;
+      diagnostics.clearRecoveredActive();
       reconciledRead = false;
       attached = requestedEffectEpoch === effectEpoch;
       await launchNext();
@@ -1189,6 +1187,12 @@ export function createManagedSerialSequenceRunner({
         parentRevision: authority?.revision ?? null,
         activeSegmentId: active?.execution.segmentId ?? null,
         activeQueuePromptId: active?.queuePromptId ?? null,
+        diagnostics: diagnostics.snapshot(
+          authority?.state ?? null,
+          active === null
+            ? null
+            : segmentIds.indexOf(active.execution.segmentId),
+        ),
       }),
   });
 }

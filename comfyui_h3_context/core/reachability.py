@@ -552,7 +552,9 @@ def build_default_reachability_manifest(
         )
         for mode in TaskMode
     )
-    native_supported = {TaskMode.T2VA, TaskMode.FL2VA, TaskMode.REF2VA}
+    # IMPORTANT: mirror the native adapter's complete dispatch, including single keyframes;
+    # a stale partial mode list hides working I2VA/L2VA routes from public reachability.
+    native_supported = set(TaskMode)
     entries.extend(
         _mode_entry(
             stage=ReachabilityStage.NATIVE_GENERATION,

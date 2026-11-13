@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, NoReturn, Protocol, SupportsIndex
 
 from ..core.authoring_render_jobs import RenderJobLimits
-from ..core.safe_paths import validate_directory, validate_regular_file
+from ..core.safe_paths import _native_io_path, validate_directory, validate_regular_file
 from .segment_artifact_store import (
     _msvcrt_get_osfhandle,
     _msvcrt_open_osfhandle,
@@ -263,8 +263,10 @@ class PinnedRenderExecutable:
         with self._lock:
             if self._closed:
                 raise RenderProcessError("runtime_unavailable")
-            metadata = validate_regular_file(
-                self._path, maximum_bytes=_MAX_EXECUTABLE_BYTES
+            # IMPORTANT: executable identity stays logical; a native metadata operand must
+            # be converted again after validation or long executable pins cannot be borrowed.
+            metadata = _native_io_path(
+                validate_regular_file(self._path, maximum_bytes=_MAX_EXECUTABLE_BYTES)
             ).lstat()
             if (metadata.st_dev, metadata.st_ino, metadata.st_size) != self._identity:
                 raise RenderProcessError("runtime_unavailable")
@@ -309,7 +311,11 @@ def pin_render_executable(
         kernel = _kernel()
         # CRITICAL: keep deny-write/delete handles through every child run. A hash followed
         # by an ordinary reopen lets an executable change between admission and CreateProcess.
-        handle = kernel.CreateFileW(str(admitted), 0x80000000, 0x1, None, 3, 0x00200080, None)
+        # IMPORTANT: this file pin accepts extended paths; CreateProcessW app/cwd below do not.
+        # Do not propagate this native spelling into the executable's logical identity.
+        handle = kernel.CreateFileW(
+            str(_native_io_path(admitted)), 0x80000000, 0x1, None, 3, 0x00200080, None
+        )
         if not handle or handle == ctypes.c_void_p(-1).value:
             raise RenderProcessError("runtime_unavailable")
         try:
@@ -321,7 +327,7 @@ def pin_render_executable(
             raise
         scope.callback(os.close, descriptor)
         opened = os.fstat(descriptor)
-        before = admitted.lstat()
+        before = _native_io_path(admitted).lstat()
         if (opened.st_dev, opened.st_ino, opened.st_size) != (
             before.st_dev,
             before.st_ino,

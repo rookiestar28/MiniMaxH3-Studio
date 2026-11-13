@@ -12,11 +12,13 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ..core.canonical import canonical_fingerprint
-from ..core.contracts import TaskMode
+from ..core.contracts import MediaKind, TaskMode
 from ..core.generation_profile import FamilyDisposition, materialization_bases
 from ..core.guide_conformance import evaluate_guide_conformance
 from ..core.managed_sequence import ManagedModeQualificationV1, ManagedModeQualificationV2
 from ..core.native_composition import NativeCompositionDisposition
+from ..core.native_guide import NativeGuideCapability
+from ..core.native_keyframe_structure import is_production_admission as is_keyframe_admission
 from ..core.native_mode_matrix import build_default_native_mode_matrix
 from ..core.native_source_compatibility import NativeSourceObservation
 from ..core.production_import import ProductionAutomaticPlanAuthorityV2
@@ -27,7 +29,10 @@ from .managed_asset_resolution import (
     build_managed_asset_resolution,
     build_managed_native_composition,
 )
-from .production_context_materializer import claim_canonical_production_materialization
+from .production_context_materializer import (
+    ProductionCanonicalLoweringV2,
+    claim_canonical_production_materialization,
+)
 
 QUALIFICATION_TTL_SECONDS = 60
 #: Issued qualifications whose loaded-source observation is retained for later currentness checks.
@@ -50,6 +55,9 @@ _COMPILER_SOURCES = (
     "core/native_source_compatibility.py",
     "core/native_t2va_structure.py",
     "core/native_t2va_baseline.py",
+    "core/native_keyframe_structure.py",
+    "core/native_keyframe_baseline.py",
+    "core/native_guide.py",
     "core/native_h3.py",
     "core/native_mode_matrix.py",
     "core/normalization.py",
@@ -234,13 +242,35 @@ class ManagedQualificationProducer:
                     if composition.observed_source() != source:
                         raise ProductionWorkbenchError("qualification_changed", 409)
                     admission = composition.detail
-                    # IMPORTANT: semantic asset IDs do not name owned ComfyUI loader nodes.
-                    # Match the shipped prepared-child resolver; otherwise readiness authorizes
-                    # a parent whose first child is certain to fail before it can bind a graph.
+                    roles = {
+                        TaskMode.T2VA: (),
+                        TaskMode.I2VA: ("first_frame",),
+                        TaskMode.L2VA: ("last_frame",),
+                        TaskMode.FL2VA: ("first_frame", "last_frame"),
+                    }.get(snapshot.report.request.task_mode)
+                    lowering = snapshot.canonical_lowering
+                    # CRITICAL: readiness qualifies only the canonical frame recipe and loaded
+                    # native/guide support. Exact locator/receipt claims remain a Start gate.
                     if (
-                        snapshot.report.request.task_mode is not TaskMode.T2VA
-                        or snapshot.wiring.bindings
-                        or snapshot.canonical_lowering is None
+                        roles is None
+                        or lowering is None
+                        or tuple(row.native_input for row in snapshot.wiring.bindings) != roles
+                        or any(
+                            row.kind is not MediaKind.IMAGE or row.native_slot != row.native_input
+                            for row in snapshot.wiring.bindings
+                        )
+                        or (
+                            roles
+                            and (
+                                type(lowering) is not ProductionCanonicalLoweringV2
+                                or lowering.task_mode is not snapshot.report.request.task_mode
+                                or tuple(role.value for role in lowering.binding_roles) != roles
+                                or type(source) is not NativeSourceObservation
+                                or not is_keyframe_admission(source.keyframes)
+                                or type(source.guide) is not NativeGuideCapability
+                                or not source.guide.admitted
+                            )
+                        )
                     ):
                         raise ProductionWorkbenchError(
                             "qualification_host_bindings_unavailable", 409
