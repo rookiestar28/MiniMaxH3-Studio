@@ -113,7 +113,8 @@ def test_inventory_covers_both_stacks_and_the_shipped_entrypoint() -> None:
     # adapter plus the two seam instruments; inactive product routes do not remove their modules.
     # The shared native audio capacity adds one dependency-free policy owner.
     # Validation and assisted proposals share one pure literal-content predicate owner.
-    assert len([row for row in document["modules"] if row["language"] == "python"]) == 355
+    #  (2026-11-24) adds the second production lineage's data tables as one pure data owner.
+    assert len([row for row in document["modules"] if row["language"] == "python"]) == 356
     # /48 add the toolbar/decisions and Media/Text; adds filmstrip ownership;
     #  replaces one legacy Inspector module with separate tabs and timeline-menu owners;
     #  adds the monitor transform overlay and its pure gesture mapper; adds the

@@ -18,6 +18,22 @@ implementation.
 
 <details>
 
+<summary><strong>1.4.6 — Longer videos on ComfyUI 0.44 and later</strong></summary>
+
+- Longer videos are no longer held on ComfyUI 0.44 and later. Version 1.4.5 did not recognize the
+  native MiniMax H3 source those versions ship, so it held longer-video generation in T2VA and in
+  the frame modes (I2VA, FL2VA and L2VA). This version recognizes it. ComfyUI versions that 1.4.5
+  already recognized are handled as before.
+- A two-segment T2VA longer video was generated on ComfyUI 0.46.0 with frontend 1.59.11, using
+  a 4-step turbo LoRA.
+- When the extension does not recognize the MiniMax H3 nodes of your ComfyUI, the message now says
+  so: update ComfyUI, and if it is already up to date, update this extension when a newer version
+  is available. A single clip in H3 App Mode still works.
+
+</details>
+
+<details>
+
 <summary><strong>1.4.5 — Longer videos from frames, CJK titles and title styles</strong></summary>
 
 - Longer videos can now be generated in I2VA, FL2VA and L2VA, as in T2VA, with cuts between
@@ -43,14 +59,6 @@ implementation.
   rendering needs a ComfyUI folder path of at most 96 characters and refuses a deeper one before
   it starts.
 - New checkouts use LF line endings on every platform.
-
-正體中文：已修正：在 App Mode 已準備好、或已含相容 H3 流程的畫布上，
-「執行／匯出」步驟的「啟動 H3 App Mode」現在可正常啟動（1.4.1 及更早版本會再次詢問保留或取代畫布）；
-裁切圖片並準備畫布後，從側邊欄啟動也可正常執行（1.4.0 與 1.4.1 會停在錯誤）。
-
-简体中文：已修复：在 App Mode 已准备好、或已含兼容 H3 流程的画布上，
-“执行／导出”步骤的“启动 H3 App Mode”现在可正常启动（1.4.1 及更早版本会再次询问保留或替换画布）；
-裁剪图片并准备画布后，从侧边栏启动也可正常运行（1.4.0 与 1.4.1 会停在错误）。
 
 </details>
 
@@ -320,8 +328,9 @@ message names it. The canvas nodes keep working even when the sidebar cannot loa
   Linux support for them is coming in an upcoming update.
 - The clip editor, image crop and App Mode have been tested on ComfyUI 0.42.0 with frontend 1.55.18
   and with frontend 1.57.1. Longer videos in the frame modes, and starting on a crop-prepared
-  canvas, have been tested on ComfyUI 0.42.0 with frontend 1.57.1. These are tested combinations,
-  not minimum versions.
+  canvas, have been tested on ComfyUI 0.42.0 with frontend 1.57.1. A two-segment T2VA longer video
+  was generated on ComfyUI 0.46.0 with frontend 1.59.11, using a 4-step turbo LoRA. These
+  are tested combinations, not minimum versions.
 - Longer-video generation checks the installed H3 implementation separately. If it reports an
   incompatibility, use a complete, compatible ComfyUI installation; installing FFmpeg or waiting
   does not fix it.
@@ -900,14 +909,6 @@ emoji and other uncovered characters are refused with an explanation. No system 
 CJK titles need 1.4.5 or later. Opening a saved CJK project in 1.4.0 or 1.4.1 keeps its text and
 permits moving, trimming or deleting the title, but CJK editing and rendering are refused.
 
-正體中文：標題內建正體中文、簡體中文、日文及韓文字型，支援一般與粗體；中日韓文字不支援斜體，
-請關閉斜體後再套用。單一內建字型必須涵蓋整段文字，不支援的 emoji 仍會遭拒絕。
-中日韓標題需要 1.4.5 或更新版本；1.4.0 與 1.4.1 可開啟儲存的中日韓專案，但會拒絕編輯與渲染這類標題。
-
-简体中文：标题内置繁中、简中、日文及韩文字体，支持常规和粗体；中日韩文字不支持斜体，
-请关闭斜体后再应用。单一内置字体必须覆盖整段文字，不支持的 emoji 仍会被拒绝。
-中日韩标题需要 1.4.5 或更新版本；1.4.0 与 1.4.1 可打开保存的中日韩项目，但会拒绝编辑和渲染这类标题。
-
 Rendered files are kept for about an hour, at most 16 at a time. Download the ones you want to keep.
 
 ### Keeping your work
@@ -1255,6 +1256,7 @@ Review workflows and screenshots before sharing them. More detail is in
 | A sequence cannot be resumed after a reload               | Cancel it and start again.                                                                                                                                 |
 | Readiness expired before generating                       | Choose **Check readiness** again.                                                                                                                          |
 | Readiness says the host does not provide every native MiniMax H3 workflow | The loaded native H3 implementation is incomplete or not supported; use a complete, compatible ComfyUI installation.                                                     |
+| Readiness says the MiniMax H3 nodes in this ComfyUI are a version this extension cannot use for longer videos | Update ComfyUI. If it is already up to date, update this extension when a newer version is available. A single clip in H3 App Mode still works.            |
 | A remote assisted-authoring profile does not run          | Check the message, profile, permission, API key and your provider quota.                                                                                   |
 
 When reporting a problem, include the node name, the diagnostic code and the profile or contract

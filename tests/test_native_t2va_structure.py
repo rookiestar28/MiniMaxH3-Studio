@@ -6,6 +6,18 @@ import inspect
 import json
 
 import pytest
+from native_lineage_fixtures import (
+    LINEAGE_B_SOURCE,
+    PATTERN_LINE,
+    PATTERN_NAME,
+    PATTERN_READ_SOURCE,
+    REGEX_FORMS_ADMITTED,
+    REGEX_FORMS_REFUSED,
+    lineage_a_manifest,
+    lineage_b_manifest,
+    variant,
+    with_pattern,
+)
 from native_t2va_fixtures import (
     BENIGN,
     MUTATIONS,
@@ -107,7 +119,11 @@ def test_production_entry_point_accepts_no_caller_table() -> None:
     assert synthetic.admitted and not is_production_admission(synthetic)
     production = classify_native_t2va_source(SYNTHETIC_SOURCE.encode("utf-8"))
     assert not production.admitted
-    assert production.manifest_fingerprint == PRODUCTION_MANIFEST.fingerprint
+    # A source no production lineage admits reports the newest lineage's refusal, so the verdict
+    # carries that production table's fingerprint and never the caller's.
+    assert production.manifest_fingerprint == structure.PRODUCTION_LINEAGES[-1].fingerprint
+    assert production.manifest_fingerprint in structure.PRODUCTION_FINGERPRINTS
+    assert production.manifest_fingerprint != synthetic_manifest().fingerprint
     with pytest.raises(TypeError):
         classify_native_t2va_source(  # type: ignore[call-arg]
             SYNTHETIC_SOURCE.encode("utf-8"), synthetic_manifest()
@@ -334,6 +350,178 @@ def test_derivation_refuses_an_open_closure_or_a_missing_definition() -> None:
             source_blob="0" * 40,
             definitions=("MiniMaxH3ImageToVideo.execute",),
         )
+
+
+def _classify_b(source: str) -> NativeT2VAStructureVerdict:
+    return structure._classify(source.encode("utf-8"), lineage_b_manifest())
+
+
+@pytest.mark.parametrize("name", sorted(REGEX_FORMS_ADMITTED))
+def test_closed_regex_assignment_form_is_admitted_in_every_shape(name: str) -> None:
+    verdict = _classify_b(with_pattern(REGEX_FORMS_ADMITTED[name]))
+    assert (verdict.reason, verdict.check) == (StructureReason.ADMITTED, "admitted")
+
+
+@pytest.mark.parametrize("name", sorted(REGEX_FORMS_REFUSED))
+def test_every_other_assignment_stays_refused_and_names_its_guard(name: str) -> None:
+    pairs, check = REGEX_FORMS_REFUSED[name]
+    verdict = _classify_b(variant(LINEAGE_B_SOURCE, *pairs))
+    assert verdict.reason is StructureReason.CHANGED
+    assert verdict.check == check
+    assert not verdict.admitted
+
+
+def test_regex_form_refusals_carry_closed_identifiers_only() -> None:
+    manifest = lineage_b_manifest()
+    closed = (
+        {"envelope_" + suffix for suffix in ("assign", "class", "dunder", "duplicate", "function")}
+        | {"binding:" + name for name in manifest.protected_names()}
+        | {"constant:" + name for name, _digest in manifest.constants}
+    )
+    for pairs, _check in REGEX_FORMS_REFUSED.values():
+        assert _classify_b(variant(LINEAGE_B_SOURCE, *pairs)).check in closed
+
+
+def test_lineage_b_shaped_source_is_admitted_only_by_its_own_manifest() -> None:
+    a, b = lineage_a_manifest(), lineage_b_manifest()
+    assert a.fingerprint != b.fingerprint
+    assert [name for name, _digest in b.definitions][3:5] == ["_av_latent", "_empty_av_latent"]
+    assert structure._classify(LINEAGE_B_SOURCE.encode(), b).admitted
+    refused = structure._classify(LINEAGE_B_SOURCE.encode(), a)
+    assert (refused.reason, refused.check) == (
+        StructureReason.CHANGED,
+        "definition:_empty_av_latent",
+    )
+    assert structure._classify(SYNTHETIC_SOURCE.encode(), a).admitted
+
+
+def test_derivation_pins_a_regex_only_when_a_selected_definition_reads_it() -> None:
+    unread = lineage_b_manifest()
+    assert [name for name, _digest in unread.constants] == [
+        name for name, _digest in lineage_a_manifest().constants
+    ]
+    read = lineage_b_manifest(PATTERN_READ_SOURCE)
+    assert PATTERN_NAME in [name for name, _digest in read.constants]
+    # An unread regular expression is not part of the audited surface: its text may change.
+    other = PATTERN_NAME + ' = re.compile("another")\n'
+    assert _classify_b(with_pattern(other)).admitted
+    # A read one is: a different pattern or a missing statement names the constant.
+    for source in (
+        variant(PATTERN_READ_SOURCE, (PATTERN_LINE, other)),
+        variant(PATTERN_READ_SOURCE, (PATTERN_LINE, "")),
+    ):
+        verdict = structure._classify(source.encode(), read)
+        assert (verdict.reason, verdict.check) == (
+            StructureReason.CHANGED,
+            "constant:" + PATTERN_NAME,
+        )
+    assert structure._classify(PATTERN_READ_SOURCE.encode(), read).admitted
+
+
+def test_derivation_drops_an_unread_pattern_only_when_the_envelope_would_admit_its_form() -> None:
+    # `re` is bound by an aliased import here, so the statement is not the closed form: derivation
+    # must keep it pinned (as it keeps every other unrecognised constant) instead of dropping it,
+    # and no manifest admits the source because the envelope refuses the statement itself.
+    aliased = variant(LINEAGE_B_SOURCE, ("import re\n", "import re as r\n"))
+    manifest = lineage_b_manifest(aliased)
+    assert PATTERN_NAME in [name for name, _digest in manifest.constants]
+    verdict = structure._classify(aliased.encode(), manifest)
+    assert (verdict.reason, verdict.check) == (StructureReason.CHANGED, "envelope_assign")
+
+
+def test_an_empty_lineage_list_is_an_error_never_a_refusal() -> None:
+    with pytest.raises(ValueError):
+        structure.classify_lineages(SYNTHETIC_SOURCE.encode(), (), structure._classify)
+
+
+def test_lineages_are_tried_in_order_and_the_first_admission_wins() -> None:
+    a, b = lineage_a_manifest(), lineage_b_manifest()
+    for order in ((a, b), (b, a)):
+        older = structure.classify_lineages(SYNTHETIC_SOURCE.encode(), order, structure._classify)
+        newer = structure.classify_lineages(LINEAGE_B_SOURCE.encode(), order, structure._classify)
+        assert older.admitted and older.manifest_fingerprint == a.fingerprint
+        assert newer.admitted and newer.manifest_fingerprint == b.fingerprint
+
+
+def test_a_source_no_lineage_admits_reports_the_newest_lineages_refusal() -> None:
+    a, b = lineage_a_manifest(), lineage_b_manifest()
+
+    def refused(source: str) -> NativeT2VAStructureVerdict:
+        return structure.classify_lineages(source.encode(), (a, b), structure._classify)
+
+    helper = refused(variant(LINEAGE_B_SOURCE, ("[1, 16, video,", "[1, 32, video,")))
+    wrapper = refused(
+        variant(
+            LINEAGE_B_SOURCE,
+            (
+                "_av_latent(width, height, video, audio)\n",
+                "_av_latent(height, width, video, audio)\n",
+            ),
+        )
+    )
+    for verdict, check in (
+        (helper, "definition:_av_latent"),
+        (wrapper, "definition:_empty_av_latent"),
+    ):
+        assert not verdict.admitted
+        assert (verdict.reason, verdict.check) == (StructureReason.CHANGED, check)
+        assert verdict.manifest_fingerprint == b.fingerprint
+    changed = refused(mutate(SYNTHETIC_SOURCE, "FPS = 24\n", "FPS = 30\n"))
+    assert not changed.admitted and changed.manifest_fingerprint == b.fingerprint
+
+
+def test_production_lineages_are_a_closed_tuple_led_by_the_unchanged_manifest() -> None:
+    lineages = structure.PRODUCTION_LINEAGES
+    assert type(lineages) is tuple and lineages
+    assert lineages[0] is PRODUCTION_MANIFEST
+    assert lineages[0].fingerprint == PRODUCTION_MANIFEST_FINGERPRINT
+    assert all(type(item) is type(PRODUCTION_MANIFEST) for item in lineages)
+    assert type(structure.PRODUCTION_FINGERPRINTS) is frozenset
+    assert structure.PRODUCTION_FINGERPRINTS == {item.fingerprint for item in lineages}
+    assert len(structure.PRODUCTION_FINGERPRINTS) == len(lineages)
+
+
+def test_production_admission_is_membership_in_the_closed_fingerprint_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    a, b = lineage_a_manifest(), lineage_b_manifest()
+    verdict_b = structure._classify(LINEAGE_B_SOURCE.encode(), b)
+    # A synthetic manifest's verdict is never a production admission.
+    assert verdict_b.admitted and not is_production_admission(verdict_b)
+    monkeypatch.setattr(
+        structure, "PRODUCTION_FINGERPRINTS", frozenset({a.fingerprint, b.fingerprint})
+    )
+    assert is_production_admission(verdict_b)
+    assert not is_production_admission(
+        NativeT2VAStructureVerdict(StructureReason.CHANGED, "definition:FPS", b.fingerprint)
+    )
+    assert not is_production_admission(
+        NativeT2VAStructureVerdict(
+            StructureReason.ADMITTED, "admitted", b.fingerprint, classifier_schema="other"
+        )
+    )
+    assert not is_production_admission(
+        NativeT2VAStructureVerdict(StructureReason.ADMITTED, "admitted", "sha256:" + "0" * 64)
+    )
+    # A forged verdict type, and any caller-supplied table, cannot stand in for the real thing.
+    assert not is_production_admission({"manifest_fingerprint": b.fingerprint})
+    assert list(inspect.signature(is_production_admission).parameters) == ["verdict"]
+
+
+def test_production_entry_point_tries_the_production_lineages_in_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    a, b = lineage_a_manifest(), lineage_b_manifest()
+    monkeypatch.setattr(structure, "PRODUCTION_LINEAGES", (a, b))
+    monkeypatch.setattr(
+        structure, "PRODUCTION_FINGERPRINTS", frozenset({a.fingerprint, b.fingerprint})
+    )
+    for source, manifest in ((SYNTHETIC_SOURCE, a), (LINEAGE_B_SOURCE, b)):
+        verdict = classify_native_t2va_source(source.encode())
+        assert verdict.admitted and verdict.manifest_fingerprint == manifest.fingerprint
+        assert is_production_admission(verdict)
+    unrelated = classify_native_t2va_source(b"x = 1\n")
+    assert not unrelated.admitted and unrelated.manifest_fingerprint == b.fingerprint
 
 
 def test_parity_report_is_pinned_for_the_cross_interpreter_probe() -> None:

@@ -702,6 +702,7 @@
         "frontend/src/lifecycle/nleWorkspaceSession.ts",
         "frontend/src/state/nleWorkspaceState.ts",
         "frontend/tests/managedQualification.test.ts",
+        "frontend/tests/nativeSourceCopy.test.ts",
         "frontend/tests/nleSequencePanelControls.test.tsx",
         "frontend/tests/plainProductCopy.test.tsx",
         "governance/contracts/supply_chain_v1.json"
@@ -1398,6 +1399,7 @@
         "comfyui_h3_context/adapters/comfyui_generation_profile.py",
         "comfyui_h3_context/core/compatibility.py",
         "comfyui_h3_context/core/generation_profile.py",
+        "comfyui_h3_context/core/native_baseline_v0_44.py",
         "comfyui_h3_context/core/native_keyframe_baseline.py",
         "comfyui_h3_context/core/native_t2va_baseline.py",
         "comfyui_h3_context/core/native_t2va_structure.py",
@@ -15884,6 +15886,6 @@
       "reachability_source": "none"
     }
   ],
-  "fingerprint": "sha256:0e02cfafa7a0a5034b71459c98256975e8baee48b87ce1d3562c479d00fca7fd",
+  "fingerprint": "sha256:5fe7528ba4fafe64153bafd4f145ff39a8d2663e0e953dfb2fe19dd122904d1b",
   "schema": "h3-context-contract-inventory/1"
 }

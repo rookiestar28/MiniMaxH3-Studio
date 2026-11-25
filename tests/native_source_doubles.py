@@ -12,7 +12,7 @@ from comfyui_h3_context.core.native_composition import NativeCompositionObservat
 from comfyui_h3_context.core.native_h3 import NATIVE_H3_SOURCE_BLOB
 from comfyui_h3_context.core.native_source_compatibility import NativeSourceObservation
 from comfyui_h3_context.core.native_t2va_structure import (
-    PRODUCTION_MANIFEST,
+    PRODUCTION_LINEAGES,
     NativeT2VAStructureVerdict,
     StructureReason,
 )
@@ -21,9 +21,10 @@ from comfyui_h3_context.core.native_t2va_structure import (
 EQUIVALENT_BLOB = "1baa33cb" + "0" * 32
 
 
-def structure_verdict(check: str = "admitted") -> NativeT2VAStructureVerdict:
+def structure_verdict(check: str = "admitted", *, lineage: int = 0) -> NativeT2VAStructureVerdict:
+    """A verdict against one production lineage (0 is the original baseline, 1 the newer shape)."""
     reason = StructureReason.ADMITTED if check == "admitted" else StructureReason.CHANGED
-    return NativeT2VAStructureVerdict(reason, check, PRODUCTION_MANIFEST.fingerprint)
+    return NativeT2VAStructureVerdict(reason, check, PRODUCTION_LINEAGES[lineage].fingerprint)
 
 
 def observed_source(
@@ -31,10 +32,11 @@ def observed_source(
     *,
     check: str = "admitted",
     origin: object = "registered-module",
+    lineage: int = 0,
 ) -> NativeSourceObservation | None:
     if blob is None:
         return None
-    return NativeSourceObservation(blob, structure_verdict(check), (origin,))
+    return NativeSourceObservation(blob, structure_verdict(check, lineage=lineage), (origin,))
 
 
 def composition_observation(

@@ -1943,10 +1943,10 @@
   ],
   "edge_kind_totals": {
     "function_local": 114,
-    "module_level": 1799,
+    "module_level": 1801,
     "type_checking": 128
   },
-  "fingerprint": "sha256:85b1ddc6961f47068660f0251c896ed6c4299380db3018beaa1c18d36c76d782",
+  "fingerprint": "sha256:12da8e95627d37393d679d82d519292608eb7f0af573213010c8cb862add4194",
   "forbidden_imports": [],
   "layer_inversions": [],
   "modules": [
@@ -2031,6 +2031,7 @@
         "tests/test_media_lease_completion.py",
         "tests/test_media_preview.py",
         "tests/test_native_composition.py",
+        "tests/test_native_lineage_qualification.py",
         "tests/test_native_source_admission_producer.py",
         "tests/test_native_source_compatibility.py",
         "tests/test_perception_settings.py",
@@ -3572,7 +3573,7 @@
       "disposition": "movable",
       "inbound": 1,
       "layer": "adapters",
-      "lines": 342,
+      "lines": 363,
       "module": "adapters.managed_mode_qualification",
       "outbound": 15,
       "owning_rules": [
@@ -3581,6 +3582,7 @@
       ],
       "owning_tests": [
         "tests/test_m26_04_qualification_producer.py",
+        "tests/test_native_lineage_qualification.py",
         "tests/test_native_source_admission_producer.py"
       ],
       "reasons": []
@@ -4540,6 +4542,8 @@
         "tests/test_native_composition.py",
         "tests/test_native_h3_adapter.py",
         "tests/test_native_keyframe_structure.py",
+        "tests/test_native_lineage_qualification.py",
+        "tests/test_native_lineage_tables.py",
         "tests/test_native_mode_matrix.py",
         "tests/test_native_mode_qualification.py",
         "tests/test_native_source_compatibility.py",
@@ -5631,6 +5635,7 @@
         "tests/test_model_adapters.py",
         "tests/test_native_behaviour_oracles.py",
         "tests/test_native_h3_adapter.py",
+        "tests/test_native_lineage_qualification.py",
         "tests/test_native_mode_matrix.py",
         "tests/test_native_mode_qualification.py",
         "tests/test_native_source_compatibility.py",
@@ -6735,6 +6740,21 @@
     },
     {
       "disposition": "movable",
+      "inbound": 2,
+      "layer": "core",
+      "lines": 348,
+      "module": "core.native_baseline_v0_44",
+      "outbound": 0,
+      "owning_rules": [
+        "submodule_as_name"
+      ],
+      "owning_tests": [
+        "tests/test_native_lineage_tables.py"
+      ],
+      "reasons": []
+    },
+    {
+      "disposition": "movable",
       "inbound": 5,
       "layer": "core",
       "lines": 331,
@@ -6765,6 +6785,7 @@
         "tests/test_frame_sequence_readiness_start.py",
         "tests/test_m26_04_qualification_producer.py",
         "tests/test_native_keyframe_structure.py",
+        "tests/test_native_lineage_qualification.py",
         "tests/test_native_source_compatibility.py"
       ],
       "reasons": []
@@ -6808,6 +6829,7 @@
         "tests/test_native_composition.py",
         "tests/test_native_composition_edges.py",
         "tests/test_native_h3_adapter.py",
+        "tests/test_native_lineage_qualification.py",
         "tests/test_native_mode_qualification.py",
         "tests/test_native_source_compatibility.py",
         "tests/test_product_shell.py",
@@ -6841,17 +6863,19 @@
       "disposition": "movable",
       "inbound": 3,
       "layer": "core",
-      "lines": 113,
+      "lines": 125,
       "module": "core.native_keyframe_structure",
-      "outbound": 2,
+      "outbound": 3,
       "owning_rules": [
         "direct_module",
-        "importlib_literal"
+        "importlib_literal",
+        "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_frame_sequence_readiness_start.py",
         "tests/test_m26_04_qualification_producer.py",
         "tests/test_native_keyframe_structure.py",
+        "tests/test_native_lineage_qualification.py",
         "tests/test_native_source_compatibility.py"
       ],
       "reasons": []
@@ -6888,36 +6912,41 @@
         "tests/test_frame_sequence_readiness_start.py",
         "tests/test_m26_04_qualification_producer.py",
         "tests/test_native_composition_edges.py",
+        "tests/test_native_lineage_qualification.py",
         "tests/test_native_source_compatibility.py"
       ],
       "reasons": []
     },
     {
-      "disposition": "need_evidence",
+      "disposition": "movable",
       "inbound": 1,
       "layer": "core",
       "lines": 126,
       "module": "core.native_t2va_baseline",
       "outbound": 0,
-      "owning_rules": [],
-      "owning_tests": [],
-      "reasons": [
-        "no test imports this module directly or through a hub symbol"
-      ]
+      "owning_rules": [
+        "submodule_as_name"
+      ],
+      "owning_tests": [
+        "tests/test_native_lineage_tables.py"
+      ],
+      "reasons": []
     },
     {
       "disposition": "movable",
       "inbound": 4,
       "layer": "core",
-      "lines": 780,
+      "lines": 913,
       "module": "core.native_t2va_structure",
-      "outbound": 1,
+      "outbound": 2,
       "owning_rules": [
         "direct_module",
         "submodule_as_name"
       ],
       "owning_tests": [
         "tests/test_native_keyframe_structure.py",
+        "tests/test_native_lineage_qualification.py",
+        "tests/test_native_lineage_tables.py",
         "tests/test_native_source_compatibility.py",
         "tests/test_native_t2va_structure.py"
       ],

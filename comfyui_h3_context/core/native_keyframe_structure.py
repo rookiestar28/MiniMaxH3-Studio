@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from enum import Enum
 
+from . import native_baseline_v0_44 as lineage_v0_44
 from . import native_t2va_structure as structure
 from .native_keyframe_baseline import MANIFEST_DATA
 
@@ -36,6 +37,16 @@ class NativeKeyframeBaselineManifest(structure.NativeT2VABaselineManifest):
 
 
 PRODUCTION_MANIFEST = NativeKeyframeBaselineManifest(**MANIFEST_DATA)
+# The audited production lineages, oldest first. The first is the original baseline and never
+# changes; a lineage is added only by deriving it from audited upstream bytes. Admission is
+# membership of a verdict's manifest fingerprint in this closed set, never a caller's table.
+PRODUCTION_LINEAGES: tuple[NativeKeyframeBaselineManifest, ...] = (
+    PRODUCTION_MANIFEST,
+    NativeKeyframeBaselineManifest(**lineage_v0_44.KEYFRAME_DATA),
+)
+PRODUCTION_FINGERPRINTS: frozenset[str] = frozenset(
+    item.fingerprint for item in PRODUCTION_LINEAGES
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,15 +98,16 @@ def _classify(
 
 
 def classify_native_keyframe_source(content: bytes) -> NativeKeyframeStructureVerdict:
-    return _classify(content, PRODUCTION_MANIFEST)
+    return structure.classify_lineages(content, PRODUCTION_LINEAGES, _classify)
 
 
 def is_production_admission(value: object) -> bool:
+    # CRITICAL: membership in the closed fingerprint set is the whole test; see the T2VA scope.
     return (
         type(value) is NativeKeyframeStructureVerdict
         and value.admitted
         and value.classifier_schema == NATIVE_KEYFRAME_CLASSIFIER_SCHEMA
-        and value.manifest_fingerprint == PRODUCTION_MANIFEST.fingerprint
+        and value.manifest_fingerprint in PRODUCTION_FINGERPRINTS
     )
 
 

@@ -74,6 +74,8 @@ const en: Tables = {
         "This ComfyUI host does not provide every native MiniMax H3 workflow that sequence generation needs.",
       qualification_composition_unqualified:
         "This ComfyUI host does not provide every native MiniMax H3 workflow that sequence generation needs.",
+      native_source_structure_unrecognized:
+        "The MiniMax H3 nodes in this ComfyUI are a version this extension cannot use for longer videos. Update ComfyUI; if it is already up to date, update this extension when a newer version is available. A single clip in H3 App Mode still works.",
       qualification_compiler_unavailable:
         "This extension's files could not be read. Reinstall the extension.",
       qualification_host_bindings_unavailable:
@@ -444,6 +446,8 @@ const zhTW: Tables = {
         "此 ComfyUI 主機未提供序列生成所需的全部原生 MiniMax H3 工作流程。",
       qualification_composition_unqualified:
         "此 ComfyUI 主機未提供序列生成所需的全部原生 MiniMax H3 工作流程。",
+      native_source_structure_unrecognized:
+        "此 ComfyUI 內的 MiniMax H3 節點版本無法用於此擴充功能的較長影片。請更新 ComfyUI；若已是最新版本，請在此擴充功能推出新版時更新。H3 App Mode 的單一片段仍可使用。",
       qualification_compiler_unavailable:
         "無法讀取此擴充功能的檔案，請重新安裝擴充功能。",
       qualification_host_bindings_unavailable:
@@ -756,6 +760,8 @@ const zhCN: Tables = {
         "此 ComfyUI 主机未提供序列生成所需的全部原生 MiniMax H3 工作流。",
       qualification_composition_unqualified:
         "此 ComfyUI 主机未提供序列生成所需的全部原生 MiniMax H3 工作流。",
+      native_source_structure_unrecognized:
+        "此 ComfyUI 内的 MiniMax H3 节点版本无法用于此扩展的较长视频。请更新 ComfyUI；若已是最新版本，请在此扩展推出新版时更新。H3 App Mode 的单个片段仍可使用。",
       qualification_compiler_unavailable:
         "无法读取此扩展的文件，请重新安装扩展。",
       qualification_host_bindings_unavailable:

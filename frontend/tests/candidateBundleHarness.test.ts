@@ -203,7 +203,10 @@ describe("candidate bundle environment", () => {
         [CANDIDATE_BUNDLE_SHA256_ENV]: entry.sha256.replace(/^sha256:/, ""),
       },
     });
-    expect(candidate?.bytes).toEqual(bytes);
+    // IMPORTANT: compare the 3.9 MB bundle with one native `Buffer.equals`. `toEqual` walks a typed
+    // array element by element in JavaScript: it took 12 s of the 15 s limit on the 1.4.5 Hosted run and
+    // 16 s on the 1.4.6 one, so the test timed out although every byte was right.
+    expect(candidate?.bytes.equals(bytes)).toBe(true);
     expect(candidate?.sha256).toBe(entry.sha256.replace(/^sha256:/, ""));
   });
 

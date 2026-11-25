@@ -49,7 +49,7 @@
       "path": "frontend/src/entry.tsx"
     }
   ],
-  "fingerprint": "sha256:dfea2fd577e1ec3bf8c5717c77ec41b4fac21afb9a39770a6f59887f2a1fa5b7",
+  "fingerprint": "sha256:db96a5ef46c444845c5bbf9d43536c1e44d7da43a34d86570291eeb9c6d48394",
   "known_violations": [],
   "modules": [
     {
@@ -2098,7 +2098,7 @@
         "comfyui_h3_context/core/production_import.py"
       ],
       "language": "python",
-      "lines": 342,
+      "lines": 363,
       "path": "comfyui_h3_context/adapters/managed_mode_qualification.py",
       "source_reachability": {
         "class": "product",
@@ -5545,6 +5545,27 @@
       }
     },
     {
+      "imports": [],
+      "language": "python",
+      "lines": 348,
+      "path": "comfyui_h3_context/core/native_baseline_v0_44.py",
+      "source_reachability": {
+        "class": "product",
+        "evidence": "product_closure",
+        "owners": [
+          "comfyui_h3_context/__init__.py",
+          "comfyui_h3_context/adapters/assisted_draft_execution.py",
+          "comfyui_h3_context/adapters/authoring_derivative_generator.py",
+          "comfyui_h3_context/adapters/authoring_derivative_source.py",
+          "comfyui_h3_context/adapters/authoring_generated_source.py",
+          "comfyui_h3_context/adapters/authoring_image_source.py",
+          "comfyui_h3_context/adapters/authoring_native_renderer.py",
+          "comfyui_h3_context/adapters/authoring_output_preview.py"
+        ],
+        "retained_reason": "reachable from a shipped entry point"
+      }
+    },
+    {
       "imports": [
         "comfyui_h3_context/core/canonical.py",
         "comfyui_h3_context/core/context_reporting.py",
@@ -5654,11 +5675,12 @@
     {
       "imports": [
         "comfyui_h3_context/core/__init__.py",
+        "comfyui_h3_context/core/native_baseline_v0_44.py",
         "comfyui_h3_context/core/native_keyframe_baseline.py",
         "comfyui_h3_context/core/native_t2va_structure.py"
       ],
       "language": "python",
-      "lines": 113,
+      "lines": 125,
       "path": "comfyui_h3_context/core/native_keyframe_structure.py",
       "source_reachability": {
         "class": "product",
@@ -5759,10 +5781,11 @@
     {
       "imports": [
         "comfyui_h3_context/core/__init__.py",
+        "comfyui_h3_context/core/native_baseline_v0_44.py",
         "comfyui_h3_context/core/native_t2va_baseline.py"
       ],
       "language": "python",
-      "lines": 780,
+      "lines": 913,
       "path": "comfyui_h3_context/core/native_t2va_structure.py",
       "source_reachability": {
         "class": "product",
@@ -11231,7 +11254,7 @@
         "frontend/src/i18n/catalog.ts"
       ],
       "language": "typescript",
-      "lines": 1052,
+      "lines": 1058,
       "path": "frontend/src/components/plainReasons.ts",
       "source_reachability": {
         "class": "product",

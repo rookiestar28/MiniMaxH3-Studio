@@ -27,7 +27,7 @@
     },
     {
       "path": "comfyui_h3_context/contracts/build_provenance_v1.json",
-      "sha256": "sha256:070c203580b21bce9bebf97c5fb88d167d0019b0c661c9d95ea5f67518c41b5b",
+      "sha256": "sha256:efe849510e0401d6171a45432a8e500164ac9711d55c78ac2f13fcd88f16d8da",
       "size": 1712
     },
     {
@@ -42,7 +42,7 @@
     },
     {
       "path": "comfyui_h3_context/contracts/installation_profiles_v1.json",
-      "sha256": "sha256:0e85dd457791e53aefe3f010a5c94a4d7739b3a6e6908ce70de1d8d95f03bbe5",
+      "sha256": "sha256:78eec7060ea1f5933a807d0e7148485339649bf03046b24dd57657b7872b71ec",
       "size": 3377
     },
     {
@@ -67,7 +67,7 @@
     },
     {
       "path": "frontend/package.json",
-      "sha256": "sha256:20eb9936251816560de648eac39181e0b9353a87a32141fc60c0ac2212abe12e",
+      "sha256": "sha256:263fb36146f75700329e16938b0bf1a44abc6388a4c60c087cc4221aad763b56",
       "size": 1307
     },
     {
@@ -537,8 +537,8 @@
     },
     {
       "path": "frontend/src/components/plainReasons.ts",
-      "sha256": "sha256:23d1990ccc303578f2a81e9f241642ba590d7b8d432aebb431759e6ce760dd17",
-      "size": 57040
+      "sha256": "sha256:e9e618e61b9c95d13825c704e54e8bb92c15aced29ca0be7f6aa268f4fab9f5e",
+      "size": 57871
     },
     {
       "path": "frontend/src/components/productionStateLabels.ts",
@@ -1697,7 +1697,7 @@
     },
     {
       "path": "governance/contracts/sbom.spdx.json",
-      "sha256": "sha256:8aac315cda347e27585428731a3437b1bedc4738f821dce7edce0d52e68a4522",
+      "sha256": "sha256:32696ce7c3029b0210a92c3aca38296721592e0c8b85338d503aac0c7f7cfb81",
       "size": 82650
     },
     {
@@ -1707,7 +1707,7 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "sha256:c516237f215d6a399ce8e4b6ef288c41343d5b459ea8844f831ab503aac8af03",
+      "sha256": "sha256:044bf276b2c2e6101825fa35f1c360f12d3ab307e8011100cac142efd00c2924",
       "size": 4095
     },
     {
@@ -1730,15 +1730,15 @@
   "runtime_entries": [
     {
       "path": "comfyui_h3_context/web/h3-context-sidebar.js",
-      "sha256": "sha256:eb9a7de0179525f6d5fbe2229f5135d4c365b6da2898a3fb6ea8557cda655460",
-      "size": 3932886
+      "sha256": "sha256:3ceff7b6ed79f4300945eae369f4f4d70026bb2682e550566e714f0de81e91c3",
+      "size": 3933669
     }
   ],
   "schema": "h3-context-supply-chain/1",
   "spdx": {
     "package_count": 180,
     "path": "governance/contracts/sbom.spdx.json",
-    "sha256": "sha256:8aac315cda347e27585428731a3437b1bedc4738f821dce7edce0d52e68a4522",
+    "sha256": "sha256:32696ce7c3029b0210a92c3aca38296721592e0c8b85338d503aac0c7f7cfb81",
     "version": "SPDX-2.3"
   },
   "version": 1

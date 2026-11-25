@@ -1,3 +1,21 @@
+# Release 1.4.6
+
+## Longer videos on ComfyUI 0.44 and later
+
+- Longer videos are no longer held on ComfyUI 0.44 and later. Version 1.4.5 did not recognize the
+  native MiniMax H3 source those versions ship, so it held longer-video generation in T2VA and in
+  the frame modes (I2VA, FL2VA and L2VA). This version recognizes it. ComfyUI versions that 1.4.5
+  already recognized are handled as before.
+- When the extension does not recognize the MiniMax H3 nodes of your ComfyUI, the message now says
+  so and what to do: update ComfyUI, and if it is already up to date, update this extension when a
+  newer version is available. A single clip in H3 App Mode still works. Before, the message said
+  only that the host did not provide every native workflow that sequence generation needs.
+
+## Compatibility
+
+- A two-segment T2VA longer video was generated on ComfyUI 0.46.0 with frontend 1.59.11, using
+  a 4-step turbo LoRA. This is a tested combination, not a minimum version.
+
 # Release 1.4.5
 
 ## Longer videos in the frame modes
@@ -41,16 +59,6 @@
 - A style sets the weight, fill colour, stroke, shadow, background and background padding, and
   turns italic off. It keeps the text, font, size, alignment and line height.
 
-正體中文：新增正體中文、簡體中文、日文及韓文標題的一般與粗體字型，預覽與渲染採用相同字型。
-中日韓文字不支援斜體，請關閉斜體；emoji 等未涵蓋字元仍會遭拒絕。套件因內含字型而增大。
-中日韓標題需要 1.4.5 或更新版本；1.4.0 與 1.4.1 可開啟專案，但拒絕中日韓標題的編輯與渲染。
-新增八種「標題樣式」，可在素材區與檢視器的「文字」分頁中使用。
-
-简体中文：新增繁中、简中、日文及韩文标题的常规和粗体字体，预览与渲染采用相同字体。
-中日韩文字不支持斜体，请关闭斜体；emoji 等未覆盖字符仍会被拒绝。内置字体使安装包增大。
-中日韩标题需要 1.4.5 或更新版本；1.4.0 与 1.4.1 可打开项目，但拒绝中日韩标题的编辑和渲染。
-新增八种“标题样式”，可在素材区与检查器的“文字”标签页中使用。
-
 ## App Mode
 
 - When App Mode prepares an I2VA canvas, it no longer leaves the template's resolution selector
@@ -65,14 +73,6 @@
 - After you crop a first frame, last frame or reference image and prepare the canvas, starting
   from the sidebar works. In 1.4.0 and 1.4.1 the sidebar stopped with an error and nothing was
   queued. ComfyUI's own Run on the same canvas was not affected.
-
-正體中文：已修正：在 App Mode 已準備好、或已含相容 H3 流程的畫布上，「執行／匯出」步驟的
-「啟動 H3 App Mode」現在可正常啟動；1.4.1 及更早版本會再次詢問保留或取代畫布，且不會加入佇列。
-裁切圖片並準備畫布後，從側邊欄啟動也可正常執行；1.4.0 與 1.4.1 會停在錯誤，且不會加入佇列。
-
-简体中文：已修复：在 App Mode 已准备好、或已含兼容 H3 流程的画布上，“执行／导出”步骤的
-“启动 H3 App Mode”现在可正常启动；1.4.1 及更早版本会再次询问保留或替换画布，且不会加入队列。
-裁剪图片并准备画布后，从侧边栏启动也可正常运行；1.4.0 与 1.4.1 会停在错误，且不会加入队列。
 
 ## Windows storage
 

@@ -20,10 +20,12 @@ import io
 import json
 import symtable
 import tokenize
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
+from typing import Protocol, TypeVar
 
+from . import native_baseline_v0_44 as lineage_v0_44
 from . import native_t2va_baseline as baseline
 
 NATIVE_T2VA_CLASSIFIER_SCHEMA = "h3.native_t2va_structure.v1"
@@ -48,6 +50,11 @@ _ENVELOPE_DECORATORS = frozenset({"classmethod", "staticmethod"})
 _CLASS_CREATION_HOOKS = frozenset(
     {"__init_subclass__", "__set_name__", "__class_getitem__", "__mro_entries__", "__prepare__"}
 )
+# The one module-level call form the envelope admits besides literals, as (module, attribute)
+# pairs, and only while that module is bound by its own plain `import`. Closed on purpose: a pair
+# joins this tuple only together with refusal rows for its arguments and a mutation receipt, never
+# to make one more host source pass. Anything else called at module level stays `envelope_assign`.
+_CLOSED_CALLS = (("re", "compile"),)
 _COMFY_NODE_BASE = ("io", "ComfyNode")
 _EXTENSION_BASE = "ComfyExtension"
 _LITERAL_BINARY_OPERATORS = (
@@ -178,6 +185,21 @@ def _json_bytes(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode("ascii")
 
 
+# The audited production lineages, oldest first: one per audited shape of the native source. The
+# first lineage is the original baseline and never changes, so every fingerprint minted against it
+# stays valid. A lineage is added only by deriving it from audited upstream bytes, never from a
+# caller-supplied table or an observed source. (Defined here, not beside the manifest: a
+# fingerprint needs `_json_bytes`.) The second is the shape whose empty-latent helper is split in
+# two, derived with `scripts/native_t2va_structure.py --shape split-latent --emit-lineage`.
+PRODUCTION_LINEAGES: tuple[NativeT2VABaselineManifest, ...] = (
+    PRODUCTION_MANIFEST,
+    NativeT2VABaselineManifest(**lineage_v0_44.T2VA_DATA),
+)
+PRODUCTION_FINGERPRINTS: frozenset[str] = frozenset(
+    item.fingerprint for item in PRODUCTION_LINEAGES
+)
+
+
 # --- parsing and bounds -------------------------------------------------------------------------
 
 
@@ -285,6 +307,56 @@ def _is_literal(node: ast.AST) -> bool:
             and _is_literal(node.right)
         )
     return False
+
+
+def _is_regex_flags(node: ast.AST, module: str) -> bool:
+    # An int literal (never a bool) or uppercase attributes of the bound module joined with `|`.
+    if isinstance(node, ast.Constant):
+        return type(node.value) is int
+    if isinstance(node, ast.BinOp):
+        return (
+            isinstance(node.op, ast.BitOr)
+            and _is_regex_flags(node.left, module)
+            and _is_regex_flags(node.right, module)
+        )
+    return (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == module
+        and node.attr.isascii()
+        and node.attr.isidentifier()
+        and node.attr.isupper()
+    )
+
+
+def _is_closed_call(node: ast.AST, plain_imports: frozenset[str]) -> bool:
+    """A pinned module-level call: `re.compile(<str literal>[, <flags>])`, nothing else.
+
+    CRITICAL: this is the only call the definition-time envelope admits, because every other call
+    could run host code or rebind a protected name when the module loads. Keep each guard: the pair
+    must be in the closed tuple, the module must be bound by a plain `import` (an alias, a dotted
+    import or `from re import compile` would let the name mean something else), the call takes
+    positional arguments only, the pattern is a plain `str` literal (a name, a call, an f-string,
+    bytes or a concatenation can run code), and the flags are the pinned shape above. Admitting any
+    other `re` attribute, a keyword, or a wider expression reopens the module-level effect hole.
+    """
+    if not (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+    ):
+        return False
+    module = node.func.value.id
+    if (module, node.func.attr) not in _CLOSED_CALLS or module not in plain_imports:
+        return False
+    if node.keywords or not 1 <= len(node.args) <= 2:
+        return False
+    pattern, *flags = node.args
+    return (
+        isinstance(pattern, ast.Constant)
+        and type(pattern.value) is str
+        and all(_is_regex_flags(item, module) for item in flags)
+    )
 
 
 def _is_reference(node: ast.AST) -> bool:
@@ -430,7 +502,13 @@ def _check_envelope(tree: ast.Module, manifest: NativeT2VABaselineManifest) -> _
             if len(statement.targets) != 1 or not isinstance(statement.targets[0], ast.Name):
                 raise _changed("envelope_assign")
             name = statement.targets[0].id
-            if not _is_literal(statement.value):
+            # `envelope.imports` holds exactly the names a plain `import` has bound so far, and
+            # `bind` refuses any later rebinding of them, so the closed form cannot be redirected
+            # by a statement that follows it (a rebinding before it is refused the same way).
+            if not (
+                _is_literal(statement.value)
+                or _is_closed_call(statement.value, frozenset(envelope.imports))
+            ):
                 raise _changed("envelope_assign")
             if name in protected and name not in constants:
                 raise _changed("binding:" + name)
@@ -621,18 +699,54 @@ def _classify(content: bytes, manifest: NativeT2VABaselineManifest) -> NativeT2V
     return NativeT2VAStructureVerdict(StructureReason.ADMITTED, "admitted", manifest.fingerprint)
 
 
+class _Admitting(Protocol):
+    @property
+    def admitted(self) -> bool: ...
+
+
+_Manifest = TypeVar("_Manifest")
+_Verdict = TypeVar("_Verdict", bound=_Admitting)
+
+
+def classify_lineages(
+    content: bytes,
+    manifests: Sequence[_Manifest],
+    classify: Callable[[bytes, _Manifest], _Verdict],
+) -> _Verdict:
+    """Try the lineages in order and return the first admitted verdict.
+
+    When none admits, the verdict of the last (newest) lineage is returned: its refusal names the
+    check a source of the newest shape fails, which is the most useful one to report. Every
+    verdict carries the fingerprint of the manifest that produced it.
+    """
+    verdict: _Verdict | None = None
+    for manifest in manifests:
+        verdict = classify(content, manifest)
+        if verdict.admitted:
+            return verdict
+    if verdict is None:
+        raise ValueError("no lineage to classify against")
+    return verdict
+
+
 def classify_native_t2va_source(content: bytes) -> NativeT2VAStructureVerdict:
-    """Classify loaded native bytes against the production baseline; no table is accepted."""
-    return _classify(content, PRODUCTION_MANIFEST)
+    """Classify loaded native bytes against the production lineages; no table is accepted."""
+    return classify_lineages(content, PRODUCTION_LINEAGES, _classify)
 
 
 def is_production_admission(verdict: object) -> bool:
-    """True only for an admitted verdict produced against the current production manifest."""
+    """True only for an admitted verdict produced against one of the production lineages.
+
+    CRITICAL: membership in the closed fingerprint set is the whole test. Never accept a caller's
+    manifest, table or fingerprint here, and never loosen it to a schema or reason check: a
+    synthetic manifest classifies sources too, and only this set separates its verdicts from
+    production authority.
+    """
     return (
         type(verdict) is NativeT2VAStructureVerdict
         and verdict.admitted
         and verdict.classifier_schema == NATIVE_T2VA_CLASSIFIER_SCHEMA
-        and verdict.manifest_fingerprint == PRODUCTION_MANIFEST.fingerprint
+        and verdict.manifest_fingerprint in PRODUCTION_FINGERPRINTS
     )
 
 
@@ -699,6 +813,22 @@ def derive_manifest(
     if {name.split(".", 1)[0] for name in definitions} != {name for name, _node in surface}:
         raise ValueError("a member row needs its top-level definition row")
     referenced = _referenced_globals([node for _name, node in surface], imports)
+    plain_imports = frozenset(
+        alias.name
+        for node in imports
+        if isinstance(node, ast.Import)
+        for alias in node.names
+        if alias.asname is None
+    )
+    # An unread compiled regular expression is outside the audited surface: pinning it would turn
+    # an upstream edit of an unrelated pattern into a refusal of the whole lineage. A literal
+    # constant keeps its existing behavior (every literal is pinned, read or not).
+    constant_nodes = [
+        node
+        for node in constant_nodes
+        if not _is_closed_call(node.value, plain_imports)
+        or any(isinstance(target, ast.Name) and target.id in referenced for target in node.targets)
+    ]
     constant_names = {
         target.id
         for node in constant_nodes
@@ -769,10 +899,13 @@ __all__ = [
     "MAX_AST_DEPTH",
     "MAX_AST_NODES",
     "MAX_SOURCE_BYTES",
+    "PRODUCTION_FINGERPRINTS",
+    "PRODUCTION_LINEAGES",
     "PRODUCTION_MANIFEST",
     "NativeT2VABaselineManifest",
     "NativeT2VAStructureVerdict",
     "StructureReason",
+    "classify_lineages",
     "classify_native_t2va_source",
     "definition_digest",
     "derive_manifest",

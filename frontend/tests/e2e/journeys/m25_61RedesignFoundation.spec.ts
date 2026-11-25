@@ -128,12 +128,18 @@ test("A61-1 negative: the same probe sees the snap guide, the one full-height li
   await page.mouse.down();
   await page.mouse.move(x + 130, y, { steps: 4 });
   await expect(canvas).toHaveAttribute("data-h3-nle-snap-line", "present");
-  await expect
-    .poll(async () => (await fullHeightColumns(page)).columns.length)
-    .toBeGreaterThan(0);
-  const guide = (await fullHeightColumns(page)).columns;
+  // IMPORTANT: judge the guide on the same read that finds it. The decoration canvas is reset when its
+  // scene changes (a filmstrip or a waveform arriving) and painted again on the next animation frame,
+  // so a second read can land in that gap and see no column: `undefined - undefined` is NaN.
   // One guide, one or two device pixels wide depending on its sub-pixel position.
-  expect(guide.at(-1)! - guide[0]!).toBeLessThanOrEqual(2);
+  await expect
+    .poll(async () => {
+      const { columns } = await fullHeightColumns(page);
+      return columns.length === 0
+        ? Number.POSITIVE_INFINITY
+        : columns.at(-1)! - columns[0]!;
+    })
+    .toBeLessThanOrEqual(2);
   await page.keyboard.press("Escape");
   await page.mouse.up();
   expect(transactions).toHaveLength(0);

@@ -39,6 +39,14 @@ QUALIFICATION_TTL_SECONDS = 60
 _MAX_ISSUED_SOURCES = 8
 _LOGGER = logging.getLogger(__name__)
 _NOT_ISSUED = object()
+#: The composition reasons that say the loaded native source was read and no audited lineage admits
+#: it. They are the only holds that get the distinct public reason below.
+_UNRECOGNIZED_SOURCE_COMPOSITION_REASONS = frozenset(
+    {
+        "native_t2va_structure_changed",
+        "native_keyframe_structure_changed",
+    }
+)
 _COMPILER_SOURCES = (
     "core/audit_override.py",
     "core/canonical.py",
@@ -57,6 +65,7 @@ _COMPILER_SOURCES = (
     "core/native_t2va_baseline.py",
     "core/native_keyframe_structure.py",
     "core/native_keyframe_baseline.py",
+    "core/native_baseline_v0_44.py",
     "core/native_guide.py",
     "core/native_h3.py",
     "core/native_mode_matrix.py",
@@ -238,7 +247,19 @@ class ManagedQualificationProducer:
                             composition.reason,
                             composition.detail,
                         )
-                        raise ProductionWorkbenchError("qualification_composition_unqualified", 409)
+                        # CRITICAL: only a source that was read and matched no audited lineage gets
+                        # native_source_structure_unrecognized, whose advice is to update ComfyUI
+                        # first and this extension second. A missing native workflow, an
+                        # unreadable source or a held audio set keeps the generic reason, because
+                        # that advice would send those users to the wrong fix.
+                        raise ProductionWorkbenchError(
+                            (
+                                "native_source_structure_unrecognized"
+                                if composition.reason in _UNRECOGNIZED_SOURCE_COMPOSITION_REASONS
+                                else "qualification_composition_unqualified"
+                            ),
+                            409,
+                        )
                     if composition.observed_source() != source:
                         raise ProductionWorkbenchError("qualification_changed", 409)
                     admission = composition.detail

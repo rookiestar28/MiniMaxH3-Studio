@@ -145,12 +145,32 @@ def test_changed_structure_holds_with_the_closed_public_reason(
     )
     before = set(sidebar._entries)
     held = _prepare(service, selection, "prepare.changed")
-    assert (held["status"], held["reason"]) == ("held", "qualification_composition_unqualified")
+    # A source that was read and matches no audited lineage gets its own closed reason; the log
+    # keeps the composition reason and the closed check identifier for the maintainer.
+    assert (held["status"], held["reason"]) == ("held", "native_source_structure_unrecognized")
     assert _CHANGED not in str(held) and "native_t2va" not in str(held)
     assert registry._current is None and set(sidebar._entries) == before
     assert [record.getMessage() for record in caplog.records] == [
         "H3 Context managed qualification held: "
         f"composition=native_t2va_structure_changed detail={_CHANGED}"
+    ]
+
+
+def test_a_source_of_the_newer_lineage_qualifies_through_the_real_producer(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO, logger=_LOGGER)
+    service, registry, selection, _clock, _facts, sidebar, _calls, _count = _ready_environment(
+        monkeypatch, source=observed_source(EQUIVALENT_BLOB, lineage=1)
+    )
+    before = set(sidebar._entries)
+    prepared = _prepare(service, selection, "prepare.newer.lineage")
+    assert prepared["status"] == "ready" and prepared["reason"] == "qualified"
+    assert registry._current is not None
+    assert set(sidebar._entries) == before
+    assert [record.getMessage() for record in caplog.records] == [
+        "H3 Context managed qualification issued: segments=2 "
+        f"source={EQUIVALENT_BLOB} detail=structural_receipt"
     ]
 
 
@@ -315,6 +335,31 @@ def test_compiler_identity_covers_the_classifier_and_its_baseline_table(
 
     with pytest.raises(ProductionWorkbenchError, match="qualification_compiler_unavailable"):
         producer_module.compiler_identity()
+
+
+def test_compiler_identity_covers_the_lineage_tables_of_every_scope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A production lineage's table decides which native sources qualify in both scopes, so a
+    # changed table must change the identity a qualification is issued under, like the first one.
+    sources = producer_module._COMPILER_SOURCES
+    lineage_module = "core/native_baseline_v0_44.py"
+    assert lineage_module in sources
+    package = Path(producer_module.__file__).resolve().parent.parent
+    for relative in sources:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(package / relative, target)
+    monkeypatch.setattr(
+        producer_module, "__file__", str(tmp_path / "adapters" / "managed_mode_qualification.py")
+    )
+    original = producer_module.compiler_identity()
+    target = tmp_path / lineage_module
+    content = target.read_bytes()
+    target.write_bytes(content + b"# changed table\n")
+    assert producer_module.compiler_identity() != original
+    target.write_bytes(content)
+    assert producer_module.compiler_identity() == original
 
 
 def test_fifteen_segment_structural_qualification_keeps_its_original_expiry(
